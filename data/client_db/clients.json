@@ -1,0 +1,24 @@
+{
+  "_schema": "client_db_v1",
+  "clients": [
+    {
+      "id": "KT",
+      "full_name": "KT 주식회사",
+      "sector": "통신/ICT",
+      "key_contacts": [],
+      "known_pain_points": [
+        "AI 전환 속도 경쟁에서 빅테크 대비 열위 인식",
+        "B2B 고객 대상 AI 서비스 수익화 모델 부재",
+        "내부 AI 인재 확보 어려움"
+      ],
+      "strategic_priorities": [
+        "AICC 고도화",
+        "sLLM 기반 기업용 AI 서비스",
+        "KT 클라우드 AI 인프라 확대"
+      ],
+      "budget_signals": "",
+      "decision_makers": [],
+      "notes": ""
+    }
+  ]
+}

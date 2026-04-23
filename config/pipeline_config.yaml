@@ -1,0 +1,63 @@
+# ─── 파이프라인 기본 설정 ───────────────────────────────────────────
+model: claude-sonnet-4-6          # 사용할 Claude 모델
+language: ko                      # 출력 언어 (ko / en)
+output_dir: output
+template_path: templates/kt_base.pptx   # 없으면 코드에서 빈 슬라이드 생성
+
+# ─── 프로젝트 컨텍스트 ────────────────────────────────────────────
+project:
+  client: KT                      # 발주 고객사
+  opportunity: "AI 서비스 수주전"
+  bidder: ""                      # 입찰사 (내부 사용시 기입)
+  date: ""                        # 비워두면 오늘 날짜 자동 삽입
+
+# ─── 전략 도출 우선순위 (1~5) ────────────────────────────────────
+strategy_weights:
+  price_competitiveness: 3        # 가격 경쟁력
+  technical_differentiation: 5   # 기술 차별화
+  reference_cases: 4             # 레퍼런스 / 유사 사례
+  partnership_ecosystem: 4       # 파트너십·생태계
+  delivery_credibility: 5        # 납기·이행 신뢰도
+  ai_readiness: 5                # AI 전환 준비도
+
+# ─── PPT 슬라이드 구성 ───────────────────────────────────────────
+slides:
+  - id: cover
+    title: "표지"
+    enabled: true
+  - id: executive_summary
+    title: "Executive Summary"
+    enabled: true
+  - id: market_context
+    title: "시장 현황 및 트렌드"
+    enabled: true
+  - id: client_analysis
+    title: "고객(KT) 니즈 분석"
+    enabled: true
+  - id: competitive_landscape
+    title: "경쟁 환경 분석"
+    enabled: true
+  - id: win_strategy
+    title: "수주 핵심 전략"
+    enabled: true
+  - id: solution_overview
+    title: "솔루션/서비스 제안"
+    enabled: true
+  - id: differentiators
+    title: "차별화 포인트"
+    enabled: true
+  - id: reference_cases
+    title: "주요 레퍼런스"
+    enabled: true
+  - id: pricing_strategy
+    title: "가격 전략"
+    enabled: true
+  - id: delivery_plan
+    title: "이행 계획"
+    enabled: true
+  - id: risk_mitigation
+    title: "리스크 대응"
+    enabled: true
+  - id: closing
+    title: "클로징"
+    enabled: true

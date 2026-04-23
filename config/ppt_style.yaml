@@ -1,0 +1,32 @@
+# ─── 브랜드 컬러 ────────────────────────────────────────────────
+colors:
+  primary: "003087"       # KT 계열 네이비
+  secondary: "E8000D"     # KT 레드 포인트
+  accent: "0066CC"        # 블루 액센트
+  dark_text: "1A1A2E"
+  light_bg: "F4F6F9"
+  white: "FFFFFF"
+  gray: "6B7280"
+
+# ─── 폰트 ───────────────────────────────────────────────────────
+fonts:
+  title: "맑은 고딕"
+  body: "맑은 고딕"
+  fallback: "Arial"
+
+font_sizes:
+  slide_title: 32
+  section_title: 24
+  body: 16
+  caption: 12
+  label: 10
+
+# ─── 슬라이드 레이아웃 ──────────────────────────────────────────
+slide:
+  width_emu: 12192000    # 16:9 기준 (widescreen)
+  height_emu: 6858000
+
+# ─── 헤더 바 ────────────────────────────────────────────────────
+header:
+  height_emu: 685800     # ~1.2cm
+  logo_placeholder: true

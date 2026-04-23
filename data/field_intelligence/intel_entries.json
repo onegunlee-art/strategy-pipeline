@@ -1,0 +1,5 @@
+{
+  "_schema": "field_intelligence_v1",
+  "_description": "영업직원이 수집한 현장 정보. add_intel.py 로 추가하거나 직접 편집 가능.",
+  "entries": []
+}

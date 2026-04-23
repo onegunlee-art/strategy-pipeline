@@ -1,0 +1,32 @@
+# ─── 전략 프롬프트 파라미터 ─────────────────────────────────────
+# 이 파일을 수정하면 Claude가 전략을 도출하는 방식이 바뀝니다.
+
+analysis_depth: detailed          # brief / standard / detailed
+tone: professional                # professional / aggressive / conservative
+
+# ─── 주요 경쟁사 (알고 있는 경우 기입) ─────────────────────────
+known_competitors:
+  - ""   # 예: "삼성SDS", "LG CNS", "SK C&C"
+
+# ─── 강조할 KT AI 서비스 카테고리 ──────────────────────────────
+kt_ai_focus_areas:
+  - 클라우드 AI 인프라
+  - AI 컨택센터 (AICC)
+  - 기업용 LLM / sLLM
+  - AI 보안 솔루션
+  - 디지털 트윈
+  - 엣지 AI
+
+# ─── 추가 전략 키워드 (자유 입력) ──────────────────────────────
+extra_strategy_keywords: []
+
+# ─── 슬라이드별 세부 지시 (선택) ────────────────────────────────
+slide_instructions:
+  win_strategy: >
+    핵심 수주 전략을 3~5개 항목으로 구체화하고,
+    각 전략마다 실행 액션과 KPI를 제시하라.
+  differentiators: >
+    경쟁사 대비 명확한 수치·사례 기반 차별화 포인트를 강조하라.
+  pricing_strategy: >
+    가격 민감도가 높은 공공·대기업 환경을 고려하여
+    TCO 관점의 가성비 논리를 포함하라.

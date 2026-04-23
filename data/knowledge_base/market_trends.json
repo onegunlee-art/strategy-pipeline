@@ -1,0 +1,36 @@
+{
+  "_schema": "market_trends_v1",
+  "last_updated": "2026-04-23",
+  "trends": [
+    {
+      "category": "AI 인프라",
+      "insight": "국내 기업 AI 도입률 2024년 기준 약 28%로 전년 대비 +9%p 성장",
+      "source": "IDC Korea 2024",
+      "relevance": "high"
+    },
+    {
+      "category": "통신사 AI",
+      "insight": "통신 3사(KT·SKT·LGU+) 모두 B2B AI 서비스를 2025~26년 핵심 성장 동력으로 설정",
+      "source": "각사 IR 자료",
+      "relevance": "high"
+    },
+    {
+      "category": "AICC",
+      "insight": "국내 AICC 시장 2025년 약 8,000억 원 규모, CAGR 22% 전망",
+      "source": "KRG 2025",
+      "relevance": "high"
+    },
+    {
+      "category": "sLLM",
+      "insight": "대기업 전용 소형언어모델(sLLM) 수요 급증 — 보안·비용 이유로 퍼블릭 LLM 대체",
+      "source": "Gartner 2025",
+      "relevance": "high"
+    },
+    {
+      "category": "공공 AI",
+      "insight": "정부 디지털플랫폼정부 사업 예산 2026년 2.4조 원, AI 의무 도입 지침 시행",
+      "source": "행안부 2025",
+      "relevance": "medium"
+    }
+  ]
+}
