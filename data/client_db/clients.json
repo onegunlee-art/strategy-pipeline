@@ -1,11 +1,58 @@
 {
-  "_schema": "client_db_v1",
+  "_schema": "client_db_v2",
+  "_note": "발주기관(고객) 정보. KT가 입찰사, 발주기관이 수주 타깃.",
   "clients": [
     {
-      "id": "KT",
-      "full_name": "KT 주식회사",
+      "id": "IIAC",
+      "full_name": "인천국제공항공사",
+      "short_name": "인천공항",
+      "sector": "공공/항공",
+      "key_dept": "운영본부 여객가치혁신처",
+      "business_history": [
+        "1차 스마트패스 사업 수주업체: 시스원",
+        "1차 사업 실주(2위): 에셋",
+        "1차 사업 ISP 참여·실주(3위): 에스트레픽",
+        "LTE-A 통합공항망 구축사업 (~'29)",
+        "4단계 공항통신 구축사업 (~'26)"
+      ],
+      "known_pain_points": [
+        "스마트패스(생체인식/안면인식) 고도화 필요",
+        "여객 편의성 향상 및 대기시간 단축",
+        "공항 통신·IoT 인프라 노후화 교체",
+        "보안·안전 강화 요구"
+      ],
+      "strategic_priorities": [
+        "스마트패스 플랫폼 구축",
+        "AI 기반 안면인식/인증솔루션 도입",
+        "공항 통신/NW 인프라 현대화",
+        "여객 모바일 서비스 확대"
+      ],
+      "budget_signals": "",
+      "decision_makers": [],
+      "neutral_parties": [
+        {"name": "DKI", "role": "모바일 시스템", "stance": "중립"},
+        {"name": "시스원", "role": "1차 사업 수주업체", "stance": "중립"},
+        {"name": "에셋", "role": "1차 사업 실주(2위)", "stance": "중립"},
+        {"name": "에스트레픽", "role": "1차 사업 ISP 참여, 실주(3위)", "stance": "우호적"},
+        {"name": "통신만사업중", "role": "LTE-A 관련", "stance": "중립"}
+      ],
+      "notes": ""
+    },
+    {
+      "id": "KT_INTERNAL",
+      "full_name": "KT 주식회사 (입찰사)",
+      "short_name": "KT",
       "sector": "통신/ICT",
-      "key_contacts": [],
+      "key_dept": "컨소시엄 주사업자 (50%)",
+      "consortium_partners": [
+        {"name": "건아정보기술", "share": "20%", "role": "스마트패스 구축"},
+        {"name": "조인트리", "share": "20%", "role": "S/W 개발"},
+        {"name": "메타빌드", "share": "10%", "role": "상용S/W, H/W"},
+        {"name": "구네보(검토중)", "share": "", "role": "스마트패스 장비 제조사"},
+        {"name": "우리앱소프트", "share": "8도", "role": "S/W 개발, SBD 실주(2위)"},
+        {"name": "알체리", "share": "", "role": "생체인식/인증솔루션"},
+        {"name": "소트시스템", "share": "", "role": "인천공항 유지보수, 통신/NW, 공사 등"}
+      ],
       "known_pain_points": [
         "AI 전환 속도 경쟁에서 빅테크 대비 열위 인식",
         "B2B 고객 대상 AI 서비스 수익화 모델 부재",
@@ -14,7 +61,8 @@
       "strategic_priorities": [
         "AICC 고도화",
         "sLLM 기반 기업용 AI 서비스",
-        "KT 클라우드 AI 인프라 확대"
+        "KT 클라우드 AI 인프라 확대",
+        "스마트패스/공항 AI 레퍼런스 확보"
       ],
       "budget_signals": "",
       "decision_makers": [],
