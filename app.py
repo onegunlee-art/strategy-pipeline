@@ -3,6 +3,7 @@ KT 수주전략 파이프라인 — 메인 앱
 점수 최적화 엔진
 """
 import json
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -36,6 +37,23 @@ def get_projects() -> list[str]:
 
 with st.sidebar:
     st.markdown("## 🎯 KT 수주전략")
+    st.markdown("---")
+
+    # API 키 설정
+    existing_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not existing_key:
+        api_key_input = st.text_input(
+            "Anthropic API Key",
+            type="password",
+            placeholder="sk-ant-...",
+            help=".env 파일이 인식되지 않을 때 여기에 직접 입력하세요",
+        )
+        if api_key_input:
+            os.environ["ANTHROPIC_API_KEY"] = api_key_input
+            st.success("API 키 설정됨")
+    else:
+        st.caption(f"API 키: ...{existing_key[-6:]}")
+
     st.markdown("---")
 
     projects = get_projects()
