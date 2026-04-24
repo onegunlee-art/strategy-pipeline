@@ -82,7 +82,7 @@ def extract_scoring_structure(rfp_text: str) -> dict:
         model="claude-sonnet-4-6",
         max_tokens=4000,
         system="당신은 RFP 평가구조 추출 전문가입니다. 정확한 JSON만 출력합니다.",
-        messages=[{"role": "user", "content": EXTRACT_PROMPT.format(rfp_text=text_to_use)}]
+        messages=[{"role": "user", "content": EXTRACT_PROMPT.replace("{rfp_text}", text_to_use)}]
     )
 
     result = _parse_claude_json(response.content[0].text)

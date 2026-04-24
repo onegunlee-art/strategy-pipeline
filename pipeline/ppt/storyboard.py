@@ -83,14 +83,12 @@ def generate_storyboard(
         model="claude-sonnet-4-6",
         max_tokens=6000,
         system="당신은 B2B 제안서 스토리보드 전문가입니다. 정확한 JSON 배열만 출력합니다.",
-        messages=[{"role": "user", "content": STORYBOARD_PROMPT.format(
-            strategies=json.dumps(strategies, ensure_ascii=False, indent=2),
-            top3=json.dumps(top3.get("top3", [])[:3], ensure_ascii=False, indent=2),
-            eval_structure=json.dumps(
-                scoring_data.get("evaluation_structure", []), ensure_ascii=False, indent=2
-            )[:3000],
-            rfp_basics=json.dumps(rfp_basics, ensure_ascii=False, indent=2),
-        )}]
+        messages=[{"role": "user", "content": STORYBOARD_PROMPT
+            .replace("{strategies}", json.dumps(strategies, ensure_ascii=False, indent=2))
+            .replace("{top3}", json.dumps(top3.get("top3", [])[:3], ensure_ascii=False, indent=2))
+            .replace("{eval_structure}", json.dumps(scoring_data.get("evaluation_structure", []), ensure_ascii=False, indent=2)[:3000])
+            .replace("{rfp_basics}", json.dumps(rfp_basics, ensure_ascii=False, indent=2))
+        }]
     )
 
     raw = response.content[0].text.strip()

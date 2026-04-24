@@ -122,13 +122,13 @@ def generate_strategies(
         model="claude-sonnet-4-6",
         max_tokens=3000,
         system="당신은 B2B 수주전략 전문가입니다. 정확한 JSON만 출력합니다.",
-        messages=[{"role": "user", "content": STRATEGY_PROMPT.format(
-            competitor=competitor,
-            competitor_profile=competitor_profile,
-            top3=top3_text,
-            rfp_basics=basics_text,
-            gap_matrix_summary=gap_text,
-        )}]
+        messages=[{"role": "user", "content": STRATEGY_PROMPT
+            .replace("{competitor}", competitor)
+            .replace("{competitor_profile}", competitor_profile)
+            .replace("{top3}", top3_text)
+            .replace("{rfp_basics}", basics_text)
+            .replace("{gap_matrix_summary}", gap_text)
+        }]
     )
 
     strategies = _parse_json(response.content[0].text)

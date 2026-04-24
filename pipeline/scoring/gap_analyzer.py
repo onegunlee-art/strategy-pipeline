@@ -153,11 +153,11 @@ def compute_top3(gap_matrix: list[dict], competitor: str, project_type: str = ""
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=2000,
-        messages=[{"role": "user", "content": TOP3_PROMPT.format(
-            gap_matrix=gap_text,
-            competitor=competitor,
-            project_type=project_type
-        )}]
+        messages=[{"role": "user", "content": TOP3_PROMPT
+            .replace("{gap_matrix}", gap_text)
+            .replace("{competitor}", competitor)
+            .replace("{project_type}", project_type)
+        }]
     )
 
     import re
