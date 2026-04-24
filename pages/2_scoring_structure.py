@@ -28,7 +28,7 @@ if not rfp_path.exists():
     st.error("RFP가 아직 파싱되지 않았습니다. **Page 1**에서 먼저 RFP를 파싱하세요.")
     st.stop()
 
-rfp_data = json.loads(rfp_path.read_text())
+rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
 
 # ── AI 추출 ────────────────────────────────────────────────────────
 col1, col2 = st.columns([3, 1])
@@ -51,7 +51,7 @@ if extract_btn:
             try:
                 from pipeline.scoring.extractor import extract_scoring_structure, validate_structure
                 result = extract_scoring_structure(rfp_text)
-                scoring_path.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+                scoring_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, encoding="utf-8"))
                 st.success("추출 완료!")
 
                 warnings = validate_structure(result)
@@ -64,7 +64,7 @@ if extract_btn:
 
 # ── 검토 UI ────────────────────────────────────────────────────────
 if scoring_path.exists():
-    scoring_data = json.loads(scoring_path.read_text())
+    scoring_data = json.loads(scoring_path.read_text(encoding="utf-8"))
     structure = scoring_data.get("evaluation_structure", [])
 
     st.markdown("---")
@@ -144,11 +144,11 @@ if scoring_path.exists():
         if st.button("💾 구조 저장", use_container_width=True, disabled=not all_confirmed, type="primary"):
             scoring_data["evaluation_structure"] = updated_structure
             scoring_data["_human_reviewed"] = True
-            scoring_path.write_text(json.dumps(scoring_data, ensure_ascii=False, indent=2))
+            scoring_path.write_text(json.dumps(scoring_data, ensure_ascii=False, indent=2, encoding="utf-8"))
             st.success("✅ 저장 완료! 다음 단계: **🎯 점수갭 분석**으로 이동하세요.")
     with col2:
         if st.button("⚡ 검토 생략하고 저장 (주의)", use_container_width=True):
             scoring_data["evaluation_structure"] = updated_structure
             scoring_data["_human_reviewed"] = False
-            scoring_path.write_text(json.dumps(scoring_data, ensure_ascii=False, indent=2))
+            scoring_path.write_text(json.dumps(scoring_data, ensure_ascii=False, indent=2, encoding="utf-8"))
             st.warning("저장됨. 구조 신뢰도가 낮은 항목은 Top3 계산에서 제외됩니다.")

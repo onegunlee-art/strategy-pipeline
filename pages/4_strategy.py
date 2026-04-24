@@ -35,11 +35,11 @@ for req_path, req_name in [(rfp_path, "RFP"), (gap_path, "점수갭"), (top3_pat
         st.error(f"{req_name} 데이터가 없습니다. 이전 단계를 먼저 완료하세요.")
         st.stop()
 
-rfp_data = json.loads(rfp_path.read_text())
-scoring_data = json.loads(scoring_path.read_text()) if scoring_path.exists() else {}
-gap_matrix = json.loads(gap_path.read_text())
-top3_data = json.loads(top3_path.read_text())
-meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
+scoring_data = json.loads(scoring_path.read_text(encoding="utf-8")) if scoring_path.exists() else {}
+gap_matrix = json.loads(gap_path.read_text(encoding="utf-8"))
+top3_data = json.loads(top3_path.read_text(encoding="utf-8"))
+meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
 competitor = meta.get("competitor", "경쟁사")
 
 st.info(f"경쟁사: **{competitor}** | 승부 포인트: **{', '.join(top3_data.get('selected_focus', []))}**")
@@ -68,7 +68,7 @@ if gen_btn:
                 competitor=competitor,
             )
             strategies = annotate_strategies_with_conflicts(strategies)
-            strategy_path.write_text(json.dumps(strategies, ensure_ascii=False, indent=2))
+            strategy_path.write_text(json.dumps(strategies, ensure_ascii=False, indent=2, encoding="utf-8"))
             st.success("전략 생성 완료!")
             st.rerun()
         except Exception as e:
@@ -76,7 +76,7 @@ if gen_btn:
 
 # ── 전략 검토 UI ───────────────────────────────────────────────────
 if strategy_path.exists():
-    strategies = json.loads(strategy_path.read_text())
+    strategies = json.loads(strategy_path.read_text(encoding="utf-8"))
 
     # 시나리오 영향 계산
     from pipeline.strategy.conflict_detector import compute_scenario_impact
@@ -135,12 +135,12 @@ if strategy_path.exists():
                 updated_s = {**s, "title": title, "description": description,
                              "competitor_angle": competitor_angle}
                 strategies = [updated_s if x["axis"] == axis else x for x in strategies]
-                strategy_path.write_text(json.dumps(strategies, ensure_ascii=False, indent=2))
+                strategy_path.write_text(json.dumps(strategies, ensure_ascii=False, indent=2, encoding="utf-8"))
                 st.success("저장됨")
 
         st.markdown("")
 
-    updated_strategies = json.loads(strategy_path.read_text())
+    updated_strategies = json.loads(strategy_path.read_text(encoding="utf-8"))
 
     # 점수 시뮬레이터
     st.markdown("---")
@@ -196,5 +196,5 @@ if strategy_path.exists():
             "scenario_accepted": f"충돌 수준: {overall_risk}",
             "timestamp": datetime.now().isoformat(),
         }
-        decision_path.write_text(json.dumps(decision, ensure_ascii=False, indent=2))
+        decision_path.write_text(json.dumps(decision, ensure_ascii=False, indent=2, encoding="utf-8"))
         st.success("✅ 전략 확정 완료! **📋 스토리보드 + PPT** 페이지로 이동하세요.")

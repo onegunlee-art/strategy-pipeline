@@ -32,7 +32,7 @@ meta_path = project_dir / "meta.json"
 
 # ── Decision Trace 표시 ────────────────────────────────────────────
 if decision_path.exists():
-    decision = json.loads(decision_path.read_text())
+    decision = json.loads(decision_path.read_text(encoding="utf-8"))
     st.markdown("### 📋 Decision Trace (이 프로젝트의 전략 선택 기록)")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -48,7 +48,7 @@ if decision_path.exists():
 st.markdown("---")
 st.markdown("### 수주 결과 입력")
 
-existing = json.loads(result_path.read_text()) if result_path.exists() else {}
+existing = json.loads(result_path.read_text(encoding="utf-8")) if result_path.exists() else {}
 
 with st.form("result_form"):
     col1, col2 = st.columns(2)
@@ -105,15 +105,15 @@ if save_btn:
         "lessons": lessons,
         "timestamp": datetime.now().isoformat(),
     }
-    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, encoding="utf-8"))
 
     # past_bids.json에 추가
     rfp_basics = {}
     if rfp_path.exists():
-        rfp_basics = json.loads(rfp_path.read_text()).get("basics", {})
-    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+        rfp_basics = json.loads(rfp_path.read_text(encoding="utf-8")).get("basics", {})
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
 
-    bids_data = json.loads(PAST_BIDS.read_text()) if PAST_BIDS.exists() else {"bids": []}
+    bids_data = json.loads(PAST_BIDS.read_text(encoding="utf-8")) if PAST_BIDS.exists() else {"bids": []}
     bids_data["bids"].append({
         "project": st.session_state.get("project", ""),
         "project_name": rfp_basics.get("project_name", ""),
@@ -121,17 +121,17 @@ if save_btn:
         "competitor": meta.get("competitor", ""),
         "outcome": outcome,
         "delta": result["delta"],
-        "selected_focus": json.loads(decision_path.read_text()).get("selected_focus", []) if decision_path.exists() else [],
+        "selected_focus": json.loads(decision_path.read_text(encoding="utf-8")).get("selected_focus", []) if decision_path.exists() else [],
         "timestamp": result["timestamp"],
     })
-    PAST_BIDS.write_text(json.dumps(bids_data, ensure_ascii=False, indent=2))
+    PAST_BIDS.write_text(json.dumps(bids_data, ensure_ascii=False, indent=2, encoding="utf-8"))
 
     st.success("✅ 결과 저장 완료! 다음 프로젝트 전략 보정에 활용됩니다.")
 
 # ── 갭 예측 vs 실제 비교 ──────────────────────────────────────────
 if result_path.exists() and gap_path.exists():
-    result = json.loads(result_path.read_text())
-    gap_matrix = json.loads(gap_path.read_text())
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    gap_matrix = json.loads(gap_path.read_text(encoding="utf-8"))
 
     st.markdown("---")
     st.markdown("### 📊 예측 vs 실제 비교")
@@ -151,7 +151,7 @@ if result_path.exists() and gap_path.exists():
 
 # ── 과거 수주 이력 ─────────────────────────────────────────────────
 if PAST_BIDS.exists():
-    bids_data = json.loads(PAST_BIDS.read_text())
+    bids_data = json.loads(PAST_BIDS.read_text(encoding="utf-8"))
     bids = bids_data.get("bids", [])
     if bids:
         st.markdown("---")

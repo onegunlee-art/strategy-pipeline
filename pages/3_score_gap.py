@@ -30,7 +30,7 @@ if not scoring_path.exists():
     st.error("평가구조 데이터가 없습니다. **Page 2**에서 먼저 평가구조를 분해하세요.")
     st.stop()
 
-scoring_data = json.loads(scoring_path.read_text())
+scoring_data = json.loads(scoring_path.read_text(encoding="utf-8"))
 structure = scoring_data.get("evaluation_structure", [])
 
 # ── 경쟁사 선택 ────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ st.caption("⭐ 가장 중요한 Human 입력 단계 — 현실적으로 KT가 �
 
 kt_scores = {}
 if gap_path.exists():
-    saved_gap = json.loads(gap_path.read_text())
+    saved_gap = json.loads(gap_path.read_text(encoding="utf-8"))
     kt_scores = {r["item"]: r["kt_score"] for r in saved_gap}
 
 updated_kt_scores = {}
@@ -103,16 +103,16 @@ if calc_btn and competitor:
         try:
             from pipeline.scoring.gap_analyzer import compute_gap_matrix, compute_top3
             gap_matrix = compute_gap_matrix(scoring_data, updated_kt_scores, competitor, project_type)
-            gap_path.write_text(json.dumps(gap_matrix, ensure_ascii=False, indent=2))
+            gap_path.write_text(json.dumps(gap_matrix, ensure_ascii=False, indent=2, encoding="utf-8"))
 
             top3_result = compute_top3(gap_matrix, competitor, project_type)
-            top3_path.write_text(json.dumps(top3_result, ensure_ascii=False, indent=2))
+            top3_path.write_text(json.dumps(top3_result, ensure_ascii=False, indent=2, encoding="utf-8"))
 
             # competitor 저장
             (project_dir / "meta.json").write_text(json.dumps({
                 "competitor": competitor,
                 "project_type": project_type,
-            }, ensure_ascii=False))
+            }, ensure_ascii=False, encoding="utf-8"))
 
             st.success("계산 완료!")
             st.rerun()
@@ -121,8 +121,8 @@ if calc_btn and competitor:
 
 # ── 결과 표시 ──────────────────────────────────────────────────────
 if gap_path.exists() and top3_path.exists():
-    gap_matrix = json.loads(gap_path.read_text())
-    top3_data = json.loads(top3_path.read_text())
+    gap_matrix = json.loads(gap_path.read_text(encoding="utf-8"))
+    top3_data = json.loads(top3_path.read_text(encoding="utf-8"))
 
     # 한 줄 전략
     one_line = top3_data.get("one_line_strategy", "")
@@ -204,5 +204,5 @@ if gap_path.exists() and top3_path.exists():
     if len(selected_focus) >= 1:
         if st.button("💾 선택 저장 → 전략 3축으로", type="primary", use_container_width=True):
             top3_data["selected_focus"] = selected_focus
-            top3_path.write_text(json.dumps(top3_data, ensure_ascii=False, indent=2))
+            top3_path.write_text(json.dumps(top3_data, ensure_ascii=False, indent=2, encoding="utf-8"))
             st.success("✅ 저장 완료! **⚡ 전략 3축** 페이지로 이동하세요.")

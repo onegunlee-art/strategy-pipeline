@@ -45,34 +45,37 @@ def extract_text_from_pdf(pdf_path: Path) -> tuple[str, bool]:
 def extract_text_via_vision(pdf_path: Path, max_pages: int = 30) -> str:
     """pypdfium2로 PDF → 이미지 변환 후 Claude Vision으로 텍스트 추출"""
     import pypdfium2 as pdfium
+    import io
 
     client = anthropic.Anthropic()
     pages_text = []
 
     doc = pdfium.PdfDocument(str(pdf_path))
-    total = min(len(doc), max_pages)
+    try:
+        total = min(len(doc), max_pages)
+        for i in range(total):
+            page = doc[i]
+            bitmap = page.render(scale=2.0)
+            pil_img = bitmap.to_pil()
 
-    for i in range(total):
-        page = doc[i]
-        bitmap = page.render(scale=2.0)
-        pil_img = bitmap.to_pil()
+            buf = io.BytesIO()
+            pil_img.save(buf, format="PNG")
+            img_data = base64.standard_b64encode(buf.getvalue()).decode()
 
-        buf = __import__("io").BytesIO()
-        pil_img.save(buf, format="PNG")
-        img_data = base64.standard_b64encode(buf.getvalue()).decode()
-
-        msg = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2000,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_data}},
-                    {"type": "text", "text": f"[PAGE {i+1}]로 시작하여 이 페이지의 텍스트를 그대로 추출하세요. 표 구조와 배점 숫자를 정확히 보존하세요."}
-                ]
-            }]
-        )
-        pages_text.append(msg.content[0].text)
+            msg = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=2000,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_data}},
+                        {"type": "text", "text": f"[PAGE {i+1}]로 시작하여 이 페이지의 텍스트를 그대로 추출하세요. 표 구조와 배점 숫자를 정확히 보존하세요."}
+                    ]
+                }]
+            )
+            pages_text.append(msg.content[0].text)
+    finally:
+        doc.close()
 
     return "\n\n".join(pages_text)
 

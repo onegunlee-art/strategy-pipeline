@@ -15,7 +15,7 @@ COMPETITORS_DB = Path(__file__).parent.parent.parent / "data/knowledge_base/comp
 
 def load_competitor_db() -> dict:
     if COMPETITORS_DB.exists():
-        return json.loads(COMPETITORS_DB.read_text())
+        return json.loads(COMPETITORS_DB.read_text(encoding="utf-8"))
     return {}
 
 

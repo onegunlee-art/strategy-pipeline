@@ -35,10 +35,10 @@ for req_path, req_name in [
         st.error(f"{req_name} 데이터가 없습니다. 이전 단계를 완료하세요.")
         st.stop()
 
-rfp_data = json.loads(rfp_path.read_text())
-strategies = json.loads(strategy_path.read_text())
-top3_data = json.loads(top3_path.read_text())
-scoring_data = json.loads(scoring_path.read_text()) if scoring_path.exists() else {}
+rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
+strategies = json.loads(strategy_path.read_text(encoding="utf-8"))
+top3_data = json.loads(top3_path.read_text(encoding="utf-8"))
+scoring_data = json.loads(scoring_path.read_text(encoding="utf-8")) if scoring_path.exists() else {}
 
 # ── 스토리보드 생성 ────────────────────────────────────────────────
 col1, col2 = st.columns([3, 1])
@@ -58,7 +58,7 @@ if gen_btn:
                 scoring_data=scoring_data,
                 rfp_basics=rfp_data.get("basics", {}),
             )
-            storyboard_path.write_text(json.dumps(slides, ensure_ascii=False, indent=2))
+            storyboard_path.write_text(json.dumps(slides, ensure_ascii=False, indent=2, encoding="utf-8"))
 
             # 커버리지 검증
             eval_items = [
@@ -77,7 +77,7 @@ if gen_btn:
 
 # ── 스토리보드 편집 ────────────────────────────────────────────────
 if storyboard_path.exists():
-    slides = json.loads(storyboard_path.read_text())
+    slides = json.loads(storyboard_path.read_text(encoding="utf-8"))
 
     # 커버리지 히트맵
     st.markdown("### 📊 평가항목 커버리지")
@@ -161,7 +161,7 @@ if storyboard_path.exists():
                     }
 
     if st.button("💾 스토리보드 저장", use_container_width=True):
-        storyboard_path.write_text(json.dumps(updated_slides, ensure_ascii=False, indent=2))
+        storyboard_path.write_text(json.dumps(updated_slides, ensure_ascii=False, indent=2, encoding="utf-8"))
         st.success("저장됨!")
 
     # ── PPT 생성 ──────────────────────────────────────────────────────

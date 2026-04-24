@@ -74,18 +74,21 @@ if uploaded:
                 "source": source,
                 "filename": uploaded.name,
             }
-            rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2))
+            rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2, encoding="utf-8"))
             st.session_state.rfp_parsed = True
             st.success(f"파싱 완료! (소스: {source})")
             st.rerun()
         except Exception as e:
             st.error(f"파싱 실패: {e}")
         finally:
-            tmp_path.unlink(missing_ok=True)
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except PermissionError:
+                pass  # Windows에서 파일이 아직 열려 있을 때 무시
 
 # ── 파싱 결과 표시 및 검토 ─────────────────────────────────────────
 if rfp_path.exists():
-    rfp_data = json.loads(rfp_path.read_text())
+    rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
     basics = rfp_data.get("basics", {})
 
     st.markdown("---")
@@ -139,7 +142,7 @@ if rfp_path.exists():
             "key_requirements": [r.strip() for r in key_reqs.split("\n") if r.strip()],
         }
         rfp_data["basics"] = basics_updated
-        rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2))
+        rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2, encoding="utf-8"))
         st.success("✅ 저장 완료! 다음 단계: **📊 평가구조 분해**로 이동하세요.")
 
     # RFP 텍스트 미리보기

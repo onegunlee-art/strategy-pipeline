@@ -28,7 +28,7 @@ if not rfp_path.exists():
     st.error("RFP 데이터가 없습니다.")
     st.stop()
 
-rfp_data = json.loads(rfp_path.read_text())
+rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
 contract_type = rfp_data.get("basics", {}).get("contract_type", "")
 
 if "협상" not in contract_type:
@@ -42,8 +42,8 @@ if not gap_path.exists():
     st.warning("점수 갭 데이터가 없습니다. Page 3를 먼저 완료하세요.")
     st.stop()
 
-gap_matrix = json.loads(gap_path.read_text())
-scoring_data = json.loads(scoring_path.read_text()) if scoring_path.exists() else {}
+gap_matrix = json.loads(gap_path.read_text(encoding="utf-8"))
+scoring_data = json.loads(scoring_path.read_text(encoding="utf-8")) if scoring_path.exists() else {}
 
 # 가격 항목 탐지
 price_item = None

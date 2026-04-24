@@ -28,7 +28,7 @@ def _parse_json(raw: str) -> dict | list:
 
 def _get_competitor_profile(competitor: str) -> str:
     if COMPETITORS_DB.exists():
-        db = json.loads(COMPETITORS_DB.read_text())
+        db = json.loads(COMPETITORS_DB.read_text(encoding="utf-8"))
         data = db.get(competitor, {})
         if data:
             strengths = ", ".join(data.get("base_strength", []))

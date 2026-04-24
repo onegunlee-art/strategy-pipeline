@@ -125,7 +125,7 @@ st.markdown("---")
 # 프로젝트 요약 (rfp.json 있으면 표시)
 rfp_path = project_dir / "rfp.json"
 if rfp_path.exists():
-    rfp_data = json.loads(rfp_path.read_text())
+    rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
     basics = rfp_data.get("basics", {})
     if basics:
         col1, col2, col3 = st.columns(3)
@@ -138,7 +138,7 @@ if rfp_path.exists():
 
     top3_path = project_dir / "top3.json"
     if top3_path.exists():
-        top3 = json.loads(top3_path.read_text())
+        top3 = json.loads(top3_path.read_text(encoding="utf-8"))
         one_line = top3.get("one_line_strategy", "")
         if one_line:
             st.success(f"**핵심 전략:** {one_line}")
