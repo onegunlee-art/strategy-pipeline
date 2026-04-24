@@ -124,8 +124,12 @@ st.markdown("---")
 
 # 프로젝트 요약 (rfp.json 있으면 표시)
 rfp_path = project_dir / "rfp.json"
-if rfp_path.exists():
-    rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
+if rfp_path.exists() and rfp_path.stat().st_size > 10:
+    try:
+        rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
+    except Exception:
+        rfp_path.unlink()
+        rfp_data = {}
     basics = rfp_data.get("basics", {})
     if basics:
         col1, col2, col3 = st.columns(3)

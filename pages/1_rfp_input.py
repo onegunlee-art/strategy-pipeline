@@ -87,8 +87,13 @@ if uploaded:
                 pass  # Windows에서 파일이 아직 열려 있을 때 무시
 
 # ── 파싱 결과 표시 및 검토 ─────────────────────────────────────────
-if rfp_path.exists():
-    rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
+if rfp_path.exists() and rfp_path.stat().st_size > 10:
+    try:
+        rfp_data = json.loads(rfp_path.read_text(encoding="utf-8"))
+    except Exception:
+        rfp_path.unlink()
+        st.warning("손상된 RFP 데이터를 삭제했습니다. PDF를 다시 업로드하세요.")
+        st.stop()
     basics = rfp_data.get("basics", {})
 
     st.markdown("---")
