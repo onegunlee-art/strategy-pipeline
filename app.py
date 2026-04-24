@@ -80,9 +80,25 @@ with st.sidebar:
         for key, icon, label, fname in STAGES:
             done = (project_dir / fname).exists()
             mark = "✅" if done else "⬜"
-            st.caption(f"{mark} {icon} {label}")
+            col_a, col_b = st.columns([3, 1])
+            with col_a:
+                st.caption(f"{mark} {icon} {label}")
+            with col_b:
+                if done and st.button("↺", key=f"reset_{key}", help=f"{label} 초기화"):
+                    (project_dir / fname).unlink()
+                    st.rerun()
 
         st.markdown("---")
+        if st.button("🗑 프로젝트 전체 초기화", use_container_width=True):
+            for _, _, _, fname in STAGES:
+                f = project_dir / fname
+                if f.exists():
+                    f.unlink()
+            for extra in ["meta.json", "gap_matrix.json", "top3.json", "decision.json"]:
+                f = project_dir / extra
+                if f.exists():
+                    f.unlink()
+            st.rerun()
         st.caption("v1.0 · 점수 최적화 엔진")
 
 # ── 메인 화면 ──────────────────────────────────────────────────────

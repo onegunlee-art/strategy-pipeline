@@ -25,7 +25,14 @@ project_dir = get_project()
 rfp_path = project_dir / "rfp.json"
 
 # ── PDF 업로드 ─────────────────────────────────────────────────────
-st.markdown("### PDF 업로드")
+col_h1, col_h2 = st.columns([4, 1])
+with col_h1:
+    st.markdown("### PDF 업로드")
+with col_h2:
+    if rfp_path.exists() and st.button("🔄 재업로드", use_container_width=True):
+        rfp_path.unlink()
+        st.rerun()
+
 uploaded = st.file_uploader("RFP PDF 파일", type=["pdf"])
 
 if uploaded:
