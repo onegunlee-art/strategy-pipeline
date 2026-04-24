@@ -16,9 +16,13 @@ COMPETITORS_DB = Path(__file__).parent.parent.parent / "data/knowledge_base/comp
 
 def _parse_json(raw: str) -> dict | list:
     raw = raw.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw)
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```\s*$", "", raw)
+    raw = raw.strip()
+    # 배열이면 [...], 객체면 {...} 추출
+    match = re.search(r"(\[.*\]|\{.*\})", raw, re.DOTALL)
+    if match:
+        raw = match.group(0)
     return json.loads(raw)
 
 

@@ -16,9 +16,14 @@ load_dotenv()
 
 def _parse_claude_json(raw: str) -> dict:
     raw = raw.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw)
+    # 마크다운 코드블록 제거
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```\s*$", "", raw)
+    raw = raw.strip()
+    # JSON 블록만 추출 (앞뒤 설명 텍스트 제거)
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if match:
+        raw = match.group(0)
     return json.loads(raw)
 
 

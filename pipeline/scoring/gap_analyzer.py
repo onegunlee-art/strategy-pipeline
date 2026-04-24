@@ -160,11 +160,14 @@ def compute_top3(gap_matrix: list[dict], competitor: str, project_type: str = ""
         )}]
     )
 
+    import re
     raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        import re
-        raw = re.sub(r"^```(?:json)?\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw)
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```\s*$", "", raw)
+    raw = raw.strip()
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if match:
+        raw = match.group(0)
 
     result = json.loads(raw)
     result["low_confidence_excluded"] = [

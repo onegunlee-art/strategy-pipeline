@@ -94,9 +94,12 @@ def generate_storyboard(
     )
 
     raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw)
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```\s*$", "", raw)
+    raw = raw.strip()
+    match = re.search(r"\[.*\]", raw, re.DOTALL)
+    if match:
+        raw = match.group(0)
 
     slides = json.loads(raw)
 
