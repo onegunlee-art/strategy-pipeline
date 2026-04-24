@@ -105,7 +105,7 @@ if save_btn:
         "lessons": lessons,
         "timestamp": datetime.now().isoformat(),
     }
-    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, encoding="utf-8"))
+    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # past_bids.json에 추가
     rfp_basics = {}
@@ -124,7 +124,7 @@ if save_btn:
         "selected_focus": json.loads(decision_path.read_text(encoding="utf-8")).get("selected_focus", []) if decision_path.exists() else [],
         "timestamp": result["timestamp"],
     })
-    PAST_BIDS.write_text(json.dumps(bids_data, ensure_ascii=False, indent=2, encoding="utf-8"))
+    PAST_BIDS.write_text(json.dumps(bids_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     st.success("✅ 결과 저장 완료! 다음 프로젝트 전략 보정에 활용됩니다.")
 

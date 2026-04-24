@@ -103,16 +103,16 @@ if calc_btn and competitor:
         try:
             from pipeline.scoring.gap_analyzer import compute_gap_matrix, compute_top3
             gap_matrix = compute_gap_matrix(scoring_data, updated_kt_scores, competitor, project_type)
-            gap_path.write_text(json.dumps(gap_matrix, ensure_ascii=False, indent=2, encoding="utf-8"))
+            gap_path.write_text(json.dumps(gap_matrix, ensure_ascii=False, indent=2), encoding="utf-8")
 
             top3_result = compute_top3(gap_matrix, competitor, project_type)
-            top3_path.write_text(json.dumps(top3_result, ensure_ascii=False, indent=2, encoding="utf-8"))
+            top3_path.write_text(json.dumps(top3_result, ensure_ascii=False, indent=2), encoding="utf-8")
 
             # competitor 저장
             (project_dir / "meta.json").write_text(json.dumps({
                 "competitor": competitor,
                 "project_type": project_type,
-            }, ensure_ascii=False, encoding="utf-8"))
+            }, ensure_ascii=False), encoding="utf-8")
 
             st.success("계산 완료!")
             st.rerun()
@@ -204,5 +204,5 @@ if gap_path.exists() and top3_path.exists():
     if len(selected_focus) >= 1:
         if st.button("💾 선택 저장 → 전략 3축으로", type="primary", use_container_width=True):
             top3_data["selected_focus"] = selected_focus
-            top3_path.write_text(json.dumps(top3_data, ensure_ascii=False, indent=2, encoding="utf-8"))
+            top3_path.write_text(json.dumps(top3_data, ensure_ascii=False, indent=2), encoding="utf-8")
             st.success("✅ 저장 완료! **⚡ 전략 3축** 페이지로 이동하세요.")

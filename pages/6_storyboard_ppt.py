@@ -58,7 +58,7 @@ if gen_btn:
                 scoring_data=scoring_data,
                 rfp_basics=rfp_data.get("basics", {}),
             )
-            storyboard_path.write_text(json.dumps(slides, ensure_ascii=False, indent=2, encoding="utf-8"))
+            storyboard_path.write_text(json.dumps(slides, ensure_ascii=False, indent=2), encoding="utf-8")
 
             # 커버리지 검증
             eval_items = [
@@ -161,7 +161,7 @@ if storyboard_path.exists():
                     }
 
     if st.button("💾 스토리보드 저장", use_container_width=True):
-        storyboard_path.write_text(json.dumps(updated_slides, ensure_ascii=False, indent=2, encoding="utf-8"))
+        storyboard_path.write_text(json.dumps(updated_slides, ensure_ascii=False, indent=2), encoding="utf-8")
         st.success("저장됨!")
 
     # ── PPT 생성 ──────────────────────────────────────────────────────

@@ -74,7 +74,7 @@ if uploaded:
                 "source": source,
                 "filename": uploaded.name,
             }
-            rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2, encoding="utf-8"))
+            rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2), encoding="utf-8")
             st.session_state.rfp_parsed = True
             st.success(f"파싱 완료! (소스: {source})")
             st.rerun()
@@ -147,7 +147,7 @@ if rfp_path.exists() and rfp_path.stat().st_size > 10:
             "key_requirements": [r.strip() for r in key_reqs.split("\n") if r.strip()],
         }
         rfp_data["basics"] = basics_updated
-        rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2, encoding="utf-8"))
+        rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2), encoding="utf-8")
         st.success("✅ 저장 완료! 다음 단계: **📊 평가구조 분해**로 이동하세요.")
 
     # RFP 텍스트 미리보기

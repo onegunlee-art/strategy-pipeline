@@ -68,7 +68,7 @@ if gen_btn:
                 competitor=competitor,
             )
             strategies = annotate_strategies_with_conflicts(strategies)
-            strategy_path.write_text(json.dumps(strategies, ensure_ascii=False, indent=2, encoding="utf-8"))
+            strategy_path.write_text(json.dumps(strategies, ensure_ascii=False, indent=2), encoding="utf-8")
             st.success("전략 생성 완료!")
             st.rerun()
         except Exception as e:
@@ -135,7 +135,7 @@ if strategy_path.exists():
                 updated_s = {**s, "title": title, "description": description,
                              "competitor_angle": competitor_angle}
                 strategies = [updated_s if x["axis"] == axis else x for x in strategies]
-                strategy_path.write_text(json.dumps(strategies, ensure_ascii=False, indent=2, encoding="utf-8"))
+                strategy_path.write_text(json.dumps(strategies, ensure_ascii=False, indent=2), encoding="utf-8")
                 st.success("저장됨")
 
         st.markdown("")
@@ -196,5 +196,5 @@ if strategy_path.exists():
             "scenario_accepted": f"충돌 수준: {overall_risk}",
             "timestamp": datetime.now().isoformat(),
         }
-        decision_path.write_text(json.dumps(decision, ensure_ascii=False, indent=2, encoding="utf-8"))
+        decision_path.write_text(json.dumps(decision, ensure_ascii=False, indent=2), encoding="utf-8")
         st.success("✅ 전략 확정 완료! **📋 스토리보드 + PPT** 페이지로 이동하세요.")
