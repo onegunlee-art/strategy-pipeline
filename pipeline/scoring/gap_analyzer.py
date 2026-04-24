@@ -5,6 +5,9 @@ import json
 from pathlib import Path
 
 import anthropic
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 COMPETITORS_DB = Path(__file__).parent.parent.parent / "data/knowledge_base/competitors.json"

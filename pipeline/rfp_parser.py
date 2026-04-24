@@ -9,6 +9,9 @@ from pathlib import Path
 
 import anthropic
 import pdfplumber
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def _parse_claude_json(raw: str) -> dict:

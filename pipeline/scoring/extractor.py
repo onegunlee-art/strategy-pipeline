@@ -6,6 +6,9 @@ import json
 import re
 
 import anthropic
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def _parse_claude_json(raw: str) -> dict:

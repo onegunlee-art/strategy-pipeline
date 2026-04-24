@@ -10,6 +10,9 @@ from datetime import date
 from pathlib import Path
 
 import anthropic
+from dotenv import load_dotenv
+
+load_dotenv()
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN

@@ -6,6 +6,9 @@ import json
 import re
 
 import anthropic
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 STORYBOARD_PROMPT = """당신은 B2B 입찰 제안서 전문 스토리보드 작가입니다.
