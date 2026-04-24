@@ -42,21 +42,24 @@ def extract_text_from_pdf(pdf_path: Path) -> tuple[str, bool]:
         return "", False
 
 
-def extract_text_via_vision(pdf_path: Path) -> str:
-    """Claude Vision으로 PDF 이미지 → 텍스트 추출 (fallback)"""
-    try:
-        import fitz  # PyMuPDF
-    except ImportError:
-        return ""
+def extract_text_via_vision(pdf_path: Path, max_pages: int = 30) -> str:
+    """pypdfium2로 PDF → 이미지 변환 후 Claude Vision으로 텍스트 추출"""
+    import pypdfium2 as pdfium
 
     client = anthropic.Anthropic()
     pages_text = []
 
-    doc = fitz.open(str(pdf_path))
-    for i, page in enumerate(doc):
-        mat = fitz.Matrix(2, 2)
-        pix = page.get_pixmap(matrix=mat)
-        img_data = base64.standard_b64encode(pix.tobytes("png")).decode()
+    doc = pdfium.PdfDocument(str(pdf_path))
+    total = min(len(doc), max_pages)
+
+    for i in range(total):
+        page = doc[i]
+        bitmap = page.render(scale=2.0)
+        pil_img = bitmap.to_pil()
+
+        buf = __import__("io").BytesIO()
+        pil_img.save(buf, format="PNG")
+        img_data = base64.standard_b64encode(buf.getvalue()).decode()
 
         msg = client.messages.create(
             model="claude-sonnet-4-6",
@@ -65,7 +68,7 @@ def extract_text_via_vision(pdf_path: Path) -> str:
                 "role": "user",
                 "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_data}},
-                    {"type": "text", "text": f"이 페이지({i+1})의 텍스트를 그대로 추출하세요. 표 구조도 최대한 보존하세요. 페이지 번호만 출력: [PAGE {i+1}]로 시작."}
+                    {"type": "text", "text": f"[PAGE {i+1}]로 시작하여 이 페이지의 텍스트를 그대로 추출하세요. 표 구조와 배점 숫자를 정확히 보존하세요."}
                 ]
             }]
         )

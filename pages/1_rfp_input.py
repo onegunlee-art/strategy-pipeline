@@ -36,29 +36,45 @@ if uploaded:
         parse_btn = st.button("🔍 파싱 시작", type="primary", use_container_width=True)
 
     if parse_btn:
-        with st.spinner("RFP 파싱 중... (30초~1분 소요)"):
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(uploaded.read())
-                tmp_path = Path(tmp.name)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(uploaded.read())
+            tmp_path = Path(tmp.name)
 
-            try:
-                from pipeline.rfp_parser import parse_rfp
-                result = parse_rfp(tmp_path)
+        try:
+            from pipeline.rfp_parser import extract_text_from_pdf
+            status = st.status("RFP 파싱 중...", expanded=True)
 
-                rfp_data = {
-                    "text": result["text"],
-                    "basics": result["basics"],
-                    "source": result["source"],
-                    "filename": uploaded.name,
-                }
-                rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2))
-                st.session_state.rfp_parsed = True
-                st.success(f"파싱 완료! (소스: {result['source']})")
-                st.rerun()
-            except Exception as e:
-                st.error(f"파싱 실패: {e}")
-            finally:
-                tmp_path.unlink(missing_ok=True)
+            with status:
+                st.write("📄 텍스트 추출 시도 중...")
+                text, success = extract_text_from_pdf(tmp_path)
+                source = "pdfplumber"
+
+                if not success or len(text.strip()) < 200:
+                    st.write("🔍 스캔 PDF 감지 — Vision 처리 시작 (페이지당 5~10초 소요)")
+                    from pipeline.rfp_parser import extract_text_via_vision
+                    text = extract_text_via_vision(tmp_path)
+                    source = "vision"
+                    if not text.strip():
+                        raise ValueError("텍스트 추출 실패 — PDF가 손상되었거나 지원하지 않는 형식입니다.")
+
+                st.write("🤖 기본정보 추출 중...")
+                from pipeline.rfp_parser import parse_rfp_basics
+                basics = parse_rfp_basics(text)
+
+            rfp_data = {
+                "text": text,
+                "basics": basics,
+                "source": source,
+                "filename": uploaded.name,
+            }
+            rfp_path.write_text(json.dumps(rfp_data, ensure_ascii=False, indent=2))
+            st.session_state.rfp_parsed = True
+            st.success(f"파싱 완료! (소스: {source})")
+            st.rerun()
+        except Exception as e:
+            st.error(f"파싱 실패: {e}")
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
 # ── 파싱 결과 표시 및 검토 ─────────────────────────────────────────
 if rfp_path.exists():
