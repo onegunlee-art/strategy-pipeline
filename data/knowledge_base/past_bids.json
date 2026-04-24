@@ -1,0 +1,5 @@
+{
+  "_schema": "past_bids_v1",
+  "_note": "수주/실패 이력 DB. 학습루프 연료.",
+  "bids": []
+}
