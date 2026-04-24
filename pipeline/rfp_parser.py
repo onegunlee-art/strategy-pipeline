@@ -27,34 +27,46 @@ def _parse_claude_json(raw: str) -> dict:
     return json.loads(raw)
 
 
-def extract_text_from_pdf(pdf_path: Path) -> tuple[str, bool]:
-    """pdfplumber로 텍스트 추출. 반환: (text, success)"""
+def extract_text_from_pdf(pdf_path: Path) -> tuple[str, list[int]]:
+    """
+    pdfplumber로 페이지별 텍스트 추출.
+    반환: (full_text, thin_pages) — thin_pages는 내용이 부족한 페이지 번호 목록
+    """
     try:
         pages = []
+        thin_pages = []
         with pdfplumber.open(pdf_path) as pdf:
             for i, page in enumerate(pdf.pages):
                 text = page.extract_text() or ""
-                if text.strip():
-                    pages.append(f"[PAGE {i+1}]\n{text}")
-        full_text = "\n\n".join(pages)
-        return full_text, bool(full_text.strip())
+                pages.append((i, text))
+                if len(text.strip()) < 80:  # 페이지당 80자 미만 = 스캔 이미지 페이지
+                    thin_pages.append(i)
+        full_text = "\n\n".join(
+            f"[PAGE {i+1}]\n{text}" for i, text in pages if text.strip()
+        )
+        return full_text, thin_pages
     except Exception:
-        return "", False
+        return "", []
 
 
-def extract_text_via_vision(pdf_path: Path, max_pages: int = 30) -> str:
-    """pypdfium2로 PDF → 이미지 변환 후 Claude Vision으로 텍스트 추출"""
+def extract_pages_via_vision(pdf_path: Path, page_indices: list[int], progress_cb=None) -> dict[int, str]:
+    """
+    지정된 페이지 인덱스만 Vision으로 처리.
+    반환: {page_index: extracted_text}
+    """
     import pypdfium2 as pdfium
     import io
 
     client = anthropic.Anthropic()
-    pages_text = []
+    results = {}
 
     doc = pdfium.PdfDocument(str(pdf_path))
     try:
-        total = min(len(doc), max_pages)
-        for i in range(total):
-            page = doc[i]
+        for idx, page_idx in enumerate(page_indices):
+            if progress_cb:
+                progress_cb(idx + 1, len(page_indices), page_idx + 1)
+
+            page = doc[page_idx]
             bitmap = page.render(scale=2.0)
             pil_img = bitmap.to_pil()
 
@@ -64,20 +76,65 @@ def extract_text_via_vision(pdf_path: Path, max_pages: int = 30) -> str:
 
             msg = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=2000,
+                max_tokens=3000,
                 messages=[{
                     "role": "user",
                     "content": [
                         {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_data}},
-                        {"type": "text", "text": f"[PAGE {i+1}]로 시작하여 이 페이지의 텍스트를 그대로 추출하세요. 표 구조와 배점 숫자를 정확히 보존하세요."}
+                        {"type": "text", "text": f"[PAGE {page_idx+1}]로 시작하여 이 페이지의 텍스트를 그대로 추출하세요. 표·배점·숫자 구조를 정확히 보존하세요. 내용이 없는 빈 페이지면 '[BLANK]'만 출력하세요."}
                     ]
                 }]
             )
-            pages_text.append(msg.content[0].text)
+            results[page_idx] = msg.content[0].text
     finally:
         doc.close()
 
-    return "\n\n".join(pages_text)
+    return results
+
+
+def extract_full_text(pdf_path: Path, progress_cb=None) -> tuple[str, str]:
+    """
+    하이브리드 추출: pdfplumber 우선, 내용 부족 페이지는 Vision 보완.
+    반환: (full_text, source_summary)
+    """
+    import pypdfium2 as pdfium
+
+    full_text, thin_pages = extract_text_from_pdf(pdf_path)
+
+    # 전체 페이지 수 확인
+    doc = pdfium.PdfDocument(str(pdf_path))
+    total_pages = len(doc)
+    doc.close()
+
+    thin_ratio = len(thin_pages) / max(total_pages, 1)
+
+    if thin_ratio > 0.5:
+        # 절반 이상이 스캔 페이지 → 전체 Vision 처리
+        source = f"vision (전체 {total_pages}페이지)"
+        vision_results = extract_pages_via_vision(
+            pdf_path, list(range(total_pages)), progress_cb
+        )
+        pages_combined = []
+        for i in range(total_pages):
+            text = vision_results.get(i, "")
+            if text and "[BLANK]" not in text:
+                pages_combined.append(text)
+        full_text = "\n\n".join(pages_combined)
+    elif thin_pages:
+        # 일부만 스캔 → 부족한 페이지만 Vision 보완
+        source = f"hybrid (Vision {len(thin_pages)}페이지 보완)"
+        vision_results = extract_pages_via_vision(pdf_path, thin_pages, progress_cb)
+        # 기존 텍스트에 Vision 결과 추가
+        extra = []
+        for page_idx, text in sorted(vision_results.items()):
+            if text and "[BLANK]" not in text:
+                extra.append(text)
+        if extra:
+            full_text = full_text + "\n\n" + "\n\n".join(extra)
+    else:
+        source = "pdfplumber"
+
+    return full_text, source
 
 
 def parse_rfp_basics(rfp_text: str) -> dict:

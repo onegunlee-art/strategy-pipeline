@@ -48,24 +48,23 @@ if uploaded:
             tmp_path = Path(tmp.name)
 
         try:
-            from pipeline.rfp_parser import extract_text_from_pdf
+            from pipeline.rfp_parser import extract_full_text, parse_rfp_basics
             status = st.status("RFP 파싱 중...", expanded=True)
+            progress_bar = st.empty()
+
+            def update_progress(done, total, page_num):
+                progress_bar.progress(done / total, text=f"Vision 처리 중: {page_num}페이지 ({done}/{total})")
 
             with status:
-                st.write("📄 텍스트 추출 시도 중...")
-                text, success = extract_text_from_pdf(tmp_path)
-                source = "pdfplumber"
+                st.write("📄 PDF 분석 중 (스캔 여부 자동 감지)...")
+                text, source = extract_full_text(tmp_path, progress_cb=update_progress)
+                progress_bar.empty()
 
-                if not success or len(text.strip()) < 200:
-                    st.write("🔍 스캔 PDF 감지 — Vision 처리 시작 (페이지당 5~10초 소요)")
-                    from pipeline.rfp_parser import extract_text_via_vision
-                    text = extract_text_via_vision(tmp_path)
-                    source = "vision"
-                    if not text.strip():
-                        raise ValueError("텍스트 추출 실패 — PDF가 손상되었거나 지원하지 않는 형식입니다.")
+                if not text.strip():
+                    raise ValueError("텍스트 추출 실패 — PDF가 손상되었거나 지원하지 않는 형식입니다.")
 
+                st.write(f"✅ 텍스트 추출 완료 ({source}, {len(text):,}자)")
                 st.write("🤖 기본정보 추출 중...")
-                from pipeline.rfp_parser import parse_rfp_basics
                 basics = parse_rfp_basics(text)
 
             rfp_data = {
