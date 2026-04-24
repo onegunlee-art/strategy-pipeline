@@ -1,4 +1,5 @@
 anthropic>=0.40.0
+python-dotenv>=1.0.0
 python-pptx>=1.0.0
 Pillow>=10.0.0
 pyyaml>=6.0

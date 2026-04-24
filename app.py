@@ -5,6 +5,9 @@ KT 수주전략 파이프라인 — 메인 앱
 import json
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 
 st.set_page_config(
