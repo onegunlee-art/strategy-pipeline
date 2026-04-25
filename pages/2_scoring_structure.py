@@ -101,7 +101,7 @@ if scoring_path.exists():
                 )
             with col2:
                 new_score = st.number_input(
-                    "배점", value=int(item.get("max_score", 0)),
+                    "배점", value=int(item.get("max_score") or 0),
                     min_value=0, max_value=200,
                     key=f"score_{item_key}", label_visibility="collapsed"
                 )

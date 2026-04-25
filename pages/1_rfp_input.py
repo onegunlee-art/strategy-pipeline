@@ -228,12 +228,12 @@ if rfp_path.exists() and rfp_path.stat().st_size > 10:
             save_btn = st.form_submit_button("💾 저장 및 확정", type="primary")
 
         if save_btn:
-            basics["meta"]["title"] = new_title
-            basics["meta"]["issuer"] = new_issuer
-            basics["timeline"]["proposal_due_date"] = new_proposal_due
-            basics["timeline"]["project_duration_months"] = new_duration
-            basics["budget"]["total_budget"] = int(new_budget * 1e8) if new_budget else None
-            basics["strategy_hints"]["win_focus"] = new_win_focus
+            basics.setdefault("meta", {})["title"] = new_title
+            basics.setdefault("meta", {})["issuer"] = new_issuer
+            basics.setdefault("timeline", {})["proposal_due_date"] = new_proposal_due
+            basics.setdefault("timeline", {})["project_duration_months"] = new_duration
+            basics.setdefault("budget", {})["total_budget"] = int(new_budget * 1e8) if new_budget else None
+            basics.setdefault("strategy_hints", {})["win_focus"] = new_win_focus
             # 하위 모듈 호환용 flat 필드 유지
             basics["project_name"] = new_title
             basics["client"] = new_issuer
