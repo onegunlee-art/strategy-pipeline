@@ -137,56 +137,137 @@ def extract_full_text(pdf_path: Path, progress_cb=None) -> tuple[str, str]:
     return full_text, source
 
 
-def parse_rfp_basics(rfp_text: str) -> dict:
-    """RFP 텍스트에서 사업 기본정보 16항목 추출"""
-    client = anthropic.Anthropic()
+RFP_SCHEMA_PROMPT = """당신은 B2B ICT 입찰 전문 분석가입니다.
+아래 RFP 텍스트를 분석하여 수주 판단에 필요한 전체 구조를 추출하세요.
+모르는 값은 null로 두고, 추론 가능한 값은 reasoning과 함께 채우세요.
 
-    prompt = f"""당신은 RFP(제안요청서) 전문 분석가입니다.
-아래 RFP 텍스트에서 사업 기본정보를 추출하세요.
-
-순수 JSON만 응답하세요 (마크다운 없이):
-{{
-  "project_name": "사업명",
-  "client": "발주기관명",
-  "contract_type": "계약방식 (일반경쟁/제한경쟁/협상에의한계약 등)",
-  "budget": "사업예산 (숫자+단위)",
-  "duration": "사업기간",
-  "submission_deadline": "제안서 제출기한",
-  "eval_date": "평가일정",
-  "announcement_date": "공고일",
-  "project_scope": "사업범위 요약 (2-3줄)",
-  "key_requirements": ["핵심 요구사항1", "요구사항2", "요구사항3"],
-  "tech_stack": ["요구 기술1", "기술2"],
-  "reference_requirements": "레퍼런스 요건",
-  "consortium_allowed": true,
-  "subcontract_ratio": "하도급 비율 제한",
-  "submission_format": "제출 형식",
-  "contact": "담당자 연락처"
-}}
+순수 JSON만 응답하세요:
+{
+  "meta": {
+    "title": "사업명",
+    "issuer": "발주기관",
+    "industry": "finance|public|enterprise|telecom|other",
+    "source_type": "pdf|scanned|mixed",
+    "confidence_score": 0.0
+  },
+  "project_overview": {
+    "objective": "사업 목적 (1-2문장)",
+    "project_type": ["ai_platform","data_platform","agent_system","infra","integration","si"],
+    "background": "추진 배경",
+    "expected_outcomes": ["기대 성과1", "기대 성과2"]
+  },
+  "timeline": {
+    "announcement_date": null,
+    "proposal_due_date": null,
+    "evaluation_period": null,
+    "project_start": null,
+    "project_duration_months": null
+  },
+  "budget": {
+    "total_budget": null,
+    "currency": "KRW",
+    "pricing_model": "fixed|t&m|hybrid",
+    "price_weight": null
+  },
+  "requirements": {
+    "must": [
+      {
+        "id": "M01",
+        "description": "필수 요건 설명",
+        "category": "technical|legal|experience|infra",
+        "verification_method": "서류|시연|인증",
+        "risk_if_missing": "disqualified|score_loss"
+      }
+    ],
+    "should": [
+      {"id": "S01", "description": "권장 요건", "category": "technical"}
+    ],
+    "optional": []
+  },
+  "evaluation": {
+    "total_score": 100,
+    "criteria": [
+      {
+        "name": "기술능력",
+        "weight": 70,
+        "sub_criteria": [
+          {"name": "세부항목명", "weight": 20, "description": "평가기준 설명"}
+        ]
+      },
+      {"name": "가격", "weight": 30, "sub_criteria": []}
+    ],
+    "evaluation_method": "relative|absolute|hybrid",
+    "pass_threshold": null
+  },
+  "deliverables": {
+    "mandatory_outputs": ["proposal_doc","technical_doc","demo","presentation"],
+    "format_constraints": [],
+    "submission_method": "online|offline|both"
+  },
+  "constraints": {
+    "legal": [],
+    "technical": [],
+    "operational": [],
+    "partner_restrictions": []
+  },
+  "risk_flags": {
+    "high_difficulty": false,
+    "unclear_requirements": false,
+    "over_specification": false,
+    "vendor_lock_in_suspected": false,
+    "timeline_risk": false,
+    "notes": ""
+  },
+  "intent_inference": {
+    "likely_preferred_vendor_type": "si|cloud|niche|telecom",
+    "hidden_priorities": ["stability","reference","cost_efficiency","innovation","security"],
+    "inferred_focus": "technical|price|balance",
+    "reasoning": "이 RFP에서 발주자가 진짜 원하는 것에 대한 분석"
+  },
+  "competition_assumption": {
+    "likely_competitors": ["LG CNS","SK C&C","삼성SDS"],
+    "expected_strengths": ["경쟁사 예상 강점"],
+    "expected_weaknesses": ["경쟁사 예상 약점"]
+  },
+  "strategy_hints": {
+    "win_focus": "technical|price|hybrid",
+    "key_differentiators": ["KT가 강조해야 할 차별점"],
+    "avoid_areas": ["피해야 할 영역"],
+    "consortium_needs": [
+      {"role": "ai_model|infra|data|consulting", "required_capability": ""}
+    ],
+    "price_strategy": "aggressive|balanced|premium",
+    "risk_mitigation": ["리스크 대응 방안"]
+  },
+  "validation": {
+    "score_sum_check": true,
+    "must_requirement_present": true,
+    "timeline_valid": false,
+    "budget_consistency": false
+  }
+}
 
 RFP 텍스트:
-{rfp_text[:8000]}
+__RFP_TEXT__
 """
+
+
+def parse_rfp_basics(rfp_text: str) -> dict:
+    """RFP 텍스트에서 전체 구조 추출 (신 스키마)"""
+    client = anthropic.Anthropic()
+
+    # 앞부분 + 평가 관련 섹션 집중 전송 (토큰 최적화)
+    text_sample = rfp_text[:6000] + "\n\n...(중략)...\n\n" + rfp_text[-4000:] if len(rfp_text) > 10000 else rfp_text
+
+    prompt = RFP_SCHEMA_PROMPT.replace("__RFP_TEXT__", text_sample)
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2000,
+        max_tokens=4000,
+        system="당신은 RFP 구조화 전문가입니다. 지정된 JSON 스키마를 정확히 채워 순수 JSON만 출력합니다.",
         messages=[{"role": "user", "content": prompt}]
     )
     return _parse_claude_json(response.content[0].text)
-
-
-def parse_rfp(pdf_path: Path) -> dict:
-    """
-    메인 파싱 함수.
-    반환: { "text": str, "basics": dict, "source": "pdfplumber"|"vision" }
-    """
-    text, success = extract_text_from_pdf(pdf_path)
-    source = "pdfplumber"
-
-    if not success or len(text.strip()) < 200:
-        text = extract_text_via_vision(pdf_path)
-        source = "vision"
 
     basics = parse_rfp_basics(text)
     return {"text": text, "basics": basics, "source": source}
