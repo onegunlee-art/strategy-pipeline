@@ -14,17 +14,41 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _repair_json(raw: str) -> str:
+    """잘리거나 손상된 JSON을 최대한 복구"""
+    # 후행 쉼표 제거 (},  }) 패턴)
+    raw = re.sub(r",\s*([\]}])", r"\1", raw)
+    # 열린 괄호/중괄호 닫기
+    stack = []
+    for ch in raw:
+        if ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if stack and stack[-1] == ch:
+                stack.pop()
+    raw = raw.rstrip(", \n\r\t")
+    raw += "".join(reversed(stack))
+    return raw
+
+
 def _parse_claude_json(raw: str) -> dict:
     raw = raw.strip()
-    # 마크다운 코드블록 제거
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```\s*$", "", raw)
     raw = raw.strip()
-    # JSON 블록만 추출 (앞뒤 설명 텍스트 제거)
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if match:
         raw = match.group(0)
-    return json.loads(raw)
+    # 1차 시도
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    # 2차: 자동 복구 후 재시도
+    try:
+        return json.loads(_repair_json(raw))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"JSON 파싱 실패 (복구 불가): {e}") from e
 
 
 def extract_text_from_pdf(pdf_path: Path) -> tuple[str, list[int]]:
