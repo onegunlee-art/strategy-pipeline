@@ -137,114 +137,43 @@ def extract_full_text(pdf_path: Path, progress_cb=None) -> tuple[str, str]:
     return full_text, source
 
 
-RFP_SCHEMA_PROMPT = """당신은 B2B ICT 입찰 전문 분석가입니다.
-아래 RFP 텍스트를 분석하여 수주 판단에 필요한 전체 구조를 추출하세요.
-모르는 값은 null로 두고, 추론 가능한 값은 reasoning과 함께 채우세요.
-
-순수 JSON만 응답하세요:
+PROMPT_PART1 = """당신은 B2B ICT 입찰 전문 분석가입니다. RFP 텍스트를 분석하세요.
+순수 JSON만 응답하세요 (마크다운 없이):
 {
-  "meta": {
-    "title": "사업명",
-    "issuer": "발주기관",
-    "industry": "finance|public|enterprise|telecom|other",
-    "source_type": "pdf|scanned|mixed",
-    "confidence_score": 0.0
-  },
-  "project_overview": {
-    "objective": "사업 목적 (1-2문장)",
-    "project_type": ["ai_platform","data_platform","agent_system","infra","integration","si"],
-    "background": "추진 배경",
-    "expected_outcomes": ["기대 성과1", "기대 성과2"]
-  },
-  "timeline": {
-    "announcement_date": null,
-    "proposal_due_date": null,
-    "evaluation_period": null,
-    "project_start": null,
-    "project_duration_months": null
-  },
-  "budget": {
-    "total_budget": null,
-    "currency": "KRW",
-    "pricing_model": "fixed|t&m|hybrid",
-    "price_weight": null
-  },
-  "requirements": {
-    "must": [
-      {
-        "id": "M01",
-        "description": "필수 요건 설명",
-        "category": "technical|legal|experience|infra",
-        "verification_method": "서류|시연|인증",
-        "risk_if_missing": "disqualified|score_loss"
-      }
-    ],
-    "should": [
-      {"id": "S01", "description": "권장 요건", "category": "technical"}
-    ],
-    "optional": []
-  },
+  "meta": {"title": "사업명", "issuer": "발주기관", "industry": "finance|public|enterprise|telecom|other", "source_type": "scanned|pdf|mixed", "confidence_score": 0.85},
+  "project_overview": {"objective": "목적(1-2문장)", "project_type": ["ai_platform"], "background": "배경", "expected_outcomes": ["성과1"]},
+  "timeline": {"announcement_date": null, "proposal_due_date": null, "evaluation_period": null, "project_start": null, "project_duration_months": null},
+  "budget": {"total_budget": null, "currency": "KRW", "pricing_model": "fixed", "price_weight": null},
+  "deliverables": {"mandatory_outputs": ["proposal_doc"], "format_constraints": [], "submission_method": "offline"},
+  "constraints": {"legal": [], "technical": [], "operational": [], "partner_restrictions": []},
+  "risk_flags": {"high_difficulty": false, "unclear_requirements": false, "over_specification": false, "vendor_lock_in_suspected": false, "timeline_risk": false, "notes": ""},
+  "intent_inference": {"likely_preferred_vendor_type": "si", "hidden_priorities": ["stability"], "inferred_focus": "technical", "reasoning": "분석 근거"},
+  "competition_assumption": {"likely_competitors": [], "expected_strengths": [], "expected_weaknesses": []},
+  "strategy_hints": {"win_focus": "technical", "key_differentiators": [], "avoid_areas": [], "consortium_needs": [], "price_strategy": "balanced", "risk_mitigation": []}
+}
+
+RFP 텍스트:
+__RFP_TEXT__
+"""
+
+PROMPT_PART2 = """당신은 B2B ICT 입찰 평가구조 전문 분석가입니다. RFP에서 평가 기준과 필수 요건을 추출하세요.
+순수 JSON만 응답하세요 (마크다운 없이):
+{
   "evaluation": {
     "total_score": 100,
     "criteria": [
-      {
-        "name": "기술능력",
-        "weight": 70,
-        "sub_criteria": [
-          {"name": "세부항목명", "weight": 20, "description": "평가기준 설명"}
-        ]
-      },
+      {"name": "기술능력", "weight": 70, "sub_criteria": [{"name": "세부항목", "weight": 20, "description": "기준설명"}]},
       {"name": "가격", "weight": 30, "sub_criteria": []}
     ],
-    "evaluation_method": "relative|absolute|hybrid",
+    "evaluation_method": "relative",
     "pass_threshold": null
   },
-  "deliverables": {
-    "mandatory_outputs": ["proposal_doc","technical_doc","demo","presentation"],
-    "format_constraints": [],
-    "submission_method": "online|offline|both"
+  "requirements": {
+    "must": [{"id": "M01", "description": "필수요건", "category": "technical", "verification_method": "서류", "risk_if_missing": "score_loss"}],
+    "should": [{"id": "S01", "description": "권장요건", "category": "technical"}],
+    "optional": []
   },
-  "constraints": {
-    "legal": [],
-    "technical": [],
-    "operational": [],
-    "partner_restrictions": []
-  },
-  "risk_flags": {
-    "high_difficulty": false,
-    "unclear_requirements": false,
-    "over_specification": false,
-    "vendor_lock_in_suspected": false,
-    "timeline_risk": false,
-    "notes": ""
-  },
-  "intent_inference": {
-    "likely_preferred_vendor_type": "si|cloud|niche|telecom",
-    "hidden_priorities": ["stability","reference","cost_efficiency","innovation","security"],
-    "inferred_focus": "technical|price|balance",
-    "reasoning": "이 RFP에서 발주자가 진짜 원하는 것에 대한 분석"
-  },
-  "competition_assumption": {
-    "likely_competitors": ["LG CNS","SK C&C","삼성SDS"],
-    "expected_strengths": ["경쟁사 예상 강점"],
-    "expected_weaknesses": ["경쟁사 예상 약점"]
-  },
-  "strategy_hints": {
-    "win_focus": "technical|price|hybrid",
-    "key_differentiators": ["KT가 강조해야 할 차별점"],
-    "avoid_areas": ["피해야 할 영역"],
-    "consortium_needs": [
-      {"role": "ai_model|infra|data|consulting", "required_capability": ""}
-    ],
-    "price_strategy": "aggressive|balanced|premium",
-    "risk_mitigation": ["리스크 대응 방안"]
-  },
-  "validation": {
-    "score_sum_check": true,
-    "must_requirement_present": true,
-    "timeline_valid": false,
-    "budget_consistency": false
-  }
+  "validation": {"score_sum_check": true, "must_requirement_present": true, "timeline_valid": false, "budget_consistency": false}
 }
 
 RFP 텍스트:
@@ -253,20 +182,39 @@ __RFP_TEXT__
 
 
 def parse_rfp_basics(rfp_text: str) -> dict:
-    """RFP 텍스트에서 전체 구조 추출 (신 스키마)"""
+    """RFP 텍스트에서 전체 구조 추출 — 2회 호출로 분리"""
     client = anthropic.Anthropic()
 
-    # 앞부분 + 평가 관련 섹션 집중 전송 (토큰 최적화)
-    text_sample = rfp_text[:6000] + "\n\n...(중략)...\n\n" + rfp_text[-4000:] if len(rfp_text) > 10000 else rfp_text
+    text_front = rfp_text[:8000]
+    text_eval = rfp_text[:5000] + "\n\n...\n\n" + rfp_text[-5000:] if len(rfp_text) > 10000 else rfp_text
 
-    prompt = RFP_SCHEMA_PROMPT.replace("__RFP_TEXT__", text_sample)
-
-    response = client.messages.create(
+    # 1차: 기본 구조 + 의도 분석
+    r1 = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=4000,
-        system="당신은 RFP 구조화 전문가입니다. 지정된 JSON 스키마를 정확히 채워 순수 JSON만 출력합니다.",
-        messages=[{"role": "user", "content": prompt}]
+        max_tokens=3000,
+        system="순수 JSON만 출력합니다. 마크다운 사용 금지.",
+        messages=[{"role": "user", "content": PROMPT_PART1.replace("__RFP_TEXT__", text_front)}]
     )
+    part1 = _parse_claude_json(r1.content[0].text)
+
+    # 2차: 평가구조 + 요건 (전체 텍스트 활용)
+    r2 = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=3000,
+        system="순수 JSON만 출력합니다. 마크다운 사용 금지.",
+        messages=[{"role": "user", "content": PROMPT_PART2.replace("__RFP_TEXT__", text_eval)}]
+    )
+    part2 = _parse_claude_json(r2.content[0].text)
+
+    # 병합
+    result = {**part1, **part2}
+
+    # 하위 모듈 호환용 flat 필드
+    result["project_name"] = result.get("meta", {}).get("title", "")
+    result["client"] = result.get("meta", {}).get("issuer", "")
+    result["contract_type"] = result.get("budget", {}).get("pricing_model", "")
+
+    return result
     return _parse_claude_json(response.content[0].text)
 
     basics = parse_rfp_basics(text)
