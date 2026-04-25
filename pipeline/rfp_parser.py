@@ -215,7 +215,7 @@ def parse_rfp_basics(rfp_text: str) -> dict:
     # 1차: 기본 구조 + 의도 분석
     r1 = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=3000,
+        max_tokens=4096,
         system="순수 JSON만 출력합니다. 마크다운 사용 금지.",
         messages=[{"role": "user", "content": PROMPT_PART1.replace("__RFP_TEXT__", text_front)}]
     )
@@ -224,7 +224,7 @@ def parse_rfp_basics(rfp_text: str) -> dict:
     # 2차: 평가구조 + 요건 (전체 텍스트 활용)
     r2 = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=3000,
+        max_tokens=4096,
         system="순수 JSON만 출력합니다. 마크다운 사용 금지.",
         messages=[{"role": "user", "content": PROMPT_PART2.replace("__RFP_TEXT__", text_eval)}]
     )
@@ -239,7 +239,3 @@ def parse_rfp_basics(rfp_text: str) -> dict:
     result["contract_type"] = result.get("budget", {}).get("pricing_model", "")
 
     return result
-    return _parse_claude_json(response.content[0].text)
-
-    basics = parse_rfp_basics(text)
-    return {"text": text, "basics": basics, "source": source}

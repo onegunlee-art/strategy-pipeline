@@ -91,6 +91,19 @@ def generate_storyboard(
         }]
     )
 
+    def _repair(s: str) -> str:
+        s = re.sub(r",\s*([\]}])", r"\1", s)
+        stack = []
+        for ch in s:
+            if ch in "{[":
+                stack.append("}" if ch == "{" else "]")
+            elif ch in "}]":
+                if stack and stack[-1] == ch:
+                    stack.pop()
+        s = s.rstrip(", \n\r\t")
+        s += "".join(reversed(stack))
+        return s
+
     raw = response.content[0].text.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```\s*$", "", raw)
@@ -99,7 +112,10 @@ def generate_storyboard(
     if match:
         raw = match.group(0)
 
-    slides = json.loads(raw)
+    try:
+        slides = json.loads(raw)
+    except json.JSONDecodeError:
+        slides = json.loads(_repair(raw))
 
     # Layer 분류 및 sequence 정렬
     slides.sort(key=lambda s: (s.get("layer", 3), s.get("sequence", 99)))

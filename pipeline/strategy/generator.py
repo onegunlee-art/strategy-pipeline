@@ -14,16 +14,36 @@ load_dotenv()
 COMPETITORS_DB = Path(__file__).parent.parent.parent / "data/knowledge_base/competitors.json"
 
 
+def _repair_json(raw: str) -> str:
+    raw = re.sub(r",\s*([\]}])", r"\1", raw)
+    stack = []
+    for ch in raw:
+        if ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if stack and stack[-1] == ch:
+                stack.pop()
+    raw = raw.rstrip(", \n\r\t")
+    raw += "".join(reversed(stack))
+    return raw
+
+
 def _parse_json(raw: str) -> dict | list:
     raw = raw.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```\s*$", "", raw)
     raw = raw.strip()
-    # 배열이면 [...], 객체면 {...} 추출
     match = re.search(r"(\[.*\]|\{.*\})", raw, re.DOTALL)
     if match:
         raw = match.group(0)
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    try:
+        return json.loads(_repair_json(raw))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"JSON 파싱 실패 (복구 불가): {e}") from e
 
 
 def _get_competitor_profile(competitor: str) -> str:

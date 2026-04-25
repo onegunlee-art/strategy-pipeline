@@ -161,6 +161,20 @@ def compute_top3(gap_matrix: list[dict], competitor: str, project_type: str = ""
     )
 
     import re
+
+    def _repair(s: str) -> str:
+        s = re.sub(r",\s*([\]}])", r"\1", s)
+        stack = []
+        for ch in s:
+            if ch in "{[":
+                stack.append("}" if ch == "{" else "]")
+            elif ch in "}]":
+                if stack and stack[-1] == ch:
+                    stack.pop()
+        s = s.rstrip(", \n\r\t")
+        s += "".join(reversed(stack))
+        return s
+
     raw = response.content[0].text.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```\s*$", "", raw)
@@ -169,7 +183,10 @@ def compute_top3(gap_matrix: list[dict], competitor: str, project_type: str = ""
     if match:
         raw = match.group(0)
 
-    result = json.loads(raw)
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        result = json.loads(_repair(raw))
     result["low_confidence_excluded"] = [
         {"item": r["item"], "structure_confidence": r["structure_confidence"]}
         for r in excluded
