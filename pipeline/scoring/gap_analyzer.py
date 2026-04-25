@@ -35,6 +35,7 @@ def get_competitor_adjustment(competitor: str, project_type: str) -> float:
 
 def estimate_competitor_score(item_name: str, max_score: int, competitor: str, project_type: str = "") -> float:
     """경쟁사 추정 점수 계산 (기본값 기반 + 보정)"""
+    max_score = max_score or 0
     db = load_competitor_db()
     comp_data = db.get(competitor, {})
     base_strengths = comp_data.get("base_strength", [])
@@ -71,7 +72,7 @@ def compute_gap_matrix(scoring_data: dict, kt_scores: dict, competitor: str, pro
         cat_name = cat["category"]
         for item in cat.get("items", []):
             item_name = item["name"]
-            max_s = item["max_score"]
+            max_s = item.get("max_score") or 0
             kt_s = kt_scores.get(item_name, max_s * 0.7)
             comp_s = estimate_competitor_score(item_name, max_s, competitor, project_type)
 

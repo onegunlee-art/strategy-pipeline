@@ -68,7 +68,7 @@ for cat in structure:
     cols = st.columns(min(len(cat.get("items", [])), 4))
     for i, item in enumerate(cat.get("items", [])):
         name = item["name"]
-        max_s = item["max_score"]
+        max_s = item.get("max_score") or 0
         default_val = kt_scores.get(name, round(max_s * 0.75, 1))
         sc = item.get("structure_confidence", 1.0)
         label = name
@@ -77,7 +77,7 @@ for cat in structure:
         with cols[i % 4]:
             val = st.number_input(
                 f"{label}\n(max {max_s})",
-                min_value=0.0, max_value=float(max_s),
+                min_value=0.0, max_value=float(max_s) if max_s else 100.0,
                 value=float(default_val),
                 step=0.5,
                 key=f"kt_{name}"
