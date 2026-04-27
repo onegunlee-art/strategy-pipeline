@@ -1,0 +1,50 @@
+{
+  "LG CNS": {
+    "base_strength": ["infra", "SI", "대형프로젝트", "제조", "금융"],
+    "base_weakness": ["AI 순수 개발", "SW 통합", "클라우드 네이티브"],
+    "project_adjustments": {
+      "AI_heavy": -1,
+      "infra_heavy": 2,
+      "cloud": -1,
+      "SI": 2
+    },
+    "typical_strategy": "인프라 안정성 + 대형 레퍼런스 중심",
+    "known_weaknesses_in_proposal": ["AI 모델 자체 개발 역량 부족", "클라우드 전환 경험 제한적"]
+  },
+  "SK C&C": {
+    "base_strength": ["AI/ML", "클라우드", "금융", "통신"],
+    "base_weakness": ["대형 인프라 구축", "공공 레퍼런스"],
+    "project_adjustments": {
+      "AI_heavy": 2,
+      "cloud": 2,
+      "public": -1,
+      "infra_heavy": -1
+    },
+    "typical_strategy": "AI 혁신 + 클라우드 중심",
+    "known_weaknesses_in_proposal": ["공공 조달 경험 부족", "대규모 현장 운영 경험 제한"]
+  },
+  "삼성SDS": {
+    "base_strength": ["제조", "물류", "대기업 계열사", "글로벌"],
+    "base_weakness": ["통신 특화", "중소 규모 민첩성"],
+    "project_adjustments": {
+      "manufacturing": 2,
+      "logistics": 2,
+      "telecom": -1,
+      "agile": -1
+    },
+    "typical_strategy": "글로벌 레퍼런스 + 삼성 생태계",
+    "known_weaknesses_in_proposal": ["통신 도메인 깊이 부족", "중소 사업 대응력 제한"]
+  },
+  "SK텔레콤": {
+    "base_strength": ["AI", "통신", "클라우드", "미디어"],
+    "base_weakness": ["시스템 통합", "공공 조달"],
+    "project_adjustments": {
+      "AI_heavy": 2,
+      "telecom": 2,
+      "SI": -1,
+      "public": -1
+    },
+    "typical_strategy": "AI 플랫폼 + 통신 인프라 활용",
+    "known_weaknesses_in_proposal": ["시스템 통합 경험 부족", "공공 레퍼런스 제한"]
+  }
+}
