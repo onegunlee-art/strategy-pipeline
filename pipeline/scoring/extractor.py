@@ -8,39 +8,13 @@ import re
 import anthropic
 from dotenv import load_dotenv
 
+from pipeline.utils import parse_json_robust
+
 load_dotenv()
 
 
-def _repair_json(raw: str) -> str:
-    raw = re.sub(r",\s*([\]}])", r"\1", raw)
-    stack = []
-    for ch in raw:
-        if ch in "{[":
-            stack.append("}" if ch == "{" else "]")
-        elif ch in "}]":
-            if stack and stack[-1] == ch:
-                stack.pop()
-    raw = raw.rstrip(", \n\r\t")
-    raw += "".join(reversed(stack))
-    return raw
-
-
 def _parse_claude_json(raw: str) -> dict:
-    raw = raw.strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```\s*$", "", raw)
-    raw = raw.strip()
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if match:
-        raw = match.group(0)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    try:
-        return json.loads(_repair_json(raw))
-    except json.JSONDecodeError as e:
-        raise ValueError(f"JSON 파싱 실패 (복구 불가): {e}") from e
+    return parse_json_robust(raw)
 
 
 EXTRACT_PROMPT = """당신은 B2B 입찰 평가구조 전문 분석가입니다.

@@ -12,6 +12,8 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
+from pipeline.utils import parse_json_robust
+
 load_dotenv()
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -126,11 +128,7 @@ def _generate_slide_content(slide_data: dict, rfp_basics: dict, strategies: list
         messages=[{"role": "user", "content": prompt}]
     )
 
-    raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw)
-    return json.loads(raw)
+    return parse_json_robust(response.content[0].text)
 
 
 def build_ppt(
