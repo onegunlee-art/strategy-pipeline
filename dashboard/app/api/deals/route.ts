@@ -3,8 +3,8 @@ import { getDb } from '@/lib/db';
 
 export async function GET() {
   try {
-    const db = getDb();
-    const rows = db.prepare(`
+    const db = await getDb();
+    const { rows } = await db.query(`
       SELECT
         d.id,
         d.client_name,
@@ -19,7 +19,7 @@ export async function GET() {
       LEFT JOIN predictions p ON p.deal_id = d.id
       LEFT JOIN outcomes o ON o.deal_id = d.id
       ORDER BY d.created_at DESC
-    `).all();
+    `);
 
     return NextResponse.json(rows);
   } catch (e: unknown) {

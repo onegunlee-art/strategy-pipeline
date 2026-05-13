@@ -8,11 +8,11 @@ export async function POST(req: NextRequest) {
       actual_result: 0 | 1;
     };
 
-    const db = getDb();
-    db.prepare('INSERT INTO outcomes (deal_id, actual_result) VALUES (?, ?)').run(
+    const db = await getDb();
+    await db.query('INSERT INTO outcomes (deal_id, actual_result) VALUES ($1, $2)', [
       deal_id,
-      actual_result
-    );
+      actual_result,
+    ]);
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

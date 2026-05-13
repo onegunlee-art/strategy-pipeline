@@ -15,9 +15,9 @@ interface PredictionRow {
 
 export async function POST() {
   try {
-    const db = getDb();
+    const db = await getDb();
 
-    const rows = db.prepare(`
+    const { rows } = await db.query(`
       SELECT
         d.id as deal_id,
         d.client_name,
@@ -31,7 +31,7 @@ export async function POST() {
       JOIN predictions p ON p.deal_id = o.deal_id
       ORDER BY o.closed_at DESC
       LIMIT 50
-    `).all() as PredictionRow[];
+    `);
 
     if (rows.length < 3) {
       return NextResponse.json({
@@ -41,7 +41,7 @@ export async function POST() {
       });
     }
 
-    const cases = rows.map(r => ({
+    const cases = (rows as PredictionRow[]).map(r => ({
       client_name: r.client_name,
       predicted: r.predicted_probability,
       actual: r.actual_result,
@@ -50,15 +50,17 @@ export async function POST() {
       weights_used: JSON.parse(r.weights_used_json),
     }));
 
-    const currentWeightRows = db.prepare(`
+    const { rows: weightRows } = await db.query(`
       SELECT variable_id, weight_value FROM weights w
       WHERE updated_at = (
         SELECT MAX(updated_at) FROM weights w2 WHERE w2.variable_id = w.variable_id
       )
-    `).all() as { variable_id: string; weight_value: number }[];
+    `);
 
     const currentWeights: Record<string, number> = {};
-    currentWeightRows.forEach(r => { currentWeights[r.variable_id] = r.weight_value; });
+    weightRows.forEach((r: { variable_id: string; weight_value: number }) => {
+      currentWeights[r.variable_id] = r.weight_value;
+    });
 
     const avgBrier = cases.reduce((s, c) => s + c.brier, 0) / cases.length;
 
@@ -122,18 +124,16 @@ ${casesSummary}
       return NextResponse.json({ ok: false, message: `가중치 합계 오류: ${total}` }, { status: 500 });
     }
 
-    const currentVersion = (db.prepare('SELECT MAX(version) as v FROM weights').get() as { v: number }).v ?? 1;
+    const { rows: versionRows } = await db.query('SELECT MAX(version) as v FROM weights');
+    const currentVersion = (versionRows[0].v as number) ?? 1;
     const newVersion = currentVersion + 1;
 
-    const insert = db.prepare(
-      'INSERT INTO weights (variable_id, weight_value, version) VALUES (?, ?, ?)'
-    );
-    const insertAll = db.transaction(() => {
-      Object.entries(parsed.weights).forEach(([varId, val]) => {
-        insert.run(varId, val, newVersion);
-      });
-    });
-    insertAll();
+    for (const [varId, val] of Object.entries(parsed.weights)) {
+      await db.query(
+        'INSERT INTO weights (variable_id, weight_value, version) VALUES ($1, $2, $3)',
+        [varId, val, newVersion]
+      );
+    }
 
     return NextResponse.json({
       ok: true,

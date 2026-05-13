@@ -1,69 +1,69 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import { mkdirSync } from 'fs';
+import { Pool } from 'pg';
 
-const DB_PATH = path.join(process.cwd(), 'data', 'strategy.db');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
-let _db: Database.Database | null = null;
+let initialized = false;
+let initPromise: Promise<void> | null = null;
 
-export function getDb(): Database.Database {
-  if (!_db) {
-    mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    _db = new Database(DB_PATH);
-    _db.pragma('journal_mode = WAL');
-    initSchema(_db);
-  }
-  return _db;
-}
-
-function initSchema(db: Database.Database) {
-  db.exec(`
+async function runInit() {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS deals (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       client_name TEXT NOT NULL,
       deal_size TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS predictions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       deal_id INTEGER REFERENCES deals(id),
       variables_json TEXT NOT NULL,
       predicted_probability REAL NOT NULL,
       weights_used_json TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS outcomes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       deal_id INTEGER REFERENCES deals(id),
       actual_result INTEGER NOT NULL,
-      closed_at TEXT DEFAULT (datetime('now'))
+      closed_at TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS weights (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       variable_id TEXT NOT NULL,
       weight_value REAL NOT NULL,
       version INTEGER NOT NULL DEFAULT 1,
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
 
-  const count = (db.prepare('SELECT COUNT(*) as c FROM weights').get() as { c: number }).c;
-  if (count === 0) {
-    const defaults = [
-      { id: 'decision_maker_access', value: 0.22 },
-      { id: 'past_win_history', value: 0.15 },
-      { id: 'price_competitiveness', value: 0.18 },
-      { id: 'tech_differentiation', value: 0.13 },
-      { id: 'lg_cns_threat', value: 0.14 },
-      { id: 'samsung_sds_threat', value: 0.10 },
-      { id: 'budget_confirmed', value: 0.08 },
-    ];
-    const insert = db.prepare(
-      'INSERT INTO weights (variable_id, weight_value, version) VALUES (?, ?, 1)'
-    );
-    defaults.forEach(w => insert.run(w.id, w.value));
+  const { rows } = await pool.query('SELECT COUNT(*) as c FROM weights');
+  if (parseInt(rows[0].c) === 0) {
+    for (const [id, value] of [
+      ['decision_maker_access', 0.22],
+      ['past_win_history', 0.15],
+      ['price_competitiveness', 0.18],
+      ['tech_differentiation', 0.13],
+      ['lg_cns_threat', 0.14],
+      ['samsung_sds_threat', 0.10],
+      ['budget_confirmed', 0.08],
+    ]) {
+      await pool.query(
+        'INSERT INTO weights (variable_id, weight_value, version) VALUES ($1, $2, 1)',
+        [id, value]
+      );
+    }
   }
+}
+
+export async function getDb(): Promise<Pool> {
+  if (!initialized) {
+    if (!initPromise) {
+      initPromise = runInit().then(() => { initialized = true; });
+    }
+    await initPromise;
+  }
+  return pool;
 }
