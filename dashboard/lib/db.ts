@@ -81,10 +81,10 @@ async function runInit() {
 
     CREATE TABLE IF NOT EXISTS ensemble_weights (
       id SERIAL PRIMARY KEY,
-      pillar_mult REAL NOT NULL DEFAULT 0.40,
-      bayesian REAL NOT NULL DEFAULT 0.20,
+      pillar_mult REAL NOT NULL DEFAULT 0.45,
+      bayesian REAL NOT NULL DEFAULT 0.30,
       elo REAL NOT NULL DEFAULT 0.20,
-      monte_carlo REAL NOT NULL DEFAULT 0.20,
+      monte_carlo REAL NOT NULL DEFAULT 0.05,
       version INTEGER NOT NULL DEFAULT 1,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
@@ -125,7 +125,7 @@ async function runInit() {
   const { rows: ensRow } = await pool.query('SELECT COUNT(*)::int as c FROM ensemble_weights');
   if (ensRow[0].c === 0) {
     await pool.query(`INSERT INTO ensemble_weights (pillar_mult, bayesian, elo, monte_carlo, version)
-                      VALUES (0.40, 0.20, 0.20, 0.20, 1)`);
+                      VALUES (0.45, 0.30, 0.20, 0.05, 1)`);
   }
 
   // v0.2 sub-factor 기본 가중치 (12개)
@@ -138,8 +138,8 @@ async function runInit() {
       ['p_tco_advantage', 0.40], ['p_roi_clarity', 0.30], ['p_partner_cost', 0.30],
       ['d_why_us', 0.40], ['d_tech_edge', 0.30], ['d_references', 0.30],
       ['e_similar_cases', 0.40], ['e_risk_response', 0.30], ['e_aidd_productivity', 0.30],
-      // pillar 가중치
-      ['pillar_V', 0.25], ['pillar_P', 0.25], ['pillar_D', 0.25], ['pillar_E', 0.25],
+      // pillar 가중치 (V=가치영향 최우선, E=실행력, D=차별화, P=가격)
+      ['pillar_V', 0.35], ['pillar_P', 0.15], ['pillar_D', 0.20], ['pillar_E', 0.30],
     ];
     for (const [id, val] of subDefaults) {
       await pool.query(
