@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   return res;
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE(_req: NextRequest) {
   const res = NextResponse.json({ ok: true });
   clearAdminCookie(res);
   return res;

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { use } from 'react';
 
 interface SubFactorLabel {
   id: string; pillar: string; label: string; description: string;
@@ -25,8 +24,8 @@ const PILLAR_COLORS: Record<string, string> = {
   V: '#4dd0e1', P: '#81c784', D: '#ffb74d', E: '#ba68c8',
 };
 
-export default function VotePage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+export default function VotePage({ params }: { params: { token: string } }) {
+  const { token } = params;
   const [data, setData] = useState<VoteData | null>(null);
   const [error, setError] = useState('');
   const [step, setStep] = useState<'name' | 'vote' | 'done'>('name');
@@ -99,7 +98,7 @@ export default function VotePage({ params }: { params: Promise<{ token: string }
         {data.deal_size && <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>{data.deal_size}</div>}
         {data.closes_at && (
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-            마감: {new Date(data.closes_at).toLocaleDateString('ko-KR')}
+            링크 마감: {new Date(data.closes_at).toLocaleDateString('ko-KR')}
           </div>
         )}
       </div>
@@ -174,14 +173,10 @@ export default function VotePage({ params }: { params: Promise<{ token: string }
                         </span>
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '6px' }}>{f.description}</div>
-                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', minWidth: '20px' }}>1</span>
-                        <input type="range" min={1} max={10} step={1} value={scores[f.id] ?? 5}
-                          onChange={e => setScores(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
-                          style={{ flex: 1, accentColor: PILLAR_COLORS[pid] }}
-                        />
-                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', minWidth: '20px', textAlign: 'right' }}>10</span>
-                      </div>
+                      <input type="range" min={1} max={10} step={1} value={scores[f.id] ?? 5}
+                        onChange={e => setScores(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
+                        style={{ width: '100%' }}
+                      />
                     </div>
                   ))}
                 </div>
