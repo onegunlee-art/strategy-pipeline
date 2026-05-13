@@ -64,10 +64,10 @@ export const SUB_FACTORS: SubFactorMeta[] = [
 ];
 
 export const PILLAR_META: Record<PillarId, { label: string; description: string; defaultWeight: number }> = {
-  V: { label: 'Value Impact', description: '고객 가치 영향 — 진짜 원하는 것을 터치했는가', defaultWeight: 0.25 },
-  P: { label: 'Price', description: '가격 경쟁력 — 총비용 우위', defaultWeight: 0.25 },
-  D: { label: 'Differentiation', description: '차별화 — Why Us', defaultWeight: 0.25 },
-  E: { label: 'Execution', description: '실행 경쟁력 — 진짜 이행할 수 있는가', defaultWeight: 0.25 },
+  V: { label: 'Value Impact', description: '고객 가치 영향 — 진짜 원하는 것을 터치했는가', defaultWeight: 0.35 },
+  P: { label: 'Price', description: '가격 경쟁력 — 총비용 우위', defaultWeight: 0.15 },
+  D: { label: 'Differentiation', description: '차별화 — Why Us', defaultWeight: 0.20 },
+  E: { label: 'Execution', description: '실행 경쟁력 — 진짜 이행할 수 있는가', defaultWeight: 0.30 },
 };
 
 export type SubScores = Record<SubFactorId, number>;  // 각 값 1-10
