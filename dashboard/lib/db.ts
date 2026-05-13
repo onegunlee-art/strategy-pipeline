@@ -1,8 +1,12 @@
 import { Pool } from 'pg';
 
+const connectionString = process.env.DATABASE_URL ?? '';
+const isPooler = connectionString.includes('pooler.supabase.com');
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString,
   ssl: { rejectUnauthorized: false },
+  ...(isPooler ? { max: 1 } : {}),
 });
 
 let initialized = false;
