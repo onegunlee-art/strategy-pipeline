@@ -99,3 +99,28 @@ export function computeBaseRate(records: HistoricalRecord[]): number {
   // Laplace smoothing (won + 1) / (total + 2)
   return (wins + 1) / (records.length + 2);
 }
+
+// DB에서 업종별 prior 조회 (import 데이터 기반)
+// label_overrides scope='prior' key=industry field='win_rate'
+export async function getPriorByIndustry(
+  pool: import('pg').Pool,
+  industry: string | null | undefined
+): Promise<number> {
+  if (industry) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT value FROM label_overrides WHERE scope='prior' AND key=$1 AND field='win_rate'`,
+        [industry]
+      );
+      if (rows.length > 0) return Math.max(0.05, Math.min(0.95, Number(rows[0].value)));
+    } catch { /* fall through */ }
+  }
+  // global fallback
+  try {
+    const { rows } = await pool.query(
+      `SELECT value FROM label_overrides WHERE scope='prior' AND key='_global' AND field='win_rate'`
+    );
+    if (rows.length > 0) return Math.max(0.05, Math.min(0.95, Number(rows[0].value)));
+  } catch { /* fall through */ }
+  return DEFAULT_PRIOR;
+}
