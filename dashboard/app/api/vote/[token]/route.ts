@@ -28,7 +28,7 @@ export async function GET(
 
   // 내 이전 표 (client_token 쿠키 기반)
   const clientToken = req.cookies.get('wr_voter')?.value;
-  let myVotes: Record<string, number> = {};
+  const myVotes: Record<string, number> = {};
   let myVoter: { id: number; display_name: string; role: string; weight: number } | null = null;
 
   if (clientToken) {
