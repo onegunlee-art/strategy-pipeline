@@ -604,6 +604,7 @@ function LinksTab() {
 function ImportTab() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ImportRow[]>([]);
+  const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState('');
@@ -644,6 +645,7 @@ function ImportTab() {
     if (ok) {
       notify(`${data.message}${data.retrained ? ' · 재학습 완료' : ''}`);
       setRows([]);
+      setFileName('');
       if (fileRef.current) fileRef.current.value = '';
     } else {
       notify(data.error ?? '저장 실패', 'var(--red)');
@@ -673,9 +675,20 @@ function ImportTab() {
             ref={fileRef}
             type="file"
             accept=".pdf,.png,.jpg,.jpeg,.webp"
-            style={{ ...S.input, cursor: 'pointer' }}
+            onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')}
+            style={{ display: 'none' }}
           />
-          <button onClick={handleOcr} disabled={loading} style={S.btn()}>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            style={{ ...S.btn('var(--cyan)'), color: '#000' }}
+          >
+            📁  파일 선택
+          </button>
+          <span style={{ fontSize: '13px', color: fileName ? 'var(--text)' : 'var(--text-dim)', minWidth: '200px' }}>
+            {fileName || '선택된 파일 없음'}
+          </span>
+          <button onClick={handleOcr} disabled={loading || !fileName} style={S.btn()}>
             {loading ? 'OCR 분석 중...' : '▶  OCR 실행'}
           </button>
           {rows.length > 0 && (
