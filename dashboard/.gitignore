@@ -35,6 +35,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local database
-/data/
+# local database (SQLite files etc.) — but include /data/seed/ for bundled seed data
+/data/*
+!/data/seed/
 

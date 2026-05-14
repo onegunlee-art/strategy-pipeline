@@ -1,137 +1,158 @@
+// 재학습: Pillar weight + Ensemble weight + Sub-factor weight (Claude)
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { brierScore, VARIABLE_META } from '@/lib/algorithm';
 import Anthropic from '@anthropic-ai/sdk';
-
-interface PredictionRow {
-  deal_id: number;
-  client_name: string;
-  predicted_probability: number;
-  variables_json: string;
-  weights_used_json: string;
-  actual_result: number;
-  closed_at: string;
-}
+import { SUB_FACTORS, SubFactorId, PillarId, PILLAR_META } from '@/lib/pillars';
+import { learnEnsembleWeights, TrainingCase, MethodProbs, brierScore } from '@/lib/ensemble';
 
 export async function POST() {
   try {
     const db = await getDb();
 
+    // 1) 학습 데이터 수집 (predicted_probability >= 0 = 실제 예측된 딜)
     const { rows } = await db.query(`
       SELECT
-        d.id as deal_id,
-        d.client_name,
+        d.id as deal_id, d.client_name,
         p.predicted_probability,
-        p.variables_json,
-        p.weights_used_json,
-        o.actual_result,
-        o.closed_at
+        p.sub_scores, p.method_probs,
+        o.actual_result, o.closed_at
       FROM outcomes o
       JOIN deals d ON d.id = o.deal_id
       JOIN predictions p ON p.deal_id = o.deal_id
+      WHERE p.predicted_probability >= 0
       ORDER BY o.closed_at DESC
-      LIMIT 50
+      LIMIT 200
     `);
 
     if (rows.length < 3) {
       return NextResponse.json({
         ok: false,
-        message: '학습에 최소 3건의 결과 데이터가 필요합니다.',
+        message: '학습에 최소 3건의 예측+결과 데이터가 필요합니다.',
         current: rows.length,
       });
     }
 
-    const cases = (rows as PredictionRow[]).map(r => ({
-      client_name: r.client_name,
-      predicted: r.predicted_probability,
-      actual: r.actual_result,
-      brier: brierScore(r.predicted_probability, r.actual_result),
-      variables: JSON.parse(r.variables_json),
-      weights_used: JSON.parse(r.weights_used_json),
-    }));
+    // 2) Ensemble weight 학습 (Brier minimize)
+    const cases: TrainingCase[] = rows
+      .filter((r: { method_probs: MethodProbs | null }) => r.method_probs != null)
+      .map((r: { method_probs: MethodProbs; actual_result: number }) => ({
+        probs: r.method_probs,
+        actual: r.actual_result as 0 | 1,
+      }));
 
-    const { rows: weightRows } = await db.query(`
+    let newEnsWeights = null;
+    if (cases.length >= 3) {
+      newEnsWeights = learnEnsembleWeights(cases, 0.1);
+      const { rows: verRow } = await db.query('SELECT MAX(version) as v FROM ensemble_weights');
+      const newVersion = (verRow[0].v ?? 1) + 1;
+      await db.query(
+        `INSERT INTO ensemble_weights (pillar_mult, bayesian, elo, monte_carlo, version)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [newEnsWeights.pillar, newEnsWeights.bayesian, newEnsWeights.elo, newEnsWeights.monteCarlo, newVersion]
+      );
+    }
+
+    // 3) Sub-factor + Pillar weight 재학습 (Claude)
+    const { rows: currentWeightRows } = await db.query(`
       SELECT variable_id, weight_value FROM weights w
       WHERE updated_at = (
         SELECT MAX(updated_at) FROM weights w2 WHERE w2.variable_id = w.variable_id
       )
     `);
+    const currentWeights = Object.fromEntries(
+      currentWeightRows.map((r: { variable_id: string; weight_value: number }) =>
+        [r.variable_id, r.weight_value])
+    );
 
-    const currentWeights: Record<string, number> = {};
-    weightRows.forEach((r: { variable_id: string; weight_value: number }) => {
-      currentWeights[r.variable_id] = r.weight_value;
-    });
+    const avgBrier =
+      cases.reduce((s, c) => s + brierScore(c.probs.pillar, c.actual), 0) / cases.length;
 
-    const avgBrier = cases.reduce((s, c) => s + c.brier, 0) / cases.length;
-
-    const variableLabels = Object.entries(VARIABLE_META)
-      .map(([k, v]) => `  - ${k} (${v.label}, invert=${v.invert}): 현재 가중치 ${((currentWeights[k] ?? v.defaultWeight) * 100).toFixed(1)}%`)
-      .join('\n');
-
-    const casesSummary = cases.slice(0, 20).map((c, i) =>
-      `  ${i + 1}. ${c.client_name}: 예측 ${c.predicted.toFixed(1)}% → 실제 ${c.actual === 1 ? '수주' : '실패'} (Brier: ${c.brier.toFixed(3)})`
+    const subFactorList = SUB_FACTORS.map(f =>
+      `  - ${f.id} (${f.pillar}, ${f.label}): 현재 가중치 ${((currentWeights[f.id] ?? f.defaultWeight) * 100).toFixed(1)}%`
     ).join('\n');
 
-    const prompt = `당신은 B2B 영업 수주 예측 모델의 가중치를 최적화하는 전문가입니다.
+    const casesSummary = rows.slice(0, 20).map((r: { client_name: string; predicted_probability: number; actual_result: number }, i: number) =>
+      `  ${i + 1}. ${r.client_name}: 예측 ${r.predicted_probability.toFixed(1)}% → 실제 ${r.actual_result === 1 ? '수주' : '실패'}`
+    ).join('\n');
 
-## 현재 변수 및 가중치
-${variableLabels}
+    const prompt = `당신은 KT B2B 수주 예측 모델의 가중치를 최적화하는 전문가입니다.
 
-## 최근 예측 결과 (${cases.length}건, 평균 Brier Score: ${avgBrier.toFixed(3)})
+## 4-Pillar 구조 (V/P/D/E)
+- V (Value Impact): ${PILLAR_META.V.description}
+- P (Price): ${PILLAR_META.P.description}
+- D (Differentiation): ${PILLAR_META.D.description}
+- E (Execution): ${PILLAR_META.E.description}
+
+## 현재 Sub-Factor 가중치 (12개, pillar별 sum=1.0)
+${subFactorList}
+
+## 현재 Pillar 가중치 (sum=1.0)
+- pillar_V: ${((currentWeights.pillar_V ?? 0.25) * 100).toFixed(1)}%
+- pillar_P: ${((currentWeights.pillar_P ?? 0.25) * 100).toFixed(1)}%
+- pillar_D: ${((currentWeights.pillar_D ?? 0.25) * 100).toFixed(1)}%
+- pillar_E: ${((currentWeights.pillar_E ?? 0.25) * 100).toFixed(1)}%
+
+## 최근 ${cases.length}건 (Pillar method 평균 Brier: ${avgBrier.toFixed(3)})
 ${casesSummary}
 
 ## 임무
-위 데이터를 분석하여 예측 정확도를 높이기 위한 새로운 가중치를 JSON으로 반환하세요.
+예측 정확도를 높이기 위한 새 가중치를 JSON으로 반환하세요.
 
 규칙:
-- 모든 가중치 합계 = 1.0
-- 각 가중치 범위: 0.05 ~ 0.35
-- 오차가 큰 케이스에서 어떤 변수가 잘못 평가되었는지 분석
-- invert=true 변수(위협도)는 높을수록 불리하므로 이를 고려
+- pillar_V + pillar_P + pillar_D + pillar_E = 1.0 (각 0.15 ~ 0.40)
+- 각 pillar 내부 sub-factor 3개 합 = 1.0 (각 0.20 ~ 0.50)
+- 오차가 큰 케이스의 패턴 분석 반영
 
-다음 JSON 형식으로만 응답하세요 (설명 없이):
+JSON 형식만 출력:
 {
-  "weights": {
-    "decision_maker_access": 0.22,
-    "past_win_history": 0.15,
-    "price_competitiveness": 0.18,
-    "tech_differentiation": 0.13,
-    "lg_cns_threat": 0.14,
-    "samsung_sds_threat": 0.10,
-    "budget_confirmed": 0.08
+  "pillar_weights": { "V": 0.25, "P": 0.25, "D": 0.25, "E": 0.25 },
+  "sub_weights": {
+    "v_customer_kpi": 0.40, "v_problem_fit": 0.30, "v_dm_empathy": 0.30,
+    "p_tco_advantage": 0.40, "p_roi_clarity": 0.30, "p_partner_cost": 0.30,
+    "d_why_us": 0.40, "d_tech_edge": 0.30, "d_references": 0.30,
+    "e_similar_cases": 0.40, "e_risk_response": 0.30, "e_aidd_productivity": 0.30
   },
-  "reasoning": "한국어로 2-3문장 설명"
+  "reasoning": "한국어 2-3문장 핵심 이유"
 }`;
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return NextResponse.json({ ok: false, message: 'Claude 응답 파싱 실패', raw: responseText }, { status: 500 });
+    const text = message.content[0].type === 'text' ? message.content[0].text : '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      return NextResponse.json({ ok: false, message: 'Claude 응답 파싱 실패', raw: text }, { status: 500 });
+    }
+    const parsed = JSON.parse(match[0]) as {
+      pillar_weights: Record<PillarId, number>;
+      sub_weights: Record<SubFactorId, number>;
+      reasoning: string;
+    };
+
+    // 검증
+    const pSum = Object.values(parsed.pillar_weights).reduce((s, v) => s + v, 0);
+    if (Math.abs(pSum - 1.0) > 0.05) {
+      return NextResponse.json({ ok: false, message: `pillar 합계 오류: ${pSum}` }, { status: 500 });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as { weights: Record<string, number>; reasoning: string };
+    // 저장
+    const { rows: verRow } = await db.query('SELECT MAX(version) as v FROM weights');
+    const newVersion = ((verRow[0].v as number) ?? 2) + 1;
 
-    const total = Object.values(parsed.weights).reduce((s, v) => s + v, 0);
-    if (Math.abs(total - 1.0) > 0.05) {
-      return NextResponse.json({ ok: false, message: `가중치 합계 오류: ${total}` }, { status: 500 });
-    }
-
-    const { rows: versionRows } = await db.query('SELECT MAX(version) as v FROM weights');
-    const currentVersion = (versionRows[0].v as number) ?? 1;
-    const newVersion = currentVersion + 1;
-
-    for (const [varId, val] of Object.entries(parsed.weights)) {
+    for (const [pid, v] of Object.entries(parsed.pillar_weights)) {
       await db.query(
         'INSERT INTO weights (variable_id, weight_value, version) VALUES ($1, $2, $3)',
-        [varId, val, newVersion]
+        [`pillar_${pid}`, v, newVersion]
+      );
+    }
+    for (const [sid, v] of Object.entries(parsed.sub_weights)) {
+      await db.query(
+        'INSERT INTO weights (variable_id, weight_value, version) VALUES ($1, $2, $3)',
+        [sid, v, newVersion]
       );
     }
 
@@ -140,7 +161,9 @@ ${casesSummary}
       version: newVersion,
       cases_analyzed: cases.length,
       avg_brier: avgBrier,
-      new_weights: parsed.weights,
+      ensemble_weights: newEnsWeights,
+      pillar_weights: parsed.pillar_weights,
+      sub_weights: parsed.sub_weights,
       reasoning: parsed.reasoning,
     });
   } catch (e: unknown) {

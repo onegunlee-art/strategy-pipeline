@@ -1,0 +1,130 @@
+[
+  {
+    "client_name": "부산은행 고객센터 보이스봇",
+    "industry": "부산",
+    "outcome": "win",
+    "risk_level": 2,
+    "deal_size_eok": 23,
+    "duration_months": 8,
+    "scores": {
+      "tech_capability": 4.3,
+      "reference": 5.0,
+      "sales": 5.0,
+      "price_cost": 4.0,
+      "consortium": 4.3,
+      "differentiation": 4.6
+    },
+    "win_loss_cause": "Long-Term 사전 영업 우수. 시장 1위 자사 보유 솔루션(STT/TTS) + 고객사 시스템 이해도 기반 기술 역량 보유 협력사 협업(브리지텍). 신한/하나/농협은행 등 금융권 보이스봇 구축 다수 레퍼런스 보유.",
+    "lessons_learned": "1년 이상 Long-Term 사전 영업을 통한 고객 신뢰 확보 및 기술적 차별화 제안. 고객의 업 이해, 임원/부장/실무자급 밀착 영업으로 유대 관계 유지.",
+    "competitors_named": ["브리지텍", "라피치", "하나글로벌"],
+    "consortium_partners": [
+      { "name": "브리지텍", "share": 0.70, "role": "보이스봇 구축 및 솔루션 구축(부산은행 IPCC 인프라 구축업체)" },
+      { "name": "하나글로벌", "share": 0.23, "role": "가상 서버 구축(부산은행 지정 공급 업체)" },
+      { "name": "라피치", "share": 0.07, "role": "KT STT/TTS Delivery 전문 업체로 안정적 공급" }
+    ],
+    "profit_rate": 0.0005,
+    "announced_at": "2025-10-13"
+  },
+  {
+    "client_name": "제주은행 생성형 AI 플랫폼 구축",
+    "industry": "금융",
+    "outcome": "win",
+    "risk_level": 3,
+    "deal_size_eok": 13,
+    "duration_months": 6,
+    "scores": {
+      "tech_capability": 4.3,
+      "reference": 4.3,
+      "sales": 3.3,
+      "price_cost": 3.5,
+      "consortium": 4.5,
+      "differentiation": 3.8
+    },
+    "win_loss_cause": "KT 자체 PoC 불가로 우수 협력사(플래티어)와의 기술 협업으로 경쟁사 대비 PoC 결과 우수. RAG용 자료 기반 20개 질문 중 17개 정답. 협력사(플래티어)의 금융권 e-커머스 레퍼런스 보유. 더존(LLM)이 고객사 2대 주주로 안정적 연동.",
+    "lessons_learned": "일정 수준 이상 품질 및 신속한 진행 가능한 우수 협력사 발굴로 영업기회 확대. 전략 재원을 활용한 kt 자사 PoC 확대 필요. 시장 우수 협력사와의 협업으로 다양한 AI 레퍼런스 축적.",
+    "competitors_named": ["포지큐브", "에자일소다"],
+    "consortium_partners": [
+      { "name": "플래티어", "share": 0.40, "role": "GenAI 플랫폼 — PoC 결과 우수, 금융권 e-커머스 경험" },
+      { "name": "더존비즈온", "share": 0.27, "role": "LLM — 고객사 2대 주주, ERP 뱅킹사업 진행 중" }
+    ],
+    "profit_rate": 0.0022,
+    "announced_at": "2025-12-24"
+  },
+  {
+    "client_name": "우리은행 UMS 문자발송시스템 리뉴얼",
+    "industry": "금융",
+    "outcome": "win",
+    "risk_level": 1,
+    "deal_size_eok": 21,
+    "duration_months": 12,
+    "scores": {
+      "tech_capability": 4.7,
+      "reference": 4.3,
+      "sales": 4.0,
+      "price_cost": 4.0,
+      "consortium": 4.3,
+      "differentiation": 3.3
+    },
+    "win_loss_cause": "현업부서 대상 기술력 인정. 어다인 4대 은행 UMS 레퍼런스 다수 보유. kt/어다인 솔루션에 대한 기술과 차별성 사전 공유로 RFP 및 사업예산에 선 반영. 사업 초기부터 전략사업으로 추진, 경쟁사 대비 가격 경쟁력 확보(3~5% 낮음). 분배 안정성, 운영 리스크 최소화, 확장성 중심의 구조적 차별화 제시.",
+    "lessons_learned": "실무부서 대상 기술적 설명이 수주에 결정적인 역할. 경쟁사는 시연/직관적인 PT로 비 기술분야 심사위원 평가에서 높은 점수 획득. 평가위원 구성에 대한 정보 파악으로 맞춤형 PT 준비 필요.",
+    "competitors_named": ["LGU+"],
+    "consortium_partners": [
+      { "name": "어다인", "share": 0.92, "role": "KT 서비스형 파트너 — 장기간 협업, 4대 은행 UMS 레퍼런스" }
+    ],
+    "profit_rate": -0.1291,
+    "announced_at": "2025-12-24"
+  },
+  {
+    "client_name": "차세대 국방시설통합정보체계 구축 사업",
+    "industry": "국방",
+    "outcome": "loss",
+    "risk_level": 3,
+    "deal_size_eok": 82.36,
+    "total_size_eok": 206,
+    "duration_months": 25,
+    "scores": {
+      "tech_capability": 2.7,
+      "reference": 3.3,
+      "sales": 3.0,
+      "price_cost": 3.7,
+      "consortium": 3.3,
+      "differentiation": 3.0
+    },
+    "win_loss_cause": "기술점수 2위(KT 84.9 < LGCNS 87.5). 경쟁사는 '24년 초부터 사업 준비, 개발 인력 구성, How-to에 집중한 기술적 차별화. 기존 개발사 및 유지보수 경험사 컨소 구성, S/W 수행 경력 20년 전문 인력 소싱. 해당 경험이 있는 컨소시/하도사 소싱 실패로 직접적인 레퍼런스 미확보. 경쟁사 대비 자사 개발 인력 제약(KT 경력/전문성)에 대한 평가위원의 우려.",
+    "lessons_learned": "규모 있는 중요사업의 경우, Long-Term 사업 개발 등 철저한 사업 준비 필요(본 사업은 1개월 전 공유, 이행주체 1/2본부 및 PM 선정 지연). 해당 경험이 있는 경쟁력 있는 전문사업자 소싱(컨소사, 하도사). 주사업자로서 분야별 자사 전문인력 확보(사업관리, 체계통합, 응용PL 등). Pre-Sales 단계에서 RFP 작성 지원 등 자사 영향력 강화 및 다각적 공략 시행. 공공본부 국방TF 신설에 따른 국방 이행 인력 강화 필요.",
+    "competitors_named": ["LG CNS", "한진정보통신"],
+    "consortium_partners": [
+      { "name": "KT", "share": 0.40, "role": "주사업자" },
+      { "name": "KTDS", "share": 0.10, "role": "그룹사 협업" },
+      { "name": "아이디어정보기술", "share": 0.31, "role": "컨소시엄" },
+      { "name": "ICTWAY", "share": 0.19, "role": "컨소시엄" }
+    ],
+    "profit_rate": 0.0038,
+    "announced_at": "2025-11-14"
+  },
+  {
+    "client_name": "차의과대학교 의료원 통합 병원정보시스템 인프라(클라우드 서비스) 임차",
+    "industry": "강남",
+    "outcome": "loss",
+    "risk_level": 2,
+    "deal_size_eok": 83.3,
+    "duration_months": 24,
+    "scores": {
+      "tech_capability": 3.0,
+      "reference": 1.0,
+      "sales": 2.7,
+      "price_cost": 1.0,
+      "consortium": 4.0,
+      "differentiation": 3.3
+    },
+    "win_loss_cause": "기술/가격 이슈로 최종 사업자 선정 지연 중. kt cloud 인프라 역량은 경쟁사 유사 수준으로 평가. kt & kt cloud 의료 섹터 Public Cloud 레퍼런스 부재, 공공 Cloud 대비 상대적으로 민간 분야의 KT Cloud 인지도 부족. 경쟁사 대비 kt 입찰가 20억 초과 투찰 — 입찰가 상승 요인: Bare Metal 기반 DBMS 서버 구성. 가격 20억 차이로 실주.",
+    "lessons_learned": "원가 상승 요인 완화 및 제거를 위한 영업력 확대 필요(경쟁사 NDS는 Oracle RAC 요건을 맞추지 않고 제안했으나, 후보사업자 자격 유지). 가격 비중이 높은 사업의 경우, 가격/기술에 대한 밸런싱 및 경쟁사 정보 확보.",
+    "competitors_named": ["NDS", "위버시스템즈", "KTC", "KTDS", "유클릭"],
+    "consortium_partners": [
+      { "name": "KT Cloud", "share": 0.87, "role": "주센터/DR센터 구성, 전용회선, Bare Metal" },
+      { "name": "위버시스템즈", "share": 0.13, "role": "의료전문 MSP" }
+    ],
+    "profit_rate": 0.0111,
+    "announced_at": "2025-12-15"
+  }
+]
