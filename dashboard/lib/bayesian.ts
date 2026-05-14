@@ -100,27 +100,72 @@ export function computeBaseRate(records: HistoricalRecord[]): number {
   return (wins + 1) / (records.length + 2);
 }
 
-// DB에서 업종별 prior 조회 (import 데이터 기반)
-// label_overrides scope='prior' key=industry field='win_rate'
-export async function getPriorByIndustry(
+// DB에서 prior 조회 우선순위: industry > risk_level > _global > DEFAULT_PRIOR
+export async function getPriorByContext(
   pool: import('pg').Pool,
-  industry: string | null | undefined
-): Promise<number> {
-  if (industry) {
+  ctx: { industry?: string | null; risk?: number | null }
+): Promise<{ prior: number; source: string; basedOnCount: number }> {
+  // 1) industry
+  if (ctx.industry) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT lo.value, (
+            SELECT COUNT(*)::int FROM deals d JOIN outcomes o ON o.deal_id=d.id
+            WHERE d.industry = lo.key
+         ) as cnt
+         FROM label_overrides lo
+         WHERE scope='prior' AND key=$1 AND field='win_rate'`,
+        [ctx.industry]
+      );
+      if (rows.length > 0) {
+        return {
+          prior: Math.max(0.05, Math.min(0.95, Number(rows[0].value))),
+          source: `industry:${ctx.industry}`,
+          basedOnCount: rows[0].cnt ?? 0,
+        };
+      }
+    } catch { /* fall through */ }
+  }
+
+  // 2) risk
+  if (ctx.risk != null) {
     try {
       const { rows } = await pool.query(
         `SELECT value FROM label_overrides WHERE scope='prior' AND key=$1 AND field='win_rate'`,
-        [industry]
+        [`risk_${ctx.risk}`]
       );
-      if (rows.length > 0) return Math.max(0.05, Math.min(0.95, Number(rows[0].value)));
+      if (rows.length > 0) {
+        return {
+          prior: Math.max(0.05, Math.min(0.95, Number(rows[0].value))),
+          source: `risk:${ctx.risk}`,
+          basedOnCount: 0,
+        };
+      }
     } catch { /* fall through */ }
   }
-  // global fallback
+
+  // 3) global
   try {
     const { rows } = await pool.query(
       `SELECT value FROM label_overrides WHERE scope='prior' AND key='_global' AND field='win_rate'`
     );
-    if (rows.length > 0) return Math.max(0.05, Math.min(0.95, Number(rows[0].value)));
+    if (rows.length > 0) {
+      return {
+        prior: Math.max(0.05, Math.min(0.95, Number(rows[0].value))),
+        source: 'global',
+        basedOnCount: 0,
+      };
+    }
   } catch { /* fall through */ }
-  return DEFAULT_PRIOR;
+
+  return { prior: DEFAULT_PRIOR, source: 'default', basedOnCount: 0 };
+}
+
+// 호환용 alias
+export async function getPriorByIndustry(
+  pool: import('pg').Pool,
+  industry: string | null | undefined
+): Promise<number> {
+  const { prior } = await getPriorByContext(pool, { industry });
+  return prior;
 }

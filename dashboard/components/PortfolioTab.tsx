@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import OutcomeRecorder from './OutcomeRecorder';
 interface CalibPoint { bucket: string; predicted: number; actual: number; count: number; }
 interface Weight { variable_id: string; weight_value: number; version: number; updated_at: string; }
 interface EnsembleW { pillar_mult: number; bayesian: number; elo: number; monte_carlo: number; version: number; }
@@ -96,6 +97,10 @@ export default function PortfolioTab({ refreshKey }: Props) {
         <Stat label="WIN RATE" value={`${(data.stats.win_rate * 100).toFixed(1)}%`} />
         <Stat label="AVG BRIER" value={data.stats.avg_brier.toFixed(3)} small="낮을수록 좋음" />
       </div>
+
+      {/* 결과 기록 UI — Win/Loss 입력 → Bayesian/Elo 자동 갱신 */}
+      <OutcomeRecorder refreshKey={refreshKey} />
+
 
       {/* CSV 임포트 */}
       <Card title="IMPORT HISTORICAL DATA (CSV)">

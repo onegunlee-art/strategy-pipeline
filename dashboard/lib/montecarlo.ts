@@ -26,11 +26,20 @@ export interface MonteCarloOptions {
   subFactorStd?: number;  // 각 sub-factor noise σ (1.0 = ±1점)
   pillarWeights?: Partial<Record<PillarId, number>>;
   subWeights?: Partial<Record<SubFactorId, number>>;
+  voterSpread?: number;   // voting 평균 spread — sigma 보정에 사용
+}
+
+// Voting spread → MC sigma 변환: baseSigma + averageSpread * 0.25
+export function sigmaFromVoterSpread(baseSigma: number, voterSpread: number): number {
+  return baseSigma + voterSpread * 0.25;
 }
 
 export function monteCarloRun(subs: SubScores, opts: MonteCarloOptions = {}): MonteCarloResult {
   const iterations = opts.iterations ?? 10000;
-  const sigma = opts.subFactorStd ?? 1.0;
+  const baseSigma = opts.subFactorStd ?? 1.0;
+  const sigma = opts.voterSpread != null
+    ? sigmaFromVoterSpread(baseSigma, opts.voterSpread)
+    : baseSigma;
 
   const results: number[] = new Array(iterations);
   for (let i = 0; i < iterations; i++) {

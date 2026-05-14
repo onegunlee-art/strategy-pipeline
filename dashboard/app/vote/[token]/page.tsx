@@ -30,6 +30,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
   const [error, setError] = useState('');
   const [step, setStep] = useState<'name' | 'vote' | 'done'>('name');
   const [name, setName] = useState('');
+  const [role, setRole] = useState<string>('reviewer');
   const [scores, setScores] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitMsg, setSubmitMsg] = useState('');
@@ -53,6 +54,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
         // 이미 본인 표 있으면 name 스텝 건너뜀
         if (d.my_voter) {
           setName(d.my_voter.display_name);
+          if (d.my_voter.role) setRole(d.my_voter.role);
           setStep(d.is_closed ? 'done' : 'vote');
         } else if (d.is_closed) {
           setStep('done');
@@ -67,7 +69,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
       const res = await fetch(`/api/vote/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: name, scores }),
+        body: JSON.stringify({ display_name: name, role, scores }),
       });
       const d = await res.json();
       if (!res.ok) {
@@ -126,6 +128,38 @@ export default function VotePage({ params }: { params: { token: string } }) {
               />
               <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '8px' }}>
                 같은 이름으로 재접속하면 이전 표를 수정할 수 있습니다
+              </div>
+
+              <div style={{ marginTop: '20px' }}>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--cyan)', letterSpacing: '2px', marginBottom: '10px' }}>
+                  본인 역할
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  {([
+                    ['executive', '임원'],
+                    ['sales_rep', '영업대표'],
+                    ['proposal_pm', '제안 PM'],
+                    ['bm', 'BM'],
+                    ['pmo', 'PMO'],
+                    ['reviewer', '검토자'],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      onClick={() => setRole(id)}
+                      style={{
+                        padding: '10px 8px', borderRadius: '6px',
+                        border: '1px solid ' + (role === id ? 'var(--cyan)' : 'var(--border)'),
+                        background: role === id ? 'rgba(77,208,225,0.15)' : 'var(--surface2)',
+                        color: role === id ? 'var(--cyan)' : 'var(--text)',
+                        fontSize: '12px', cursor: 'pointer',
+                      }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '6px' }}>
+                  역할별로 평가 가중치가 달라집니다 (임원 2.5×, 영업대표 2.3×, 검토자 1.0×)
+                </div>
               </div>
             </div>
             <button

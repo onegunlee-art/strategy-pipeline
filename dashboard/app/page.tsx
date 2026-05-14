@@ -6,9 +6,11 @@ import EnsembleAnalysisTab from '@/components/EnsembleAnalysisTab';
 import MonteCarloTab from '@/components/MonteCarloTab';
 import CompetitorTab from '@/components/CompetitorTab';
 import PortfolioTab from '@/components/PortfolioTab';
+import PortfolioView from '@/components/PortfolioView';
+import ScenarioCompare from '@/components/ScenarioCompare';
 import { PillarId, SubFactorId, SubScores, defaultSubScores } from '@/lib/pillars';
 
-type Tab = 'pillar' | 'analysis' | 'simulator' | 'competitor' | 'portfolio';
+type Tab = 'pillar' | 'analysis' | 'simulator' | 'compare' | 'competitor' | 'portfolio_view' | 'portfolio';
 
 interface PredictResult {
   deal_id: number;
@@ -27,11 +29,13 @@ interface PredictResult {
 }
 
 const TABS: { id: Tab; label: string; short: string }[] = [
-  { id: 'pillar',     label: 'Pillar 진단',    short: '01' },
-  { id: 'analysis',   label: '확률 & 약점',     short: '02' },
-  { id: 'simulator',  label: '시나리오 (MC)',   short: '03' },
-  { id: 'competitor', label: '경쟁구도 (Elo)',  short: '04' },
-  { id: 'portfolio',  label: '학습 & 데이터',   short: '05' },
+  { id: 'pillar',         label: 'Pillar 진단',     short: '01' },
+  { id: 'analysis',       label: '확률 & 약점',      short: '02' },
+  { id: 'simulator',      label: '시나리오 (MC)',    short: '03' },
+  { id: 'compare',        label: '액션 비교',        short: '04' },
+  { id: 'competitor',     label: '경쟁구도 (Elo)',   short: '05' },
+  { id: 'portfolio_view', label: '포트폴리오',       short: '06' },
+  { id: 'portfolio',      label: '학습 & 데이터',    short: '07' },
 ];
 
 export default function Dashboard() {
@@ -113,6 +117,38 @@ export default function Dashboard() {
         </div>
       </nav>
 
+      {/* No-Go 배너 + Disclaimer */}
+      {result && result.probability < 30 && (
+        <div style={{
+          background: 'rgba(255,68,102,0.10)',
+          borderBottom: '1px solid var(--red)',
+          padding: '12px 32px',
+        }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <span style={{
+              fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--red)',
+              padding: '4px 10px', borderRadius: '4px', background: 'rgba(255,68,102,0.20)',
+              letterSpacing: '2px',
+            }}>
+              🔴 NO-GO
+            </span>
+            <span style={{ fontSize: '13px', color: 'var(--text)' }}>
+              현재 예측 확률 {result.probability.toFixed(1)}% — 30% 미만. KT 문서 Gate Review 기준 No-Go 권고. 자원 재배분 검토 필요.
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div style={{
+        background: 'rgba(77,208,225,0.05)',
+        borderBottom: '1px solid var(--border)',
+        padding: '8px 32px',
+      }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', fontSize: '11px', color: 'var(--text-dim)' }}>
+          ⓘ 본 시스템은 의사결정 보조 지표이며 실제 수주를 보장하지 않습니다. Bayesian/Elo 수치는 데이터 누적에 따라 신뢰도가 개선됩니다.
+        </div>
+      </div>
+
       {/* 콘텐츠 */}
       <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '32px' }}>
         {tab === 'pillar' && <PillarInputTab onResult={handleResult} />}
@@ -125,7 +161,13 @@ export default function Dashboard() {
           <MonteCarloTab initialSubs={result.sub_scores} baseProb={result.probability} />
         ) : <MonteCarloTab initialSubs={defaultSubScores()} baseProb={50} />)}
 
+        {tab === 'compare' && (
+          <ScenarioCompare initialSubs={result?.sub_scores ?? defaultSubScores()} />
+        )}
+
         {tab === 'competitor' && <CompetitorTab refreshKey={refreshKey} />}
+
+        {tab === 'portfolio_view' && <PortfolioView refreshKey={refreshKey} />}
 
         {tab === 'portfolio' && <PortfolioTab refreshKey={refreshKey} />}
       </main>

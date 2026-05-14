@@ -313,6 +313,26 @@ function DealsTab() {
 
 // ─── Voters Tab ───────────────────────────────────────────────────────────────
 
+interface Conflict {
+  subFactorId: string;
+  highRole: string; highVoter: string; highScore: number;
+  lowRole: string; lowVoter: string; lowScore: number;
+  gap: number; message: string;
+}
+interface HeatmapRow {
+  voter_id: number; voter_name: string; role: string;
+  scores: Record<string, number>;
+}
+interface TallyData {
+  voter_count: number;
+  vote_count: number;
+  probability: number;
+  average_spread: number;
+  conflicts: Conflict[];
+  heatmap: HeatmapRow[];
+  spread: Record<string, number>;
+}
+
 function VotersTab() {
   const [voters, setVoters] = useState<Voter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -320,6 +340,8 @@ function VotersTab() {
   const [editRole, setEditRole] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [msg, setMsg] = useState('');
+  const [selectedDeal, setSelectedDeal] = useState<number | null>(null);
+  const [tally, setTally] = useState<TallyData | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -329,7 +351,14 @@ function VotersTab() {
     });
   }, []);
 
+  const loadTally = useCallback((dealId: number) => {
+    fetch(`/api/vote-tally/${dealId}`).then(r => r.json()).then(d => setTally(d));
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (selectedDeal) loadTally(selectedDeal);
+  }, [selectedDeal, loadTally]);
 
   const startEdit = (v: Voter) => {
     setEditId(v.id);
@@ -361,8 +390,100 @@ function VotersTab() {
 
   if (loading) return <LoadingText />;
 
+  // 딜 ID별 voter 그룹화
+  const dealIds = Array.from(new Set(voters.map(v => v.deal_id)));
+
   return (
-    <div style={S.card}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+      {/* 딜 선택 — Heatmap / Conflict 조회용 */}
+      {dealIds.length > 0 && (
+        <div style={S.card}>
+          <div style={{ ...S.mono, marginBottom: '12px' }}>VOTING DEAL — HEATMAP / CONFLICT 조회</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {dealIds.map(id => {
+              const active = selectedDeal === id;
+              const count = voters.filter(v => v.deal_id === id).length;
+              return (
+                <button key={id} onClick={() => setSelectedDeal(id)}
+                  style={{
+                    padding: '6px 12px', borderRadius: '6px',
+                    background: active ? 'var(--cyan)' : 'var(--surface2)',
+                    color: active ? '#000' : 'var(--text)',
+                    border: '1px solid ' + (active ? 'var(--cyan)' : 'var(--border)'),
+                    fontFamily: 'IBM Plex Mono', fontSize: '11px', cursor: 'pointer',
+                  }}>
+                  Deal #{id} ({count}명)
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Heatmap + Conflict */}
+      {tally && (
+        <div style={S.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={S.mono}>HEATMAP — Voter × Sub-factor</div>
+            <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)' }}>
+              avg spread: {tally.average_spread?.toFixed(2) ?? '0'} · 확률 {(tally.probability * 100)?.toFixed(1)}%
+            </div>
+          </div>
+          {tally.conflicts && tally.conflicts.length > 0 && (
+            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {tally.conflicts.map((c, i) => (
+                <div key={i} style={{
+                  padding: '8px 12px', background: 'rgba(255,183,77,0.10)',
+                  borderRadius: '6px', borderLeft: '3px solid var(--yellow)',
+                  fontSize: '12px',
+                }}>
+                  <strong style={{ color: 'var(--yellow)' }}>⚠ {c.subFactorId}</strong> — {c.message}
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...S.th, position: 'sticky', left: 0, background: 'var(--surface)' }}>Voter</th>
+                  <th style={S.th}>Role</th>
+                  {Object.keys(tally.spread ?? {}).map(sub => (
+                    <th key={sub} style={{ ...S.th, fontSize: '9px' }}>
+                      {sub.replace(/^[vpde]_/, '')}
+                      {tally.spread[sub] >= 2.0 && <span style={{ color: 'var(--yellow)' }}> ⚠</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tally.heatmap.map(row => (
+                  <tr key={row.voter_id}>
+                    <td style={{ ...S.td, position: 'sticky', left: 0, background: 'var(--surface)' }}>{row.voter_name}</td>
+                    <td style={{ ...S.td, fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)' }}>{row.role}</td>
+                    {Object.keys(tally.spread ?? {}).map(sub => {
+                      const v = row.scores[sub];
+                      const color = v == null ? 'var(--text-dim)'
+                        : v >= 8 ? 'var(--green)' : v <= 3 ? 'var(--red)' : 'var(--text)';
+                      return (
+                        <td key={sub} style={{ ...S.td, textAlign: 'center', fontFamily: 'IBM Plex Mono', color }}>
+                          {v ?? '-'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--text-dim)' }}>
+            ⚠ = spread ≥ 2.0 (의견 분산 큼). 갈색 점 = 갈등 감지 (역할 간 갭 ≥ 4점)
+          </div>
+        </div>
+      )}
+
+      <div style={S.card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div style={S.mono}>VOTERS ({voters.length})</div>
         {msg && <span style={{ fontSize: '12px', color: 'var(--green)' }}>{msg}</span>}
@@ -411,6 +532,7 @@ function VotersTab() {
         </tbody>
       </table>
       {voters.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>투표자 없음</div>}
+      </div>
     </div>
   );
 }

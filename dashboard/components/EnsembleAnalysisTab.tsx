@@ -51,19 +51,11 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const generateStrategy = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/strategy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_name: result.client_name,
-          deal_size: result.deal_size,
-          weaknesses: result.weaknesses,
-          current_probability: result.probability,
-          competitors: result.competitors,
-        }),
-      });
+      // v0.4: /api/strategy/[deal_id] — Gemini 외부 리서치 + case_studies 통합
+      const res = await fetch(`/api/strategy/${result.deal_id}`, { method: 'POST' });
       const data = await res.json();
       if (data.cards) setCards(data.cards);
+      // research, customer_context, similar_cases도 함께 받지만 카드 표시에 집중
     } catch {
       setCards([]);
     } finally { setLoading(false); }

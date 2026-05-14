@@ -41,7 +41,12 @@ export async function GET(
       [link.deal_id, clientToken]
     );
     if (voterRows.length > 0) {
-      myVoter = { id: voterRows[0].id, display_name: voterRows[0].display_name, role: voterRows[0].role, weight: voterRows[0].weight };
+      myVoter = {
+        id: voterRows[0].id,
+        display_name: voterRows[0].display_name,
+        role: voterRows[0].role_v1 ?? voterRows[0].role,
+        weight: voterRows[0].weight,
+      };
       for (const vr of voterRows[0].votes_raw ?? []) {
         if (vr?.sub_factor_id) myVotes[vr.sub_factor_id] = vr.score;
       }
@@ -90,23 +95,26 @@ export async function POST(
     return NextResponse.json({ error: '마감된 투표입니다.' }, { status: 410 });
   }
 
-  const { display_name, scores } = await req.json();
-  // scores: Record<sub_factor_id, number>
+  const { display_name, scores, role } = await req.json();
+  // scores: Record<sub_factor_id, number>, role: VoterRole (v1)
   if (!display_name?.trim()) {
     return NextResponse.json({ error: 'display_name 필수' }, { status: 400 });
   }
+  const v1Roles = ['executive', 'sales_rep', 'proposal_pm', 'bm', 'pmo', 'reviewer'];
+  const roleV1 = v1Roles.includes(role) ? role : 'reviewer';
 
   // client_token 쿠키 — 재방문 식별
   let clientToken = req.cookies.get('wr_voter')?.value;
   if (!clientToken) clientToken = generateClientToken();
 
-  // voters upsert (같은 딜에 같은 이름이면 기존 voter 사용, client_token 업데이트)
+  // voters upsert (같은 딜에 같은 이름이면 기존 voter 사용, client_token + role_v1 업데이트)
   const { rows: voterRows } = await db.query(
-    `INSERT INTO voters (deal_id, display_name, client_token)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (deal_id, display_name) DO UPDATE SET client_token = $3
-     RETURNING id, role, weight`,
-    [link.deal_id, display_name.trim(), clientToken]
+    `INSERT INTO voters (deal_id, display_name, client_token, role_v1)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (deal_id, display_name) DO UPDATE
+     SET client_token = $3, role_v1 = $4
+     RETURNING id, role, weight, role_v1`,
+    [link.deal_id, display_name.trim(), clientToken, roleV1]
   );
   const voterId = voterRows[0].id;
 
