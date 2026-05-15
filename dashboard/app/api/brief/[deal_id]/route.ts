@@ -5,6 +5,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 // POST /api/brief/[deal_id] — Executive Brief 생성 (24h 캐시)
 export async function POST(
   _req: NextRequest,
