@@ -9,7 +9,12 @@ export type ResearchTopic =
   | { kind: 'customer_context'; clientName: string; industry?: string }
   | { kind: 'competitor_elo'; competitorName: string }
   | { kind: 'similar_reference'; clientName: string; industry?: string }
-  | { kind: 'market_base_rate'; industry: string };
+  | { kind: 'market_base_rate'; industry: string }
+  // v0.5 AI 컨텍스트 레이어 — Layer 2 (참고 전용)
+  | { kind: 'kt_news' }
+  | { kind: 'competitor_trend'; competitorName: string }
+  | { kind: 'ai_mega_project'; industry?: string }
+  | { kind: 'consortium_trend'; partnerName?: string };
 
 export interface ResearchResult {
   text: string;
@@ -25,6 +30,10 @@ function serializeTopic(t: ResearchTopic): string {
     case 'competitor_elo': return `competitor_elo:${t.competitorName}`;
     case 'similar_reference': return `similar_reference`;
     case 'market_base_rate': return `market_base_rate:${t.industry}`;
+    case 'kt_news': return `kt_news`;
+    case 'competitor_trend': return `competitor_trend:${t.competitorName}`;
+    case 'ai_mega_project': return `ai_mega_project:${t.industry ?? 'general'}`;
+    case 'consortium_trend': return `consortium_trend:${t.partnerName ?? 'general'}`;
   }
 }
 
@@ -91,6 +100,56 @@ function buildPrompt(t: ResearchTopic): { prompt: string; useGrounding: boolean 
   "summary": "시장 특성 1~2문장",
   "estimated_win_rate_range": [0.2, 0.6],
   "key_dynamics": ["시장 역학 1", "시장 역학 2"]
+}`,
+      };
+
+    case 'kt_news':
+      return {
+        useGrounding: true,
+        prompt: `KT(케이티)의 최근 6개월 B2B/엔터프라이즈 사업 관련 뉴스, 신규 전략, 조직 변화, AI/클라우드 역량 발표를 검색하여 JSON으로 응답하세요:
+{
+  "summary": "KT B2B 현황 1~2문장",
+  "recent_announcements": ["최근 발표 1", "최근 발표 2", "최근 발표 3"],
+  "competitive_strengths": ["경쟁 강점 1", "경쟁 강점 2"],
+  "watch_points": ["주의 사항 1", "주의 사항 2"]
+}`,
+      };
+
+    case 'competitor_trend':
+      return {
+        useGrounding: true,
+        prompt: `한국 IT 기업 "${t.competitorName}"의 최근 6개월 B2B 수주 동향, 신규 제품/서비스 발표, 전략 변화를 검색하여 JSON으로 응답하세요:
+{
+  "summary": "${t.competitorName} 최근 동향 1~2문장",
+  "recent_wins": ["최근 수주/계약 1", "최근 수주/계약 2"],
+  "new_capabilities": ["신규 역량/서비스 1", "신규 역량/서비스 2"],
+  "strategic_direction": "전략 방향 1문장",
+  "threat_level": "high|medium|low"
+}`,
+      };
+
+    case 'ai_mega_project':
+      return {
+        useGrounding: true,
+        prompt: `한국 ${t.industry ? `${t.industry} 산업` : '공공/금융/제조'} 분야의 최근 6개월 AI 대형 구축 사업 (100억원 이상) 동향을 검색하여 JSON으로 응답하세요:
+{
+  "summary": "AI 대형 사업 동향 1~2문장",
+  "major_projects": ["주요 사업 1 (발주기관, 규모)", "주요 사업 2", "주요 사업 3"],
+  "winning_vendors": ["수주 기업 1", "수주 기업 2"],
+  "key_requirements": ["핵심 요구사항 1", "핵심 요구사항 2"],
+  "market_trend": "시장 트렌드 1문장"
+}`,
+      };
+
+    case 'consortium_trend':
+      return {
+        useGrounding: true,
+        prompt: `한국 IT 프로젝트 컨소시엄 동향을 조사하세요. ${t.partnerName ? `특히 "${t.partnerName}"의 최근 컨소시엄 참여 현황을 포함하여 ` : ''}JSON으로 응답:
+{
+  "summary": "컨소시엄 동향 1~2문장",
+  "active_partners": ["주요 협력사 1 (역할)", "주요 협력사 2 (역할)"],
+  "recent_consortiums": ["최근 컨소시엄 사례 1", "최근 컨소시엄 사례 2"],
+  "partnership_tips": ["파트너십 팁 1", "파트너십 팁 2"]
 }`,
       };
   }
