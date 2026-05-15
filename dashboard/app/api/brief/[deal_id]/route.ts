@@ -99,18 +99,46 @@ export async function POST(
     [dealId]
   );
 
-  // 7) Claude 브리프 생성
+  // 7) Claude 브리프 — SSE 스트리밍 (Vercel timeout 우회)
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 503 });
   }
 
-  const winProb = (deal.predicted_probability ?? 0) * 100;
-  const ciLow = (deal.confidence_low ?? 0) * 100;
-  const ciHigh = (deal.confidence_high ?? 0) * 100;
+  const winProb = deal.predicted_probability ?? 0;
+  const ciLow = deal.confidence_low ?? 0;
+  const ciHigh = deal.confidence_high ?? 0;
   const pillarScores: Record<string, number> = deal.pillar_scores ?? {};
 
-  const promptContext = `
+  const meta = {
+    deal_id: dealId,
+    client_name: deal.client_name,
+    industry: deal.industry,
+    generated_at: new Date().toISOString(),
+    layer1_quant: {
+      win_probability: winProb,
+      ci_low: ciLow,
+      ci_high: ciHigh,
+      pillar_scores: pillarScores,
+      voter_count: voterCount,
+      weaknesses,
+    },
+    layer2_ai_context: {
+      kt_news: ktNews.json,
+      competitor_trends: { lg_cns: lgCnsTrend.json, samsung_sds: samsungTrend.json },
+      ai_mega_project: aiMega.json,
+      consortium_trend: consortiumTrend.json,
+    },
+  };
+
+  const briefPrompt = `당신은 KT 수주전략팀의 임원 보고서 작성 전문가입니다.
+아래 딜 분석 데이터를 바탕으로 임원용 Executive Brief를 작성하세요.
+
+**중요 원칙:**
+- 🟢 정량 수치(확률, Pillar 점수)는 "자체 데이터 기반"임을 명시
+- 🟡 AI 컨텍스트(경쟁사 동향, 시장 트렌드)는 "참고 분석"임을 명시
+- 5페이지 이내, 임원이 5분 안에 읽을 수 있는 분량
+
 ## 딜 정보
 - 고객사: ${deal.client_name}
 - 산업: ${deal.industry ?? '미상'}
@@ -123,42 +151,20 @@ export async function POST(
 - 주요 약점: ${weaknesses.map(w => `${w.id}(${w.score.toFixed(1)}/10)`).join(', ')}
 - 경쟁사: ${competitors.map(c => `${c.name}(Elo ${c.current_elo.toFixed(0)})`).join(', ') || '미확인'}
 
-## AI 컨텍스트 (🟡 참고용 — Gemini 분석)
+## AI 컨텍스트 (🟡 참고용)
 ### 고객사 현황
 ${customerCtx.text.slice(0, 500)}
-
 ### KT 최근 동향
 ${ktNews.text.slice(0, 400)}
-
 ### 경쟁사 동향
 LG CNS: ${lgCnsTrend.text.slice(0, 300)}
 Samsung SDS: ${samsungTrend.text.slice(0, 300)}
-
 ### AI 대형 사업 트렌드
 ${aiMega.text.slice(0, 400)}
-
-### 컨소시엄 동향
-${consortiumTrend.text.slice(0, 300)}
-
-### 유사 레퍼런스
-${similarRef.text.slice(0, 400)}
-
 ### 약점별 외부 근거
 ${weaknesses.map((w, i) => `${w.id}: ${weaknessResearch[i]?.text?.slice(0, 200) ?? 'N/A'}`).join('\n')}
-
 ## 유사 사례 (자체 DB)
 ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.win_loss_cause ?? c.lessons_learned ?? ''}`).join('\n')}
-`;
-
-  const briefPrompt = `당신은 KT 수주전략팀의 임원 보고서 작성 전문가입니다.
-아래 딜 분석 데이터를 바탕으로 임원용 Executive Brief를 작성하세요.
-
-**중요 원칙:**
-- 🟢 정량 수치(확률, Pillar 점수)는 "자체 데이터 기반"임을 명시
-- 🟡 AI 컨텍스트(경쟁사 동향, 시장 트렌드)는 "참고 분석"임을 명시
-- 5페이지 이내, 임원이 5분 안에 읽을 수 있는 분량
-
-${promptContext}
 
 다음 JSON 형식으로만 응답하세요 (한국어):
 {
@@ -167,7 +173,7 @@ ${promptContext}
     "probability": ${winProb.toFixed(1)},
     "ci_low": ${ciLow.toFixed(1)},
     "ci_high": ${ciHigh.toFixed(1)},
-    "data_source": "자체 ${80}건 수주 이력 + Voting ${voterCount}명",
+    "data_source": "자체 수주 이력 + Voting ${voterCount}명",
     "key_drivers": ["주요 동인 1", "주요 동인 2", "주요 동인 3"]
   },
   "strategy_actions": [
@@ -194,63 +200,70 @@ ${promptContext}
   "sources": ["출처 URL 또는 근거 1", "출처 2"]
 }`;
 
-  let briefJson: Record<string, unknown> = {};
-  let briefText = '';
-  try {
-    const client = new Anthropic({ apiKey });
-    const msg = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: briefPrompt }],
-    });
-    briefText = msg.content[0].type === 'text' ? msg.content[0].text : '';
-  } catch (e) {
-    console.error('[brief] Claude API error:', e);
-    return NextResponse.json({ error: 'brief generation failed', detail: String(e) }, { status: 500 });
-  }
+  const encoder = new TextEncoder();
+  const client = new Anthropic({ apiKey });
 
-  // JSON 파싱 실패는 빈 briefJson으로 fallback (500 방지)
-  try {
-    const m = briefText.match(/\{[\s\S]*\}/);
-    if (m) briefJson = JSON.parse(m[0]);
-  } catch {
-    console.error('[brief] JSON parse failed:', briefText.slice(0, 300));
-  }
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        // meta 이벤트 즉시 전송 → Vercel timeout 방지
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'meta', ...meta })}\n\n`));
 
-  const output = {
-    deal_id: dealId,
-    client_name: deal.client_name,
-    industry: deal.industry,
-    generated_at: new Date().toISOString(),
-    layer1_quant: {
-      win_probability: winProb,
-      ci_low: ciLow,
-      ci_high: ciHigh,
-      pillar_scores: pillarScores,
-      voter_count: voterCount,
-      weaknesses,
+        const stream = client.messages.stream({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: briefPrompt }],
+        });
+
+        let briefText = '';
+        for await (const event of stream) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            briefText += event.delta.text;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'delta', text: event.delta.text })}\n\n`));
+          }
+        }
+
+        // JSON 파싱 후 캐시 저장
+        let briefJson: Record<string, unknown> = {};
+        try {
+          const clean = briefText.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+          const m = clean.match(/\{[\s\S]*\}/);
+          if (m) briefJson = JSON.parse(m[0]);
+        } catch {
+          console.error('[brief] JSON parse failed:', briefText.slice(0, 300));
+        }
+
+        const output = { ...meta, ...briefJson, cached: false };
+        try {
+          await pool.query(
+            `INSERT INTO external_research (deal_id, topic, source, result_text, result_json)
+             VALUES ($1, 'brief', 'claude-sonnet-4-6', $2, $3)
+             ON CONFLICT (deal_id, topic) DO UPDATE
+             SET result_text = EXCLUDED.result_text,
+                 result_json = EXCLUDED.result_json,
+                 created_at = NOW()`,
+            [dealId, briefText.slice(0, 2000), JSON.stringify(output)],
+          );
+        } catch (e) {
+          console.error('[brief] cache save failed:', e);
+        }
+
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));
+      } catch (err) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', message: String(err) })}\n\n`));
+      } finally {
+        controller.close();
+      }
     },
-    layer2_ai_context: {
-      kt_news: ktNews.json,
-      competitor_trends: { lg_cns: lgCnsTrend.json, samsung_sds: samsungTrend.json },
-      ai_mega_project: aiMega.json,
-      consortium_trend: consortiumTrend.json,
+  });
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
     },
-    ...briefJson,
-  };
-
-  // 캐시 저장
-  await pool.query(
-    `INSERT INTO external_research (deal_id, topic, source, result_text, result_json)
-     VALUES ($1, 'brief', 'claude-sonnet-4-6', $2, $3)
-     ON CONFLICT (deal_id, topic) DO UPDATE
-     SET result_text = EXCLUDED.result_text,
-         result_json = EXCLUDED.result_json,
-         created_at = NOW()`,
-    [dealId, briefText.slice(0, 2000), JSON.stringify(output)],
-  );
-
-  return NextResponse.json({ ...output, cached: false });
+  });
 }
 
 // GET /api/brief/[deal_id] — 캐시된 브리프 반환
