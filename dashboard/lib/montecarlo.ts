@@ -2,6 +2,7 @@
 // 각 sub-factor에 정규분포 noise 추가 후 pillar mult로 10,000회 확률 분포 도출
 
 import { SubScores, SUB_FACTORS, pillarMultiplication, pillarScoreFromSubs, PillarId, SubFactorId } from './pillars';
+import { RewardFactors } from './mcReward';
 
 export interface MonteCarloResult {
   mean: number;        // 평균 확률
@@ -10,6 +11,7 @@ export interface MonteCarloResult {
   p95: number;         // 95th percentile
   std: number;
   distribution: number[];  // 100 bin 히스토그램 (각 bin의 개수)
+  seedPoolHash?: string;   // 재현성 추적 — 동일 hash = 동일 CI
 }
 
 // Box-Muller 변환으로 정규분포 샘플
@@ -27,6 +29,7 @@ export interface MonteCarloOptions {
   pillarWeights?: Partial<Record<PillarId, number>>;
   subWeights?: Partial<Record<SubFactorId, number>>;
   voterSpread?: number;   // voting 평균 spread — sigma 보정에 사용
+  rewardFactors?: RewardFactors;  // per-pillar/per-risk sigma 조정 (mean 불변, CI band만 조정)
 }
 
 // Voting spread → MC sigma 변환: baseSigma + averageSpread * 0.25
@@ -41,12 +44,17 @@ export function monteCarloRun(subs: SubScores, opts: MonteCarloOptions = {}): Mo
     ? sigmaFromVoterSpread(baseSigma, opts.voterSpread)
     : baseSigma;
 
+  const rf = opts.rewardFactors;
+  const riskScale = rf?.riskSigmaScale ?? 1.0;
+
   const results: number[] = new Array(iterations);
   for (let i = 0; i < iterations; i++) {
     const noisy: SubScores = {} as SubScores;
     for (const f of SUB_FACTORS) {
       const raw = subs[f.id] ?? 5;
-      noisy[f.id] = Math.max(1, Math.min(10, gaussianSample(raw, sigma)));
+      const pillarScale = rf?.pillarSigmaWeights[f.pillar] ?? 1.0;
+      const effectiveSigma = sigma * pillarScale * riskScale;
+      noisy[f.id] = Math.max(1, Math.min(10, gaussianSample(raw, effectiveSigma)));
     }
     const pillars = pillarScoreFromSubs(noisy, opts.subWeights);
     results[i] = pillarMultiplication(pillars, opts.pillarWeights);
@@ -68,5 +76,5 @@ export function monteCarloRun(subs: SubScores, opts: MonteCarloOptions = {}): Mo
     distribution[idx]++;
   }
 
-  return { mean, median, p5, p95, std, distribution };
+  return { mean, median, p5, p95, std, distribution, seedPoolHash: rf?.seedPoolHash };
 }
