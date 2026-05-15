@@ -79,7 +79,7 @@ export async function POST(
   ];
   const researchResults = await Promise.all(researchPromises);
 
-  const [customerCtx, similarRef, ktNews, lgCnsTrend, samsungTrend, aiMega, consortiumTrend, ...weaknessResearch] =
+  const [customerCtx, , ktNews, lgCnsTrend, samsungTrend, aiMega, consortiumTrend, ...weaknessResearch] =
     researchResults;
 
   // 5) 유사 사례 3건
