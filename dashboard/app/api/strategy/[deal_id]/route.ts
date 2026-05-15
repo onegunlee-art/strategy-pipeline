@@ -136,9 +136,10 @@ ${weaknessBlock}
 ${similarBlock || '(유사 사례 없음)'}
 
 ## 출력 규칙
-- JSON 배열만 출력 (설명 텍스트 없음)
-- reasoning_trace.situation: 딜 메타에서 추출한 현황 1-2문장만 (새로운 사실 생성 금지)
-- reasoning_trace.complication: 핵심 장애물 + 유사 사례 인용 시 [사례 N] 번호 명시
+- JSON 배열만 출력 (설명 텍스트, 마크다운 코드블록 없음)
+- 각 텍스트 필드는 50자 이내 (토큰 절약, 3개 카드 완성 필수)
+- reasoning_trace.situation: 딜 메타에서 추출한 현황 1문장만 (새로운 사실 생성 금지)
+- reasoning_trace.complication: 핵심 장애물 1문장 + 유사 사례 인용 시 [사례 N] 번호 명시
 - reasoning_trace.question: Complication에서 도출되는 핵심 질문 1문장
 - reasoning_trace.answer_summary: 아래 actions의 한줄 요약
 
@@ -184,7 +185,7 @@ ${similarBlock || '(유사 사례 없음)'}
 
           const stream = client.messages.stream({
             model: 'claude-sonnet-4-6',
-            max_tokens: 3000,
+            max_tokens: 4096,
             messages: [{ role: 'user', content: prompt }],
           });
 
