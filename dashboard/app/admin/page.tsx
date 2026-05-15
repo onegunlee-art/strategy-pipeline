@@ -1054,7 +1054,7 @@ function CompetitorsTab() {
           </tbody>
         </table>
         <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--text-dim)' }}>
-          ⚠️ "적용" 버튼을 눌러야만 AI 추정값이 실제 모델에 반영됩니다. 자동 주입되지 않습니다.
+          ⚠️ &ldquo;적용&rdquo; 버튼을 눌러야만 AI 추정값이 실제 모델에 반영됩니다. 자동 주입되지 않습니다.
         </div>
       </div>
 
@@ -1116,7 +1116,7 @@ function CompetitorsTab() {
           </tbody>
         </table>
         <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--text-dim)' }}>
-          ⚠️ "적용" 버튼을 눌러야만 AI 추정값이 Bayesian prior에 반영됩니다. 자동 주입되지 않습니다.
+          ⚠️ &ldquo;적용&rdquo; 버튼을 눌러야만 AI 추정값이 Bayesian prior에 반영됩니다. 자동 주입되지 않습니다.
         </div>
       </div>
     </div>
