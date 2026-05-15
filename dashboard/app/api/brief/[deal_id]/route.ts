@@ -200,15 +200,21 @@ ${promptContext}
     const client = new Anthropic({ apiKey });
     const msg = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
+      max_tokens: 4096,
       messages: [{ role: 'user', content: briefPrompt }],
     });
     briefText = msg.content[0].type === 'text' ? msg.content[0].text : '';
+  } catch (e) {
+    console.error('[brief] Claude API error:', e);
+    return NextResponse.json({ error: 'brief generation failed', detail: String(e) }, { status: 500 });
+  }
+
+  // JSON 파싱 실패는 빈 briefJson으로 fallback (500 방지)
+  try {
     const m = briefText.match(/\{[\s\S]*\}/);
     if (m) briefJson = JSON.parse(m[0]);
-  } catch (e) {
-    console.error('[brief] Claude error:', e);
-    return NextResponse.json({ error: 'brief generation failed' }, { status: 500 });
+  } catch {
+    console.error('[brief] JSON parse failed:', briefText.slice(0, 300));
   }
 
   const output = {
