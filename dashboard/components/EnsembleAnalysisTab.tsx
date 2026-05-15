@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { PillarId, SubFactorId, SubScores } from '@/lib/pillars';
+import ConfidenceBadge from './ConfidenceBadge';
 
 interface PredictResult {
   deal_id: number;
@@ -47,26 +48,29 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const [cards, setCards] = useState<StrategyCard[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [outcomeSaved, setOutcomeSaved] = useState(false);
+  const [briefLoading, setBriefLoading] = useState(false);
 
   const generateStrategy = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/strategy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_name: result.client_name,
-          deal_size: result.deal_size,
-          weaknesses: result.weaknesses,
-          current_probability: result.probability,
-          competitors: result.competitors,
-        }),
-      });
+      // v0.4: /api/strategy/[deal_id] — Gemini 외부 리서치 + case_studies 통합
+      const res = await fetch(`/api/strategy/${result.deal_id}`, { method: 'POST' });
       const data = await res.json();
       if (data.cards) setCards(data.cards);
+      // research, customer_context, similar_cases도 함께 받지만 카드 표시에 집중
     } catch {
       setCards([]);
     } finally { setLoading(false); }
+  };
+
+  const openBrief = async () => {
+    setBriefLoading(true);
+    // Brief 생성 요청 후 새 탭에서 열기
+    try {
+      await fetch(`/api/brief/${result.deal_id}`, { method: 'POST' });
+    } catch { /* brief 페이지에서 재시도 */ }
+    setBriefLoading(false);
+    window.open(`/brief/${result.deal_id}`, '_blank');
   };
 
   const recordOutcome = async (r: 1 | 0) => {
@@ -94,8 +98,9 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
         padding: '32px', display: 'flex', gap: '24px', alignItems: 'center',
       }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '2px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '2px' }}>
             ENSEMBLE WIN PROBABILITY
+            <ConfidenceBadge kind="own_data" label={`자체 ${result.data_points}건`} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '8px' }}>
             <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '64px', color: probColor, fontWeight: 600, lineHeight: 1 }}>
@@ -253,6 +258,32 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
           </div>
         </Card>
       )}
+
+      {/* Executive Brief 생성 */}
+      <Card title="EXECUTIVE BRIEF">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
+              Gemini 2.5 Pro가 정량 결과 + 외부 리서치 (LG CNS/Samsung SDS 동향, AI 대형 사업, KT 뉴스)를 통합하여 1페이지 임원 요약 + 3페이지 전략 액션을 생성합니다.
+            </div>
+            <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <ConfidenceBadge kind="own_data" label="정량 분석 포함" />
+              <ConfidenceBadge kind="ai_estimate" label="AI 컨텍스트 포함" />
+              {result.data_points > 0 && <ConfidenceBadge kind="voting" label="Voting 반영" />}
+            </div>
+          </div>
+          <button onClick={openBrief} disabled={briefLoading}
+            style={{
+              padding: '12px 20px', borderRadius: '8px',
+              border: '1px solid var(--cyan)', background: 'transparent',
+              color: briefLoading ? 'var(--text-dim)' : 'var(--cyan)',
+              fontFamily: 'IBM Plex Mono', fontSize: '12px',
+              cursor: briefLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap',
+            }}>
+            {briefLoading ? '생성 중...' : '📋 Executive Brief 생성'}
+          </button>
+        </div>
+      </Card>
 
       {/* 결과 기록 */}
       {!outcomeSaved ? (

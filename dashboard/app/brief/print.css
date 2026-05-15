@@ -1,0 +1,23 @@
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11px;
+  }
+
+  .brief-root {
+    color: black !important;
+    padding: 16px !important;
+    max-width: 100% !important;
+  }
+
+  /* 카드 배경 제거 */
+  div[style] {
+    background: white !important;
+    color: black !important;
+  }
+}

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { SUB_FACTORS, PILLAR_META } from '@/lib/pillars';
 
-type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import';
+type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -99,6 +99,7 @@ export default function AdminPage() {
     { id: 'weights', label: 'Weights' },
     { id: 'links', label: 'Links' },
     { id: 'import', label: 'Import' },
+    { id: 'competitors', label: 'Competitors' },
   ];
 
   return (
@@ -130,6 +131,7 @@ export default function AdminPage() {
         {tab === 'weights' && <WeightsTab />}
         {tab === 'links' && <LinksTab />}
         {tab === 'import' && <ImportTab />}
+        {tab === 'competitors' && <CompetitorsTab />}
       </main>
     </div>
   );
@@ -313,6 +315,26 @@ function DealsTab() {
 
 // ─── Voters Tab ───────────────────────────────────────────────────────────────
 
+interface Conflict {
+  subFactorId: string;
+  highRole: string; highVoter: string; highScore: number;
+  lowRole: string; lowVoter: string; lowScore: number;
+  gap: number; message: string;
+}
+interface HeatmapRow {
+  voter_id: number; voter_name: string; role: string;
+  scores: Record<string, number>;
+}
+interface TallyData {
+  voter_count: number;
+  vote_count: number;
+  probability: number;
+  average_spread: number;
+  conflicts: Conflict[];
+  heatmap: HeatmapRow[];
+  spread: Record<string, number>;
+}
+
 function VotersTab() {
   const [voters, setVoters] = useState<Voter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -320,6 +342,8 @@ function VotersTab() {
   const [editRole, setEditRole] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [msg, setMsg] = useState('');
+  const [selectedDeal, setSelectedDeal] = useState<number | null>(null);
+  const [tally, setTally] = useState<TallyData | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -329,7 +353,14 @@ function VotersTab() {
     });
   }, []);
 
+  const loadTally = useCallback((dealId: number) => {
+    fetch(`/api/vote-tally/${dealId}`).then(r => r.json()).then(d => setTally(d));
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (selectedDeal) loadTally(selectedDeal);
+  }, [selectedDeal, loadTally]);
 
   const startEdit = (v: Voter) => {
     setEditId(v.id);
@@ -361,8 +392,100 @@ function VotersTab() {
 
   if (loading) return <LoadingText />;
 
+  // 딜 ID별 voter 그룹화
+  const dealIds = Array.from(new Set(voters.map(v => v.deal_id)));
+
   return (
-    <div style={S.card}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+      {/* 딜 선택 — Heatmap / Conflict 조회용 */}
+      {dealIds.length > 0 && (
+        <div style={S.card}>
+          <div style={{ ...S.mono, marginBottom: '12px' }}>VOTING DEAL — HEATMAP / CONFLICT 조회</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {dealIds.map(id => {
+              const active = selectedDeal === id;
+              const count = voters.filter(v => v.deal_id === id).length;
+              return (
+                <button key={id} onClick={() => setSelectedDeal(id)}
+                  style={{
+                    padding: '6px 12px', borderRadius: '6px',
+                    background: active ? 'var(--cyan)' : 'var(--surface2)',
+                    color: active ? '#000' : 'var(--text)',
+                    border: '1px solid ' + (active ? 'var(--cyan)' : 'var(--border)'),
+                    fontFamily: 'IBM Plex Mono', fontSize: '11px', cursor: 'pointer',
+                  }}>
+                  Deal #{id} ({count}명)
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Heatmap + Conflict */}
+      {tally && (
+        <div style={S.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={S.mono}>HEATMAP — Voter × Sub-factor</div>
+            <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)' }}>
+              avg spread: {tally.average_spread?.toFixed(2) ?? '0'} · 확률 {(tally.probability * 100)?.toFixed(1)}%
+            </div>
+          </div>
+          {tally.conflicts && tally.conflicts.length > 0 && (
+            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {tally.conflicts.map((c, i) => (
+                <div key={i} style={{
+                  padding: '8px 12px', background: 'rgba(255,183,77,0.10)',
+                  borderRadius: '6px', borderLeft: '3px solid var(--yellow)',
+                  fontSize: '12px',
+                }}>
+                  <strong style={{ color: 'var(--yellow)' }}>⚠ {c.subFactorId}</strong> — {c.message}
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...S.th, position: 'sticky', left: 0, background: 'var(--surface)' }}>Voter</th>
+                  <th style={S.th}>Role</th>
+                  {Object.keys(tally.spread ?? {}).map(sub => (
+                    <th key={sub} style={{ ...S.th, fontSize: '9px' }}>
+                      {sub.replace(/^[vpde]_/, '')}
+                      {tally.spread[sub] >= 2.0 && <span style={{ color: 'var(--yellow)' }}> ⚠</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tally.heatmap.map(row => (
+                  <tr key={row.voter_id}>
+                    <td style={{ ...S.td, position: 'sticky', left: 0, background: 'var(--surface)' }}>{row.voter_name}</td>
+                    <td style={{ ...S.td, fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)' }}>{row.role}</td>
+                    {Object.keys(tally.spread ?? {}).map(sub => {
+                      const v = row.scores[sub];
+                      const color = v == null ? 'var(--text-dim)'
+                        : v >= 8 ? 'var(--green)' : v <= 3 ? 'var(--red)' : 'var(--text)';
+                      return (
+                        <td key={sub} style={{ ...S.td, textAlign: 'center', fontFamily: 'IBM Plex Mono', color }}>
+                          {v ?? '-'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--text-dim)' }}>
+            ⚠ = spread ≥ 2.0 (의견 분산 큼). 갈색 점 = 갈등 감지 (역할 간 갭 ≥ 4점)
+          </div>
+        </div>
+      )}
+
+      <div style={S.card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div style={S.mono}>VOTERS ({voters.length})</div>
         {msg && <span style={{ fontSize: '12px', color: 'var(--green)' }}>{msg}</span>}
@@ -411,6 +534,7 @@ function VotersTab() {
         </tbody>
       </table>
       {voters.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>투표자 없음</div>}
+      </div>
     </div>
   );
 }
@@ -783,6 +907,218 @@ function ImportTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Competitors Tab ──────────────────────────────────────────────────────────
+
+interface Competitor { id: number; name: string; current_elo: number; match_count: number; }
+interface AiEloEstimate { name: string; estimated_elo_range: [number, number]; summary: string; recent_wins: string[]; strength_areas: string[]; }
+interface IndustryPrior { industry: string; win_rate: number; deal_count: number; }
+interface AiPriorEstimate { industry: string; estimated_win_rate_range: [number, number]; summary: string; }
+
+function CompetitorsTab() {
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [aiElo, setAiElo] = useState<Record<string, AiEloEstimate | null>>({});
+  const [aiEloLoading, setAiEloLoading] = useState<Record<string, boolean>>({});
+  const [industryPriors, setIndustryPriors] = useState<IndustryPrior[]>([]);
+  const [aiPrior, setAiPrior] = useState<Record<string, AiPriorEstimate | null>>({});
+  const [aiPriorLoading, setAiPriorLoading] = useState<Record<string, boolean>>({});
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [compRes, priorRes] = await Promise.all([
+        fetch('/api/admin/competitors'),
+        fetch('/api/admin/industry-priors'),
+      ]);
+      if (compRes.ok) setCompetitors(await compRes.json());
+      if (priorRes.ok) setIndustryPriors(await priorRes.json());
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const fetchAiElo = async (comp: Competitor) => {
+    setAiEloLoading(p => ({ ...p, [comp.name]: true }));
+    try {
+      const res = await fetch(`/api/admin/ai-estimate?type=elo&name=${encodeURIComponent(comp.name)}`);
+      const d = await res.json();
+      setAiElo(p => ({ ...p, [comp.name]: d.estimate ?? null }));
+    } catch { /* ignore */ }
+    setAiEloLoading(p => ({ ...p, [comp.name]: false }));
+  };
+
+  const applyAiElo = async (comp: Competitor, estimate: AiEloEstimate) => {
+    const midElo = Math.round((estimate.estimated_elo_range[0] + estimate.estimated_elo_range[1]) / 2);
+    const res = await fetch('/api/admin/competitors', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: comp.id, current_elo: midElo }),
+    });
+    if (res.ok) {
+      setMsg(`✓ ${comp.name} Elo → ${midElo} 적용됨 (AI 추정 중간값)`);
+      load();
+    }
+  };
+
+  const fetchAiPrior = async (industry: string) => {
+    setAiPriorLoading(p => ({ ...p, [industry]: true }));
+    try {
+      const res = await fetch(`/api/admin/ai-estimate?type=prior&industry=${encodeURIComponent(industry)}`);
+      const d = await res.json();
+      setAiPrior(p => ({ ...p, [industry]: d.estimate ?? null }));
+    } catch { /* ignore */ }
+    setAiPriorLoading(p => ({ ...p, [industry]: false }));
+  };
+
+  const applyAiPrior = async (industry: string, estimate: AiPriorEstimate) => {
+    const midRate = (estimate.estimated_win_rate_range[0] + estimate.estimated_win_rate_range[1]) / 2;
+    const res = await fetch('/api/admin/labels', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'prior', key: industry, field: 'win_rate', value: midRate.toFixed(3) }),
+    });
+    if (res.ok) {
+      setMsg(`✓ ${industry} prior → ${(midRate * 100).toFixed(1)}% 적용됨 (AI 추정 중간값)`);
+    }
+  };
+
+  if (loading) return <LoadingText />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {msg && (
+        <div style={{ padding: '10px 14px', background: 'rgba(129,199,132,0.12)', border: '1px solid var(--green)', borderRadius: '8px', fontSize: '12px', color: 'var(--green)' }}>
+          {msg}
+        </div>
+      )}
+
+      {/* 경쟁사 Elo 섹션 */}
+      <div style={S.card}>
+        <div style={{ ...S.mono, color: 'var(--cyan)', marginBottom: '16px' }}>
+          COMPETITOR ELO 관리
+          <span style={{ marginLeft: '12px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 400 }}>
+            🟢 자체 DB 값 / 🟡 AI 추정 (Gemini, 참고용)
+          </span>
+        </div>
+        <table style={S.table}>
+          <thead>
+            <tr>
+              <th style={S.th}>경쟁사</th>
+              <th style={S.th}>현재 Elo 🟢</th>
+              <th style={S.th}>매치 수</th>
+              <th style={S.th}>AI 추정 Elo 🟡</th>
+              <th style={S.th}>액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            {competitors.map(comp => {
+              const est = aiElo[comp.name];
+              const fetching = aiEloLoading[comp.name];
+              return (
+                <tr key={comp.id}>
+                  <td style={S.td}>{comp.name}</td>
+                  <td style={{ ...S.td, fontFamily: 'IBM Plex Mono', color: 'var(--cyan)' }}>{comp.current_elo.toFixed(0)}</td>
+                  <td style={{ ...S.td, color: 'var(--text-dim)' }}>{comp.match_count}</td>
+                  <td style={S.td}>
+                    {est ? (
+                      <div>
+                        <span style={{ fontFamily: 'IBM Plex Mono', color: '#ffd54f' }}>
+                          {est.estimated_elo_range[0]}~{est.estimated_elo_range[1]}
+                        </span>
+                        <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>{est.summary}</div>
+                      </div>
+                    ) : (
+                      <button onClick={() => fetchAiElo(comp)} disabled={fetching}
+                        style={{ ...S.btn('var(--surface2)'), fontSize: '10px', padding: '4px 8px' }}>
+                        {fetching ? '조회 중...' : '🟡 AI 추정 보기'}
+                      </button>
+                    )}
+                  </td>
+                  <td style={S.td}>
+                    {est && (
+                      <button onClick={() => applyAiElo(comp, est)}
+                        style={{ ...S.btn('var(--cyan)'), fontSize: '10px', padding: '4px 10px', color: '#000' }}>
+                        적용
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--text-dim)' }}>
+          ⚠️ &ldquo;적용&rdquo; 버튼을 눌러야만 AI 추정값이 실제 모델에 반영됩니다. 자동 주입되지 않습니다.
+        </div>
+      </div>
+
+      {/* 산업별 Prior 섹션 */}
+      <div style={S.card}>
+        <div style={{ ...S.mono, color: 'var(--cyan)', marginBottom: '16px' }}>
+          INDUSTRY PRIOR 관리
+          <span style={{ marginLeft: '12px', fontSize: '10px', color: 'var(--text-dim)', fontWeight: 400 }}>
+            🟢 자체 이력 기반 / 🟡 AI 시장 추정 (참고용)
+          </span>
+        </div>
+        <table style={S.table}>
+          <thead>
+            <tr>
+              <th style={S.th}>산업</th>
+              <th style={S.th}>자체 Win율 🟢</th>
+              <th style={S.th}>학습 딜 수</th>
+              <th style={S.th}>AI 추정 Win율 🟡</th>
+              <th style={S.th}>액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            {industryPriors.map(ip => {
+              const est = aiPrior[ip.industry];
+              const fetching = aiPriorLoading[ip.industry];
+              return (
+                <tr key={ip.industry}>
+                  <td style={S.td}>{ip.industry}</td>
+                  <td style={{ ...S.td, fontFamily: 'IBM Plex Mono', color: 'var(--cyan)' }}>
+                    {(ip.win_rate * 100).toFixed(1)}%
+                  </td>
+                  <td style={{ ...S.td, color: 'var(--text-dim)' }}>{ip.deal_count}</td>
+                  <td style={S.td}>
+                    {est ? (
+                      <div>
+                        <span style={{ fontFamily: 'IBM Plex Mono', color: '#ffd54f' }}>
+                          {(est.estimated_win_rate_range[0] * 100).toFixed(0)}~{(est.estimated_win_rate_range[1] * 100).toFixed(0)}%
+                        </span>
+                        <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>{est.summary}</div>
+                      </div>
+                    ) : (
+                      <button onClick={() => fetchAiPrior(ip.industry)} disabled={fetching}
+                        style={{ ...S.btn('var(--surface2)'), fontSize: '10px', padding: '4px 8px' }}>
+                        {fetching ? '조회 중...' : '🟡 AI 추정 보기'}
+                      </button>
+                    )}
+                  </td>
+                  <td style={S.td}>
+                    {est && (
+                      <button onClick={() => applyAiPrior(ip.industry, est)}
+                        style={{ ...S.btn('var(--cyan)'), fontSize: '10px', padding: '4px 10px', color: '#000' }}>
+                        적용
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--text-dim)' }}>
+          ⚠️ &ldquo;적용&rdquo; 버튼을 눌러야만 AI 추정값이 Bayesian prior에 반영됩니다. 자동 주입되지 않습니다.
+        </div>
+      </div>
     </div>
   );
 }

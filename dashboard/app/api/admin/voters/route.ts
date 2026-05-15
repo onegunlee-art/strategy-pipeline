@@ -26,14 +26,18 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(rows);
 }
 
-// PUT /api/admin/voters — update role/weight
+// PUT /api/admin/voters — update role/weight/role_v1
 export async function PUT(req: NextRequest) {
   if (!isAdminAuthed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const { voter_id, role, weight } = await req.json();
+  const { voter_id, role, weight, role_v1 } = await req.json();
   const db = await getDb();
   await db.query(
-    'UPDATE voters SET role = COALESCE($2, role), weight = COALESCE($3, weight) WHERE id = $1',
-    [voter_id, role ?? null, weight ?? null]
+    `UPDATE voters
+       SET role = COALESCE($2, role),
+           weight = COALESCE($3, weight),
+           role_v1 = COALESCE($4, role_v1)
+     WHERE id = $1`,
+    [voter_id, role ?? null, weight ?? null, role_v1 ?? null]
   );
   return NextResponse.json({ ok: true });
 }

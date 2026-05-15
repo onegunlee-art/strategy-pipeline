@@ -148,6 +148,47 @@ async function runInit() {
     );
   `);
 
+  // v0.4 신규 테이블 + 컬럼
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS case_studies (
+      id SERIAL PRIMARY KEY,
+      deal_id INTEGER REFERENCES deals(id) ON DELETE CASCADE,
+      outcome TEXT NOT NULL,
+      tech_capability REAL,
+      reference REAL,
+      sales REAL,
+      price_cost REAL,
+      consortium REAL,
+      differentiation REAL,
+      win_loss_cause TEXT,
+      lessons_learned TEXT,
+      competitors_named TEXT[],
+      consortium_partners JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS external_research (
+      id SERIAL PRIMARY KEY,
+      deal_id INTEGER REFERENCES deals(id) ON DELETE CASCADE,
+      topic TEXT NOT NULL,
+      source TEXT NOT NULL,
+      query TEXT,
+      result_text TEXT,
+      result_json JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (deal_id, topic)
+    );
+
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS execution_unit TEXT;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS pm TEXT;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS duration_months INTEGER;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS vdc_a REAL;
+    ALTER TABLE voters ADD COLUMN IF NOT EXISTS role_v1 TEXT;
+
+    -- v0.5: applied_at — 어드민이 AI 추정값을 정량 모델에 수동 채택한 시점
+    ALTER TABLE external_research ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
+  `);
+
   // 시드 데이터
   const { rows: compCount } = await pool.query('SELECT COUNT(*)::int as c FROM competitors');
   if (compCount[0].c === 0) {
@@ -186,6 +227,17 @@ async function runInit() {
         [id, val]
       );
     }
+  }
+
+  // v0.4: 2025 Q4 PDF 시드 (idempotent)
+  try {
+    const { seedFromBundledData } = await import('./seed');
+    const result = await seedFromBundledData(pool);
+    if (!result.skipped) {
+      console.log('[seed_2025Q4]', result);
+    }
+  } catch (e) {
+    console.error('[seed_2025Q4] failed:', e);
   }
 }
 

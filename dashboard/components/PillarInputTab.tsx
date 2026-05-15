@@ -27,6 +27,13 @@ const PILLAR_COLORS: Record<PillarId, string> = {
   V: '#4dd0e1', P: '#81c784', D: '#ffb74d', E: '#ba68c8',
 };
 
+interface OpenDeal {
+  id: number;
+  client_name: string;
+  industry: string | null;
+  voter_count: number;
+}
+
 export default function PillarInputTab({ onResult }: Props) {
   const [clientName, setClientName] = useState('');
   const [dealSize, setDealSize] = useState('');
@@ -37,12 +44,43 @@ export default function PillarInputTab({ onResult }: Props) {
   const [selectedCompIds, setSelectedCompIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [openDeals, setOpenDeals] = useState<OpenDeal[]>([]);
+  const [selectedDealId, setSelectedDealId] = useState<number | null>(null);
+  const [loadingVote, setLoadingVote] = useState(false);
+  const [voteMsg, setVoteMsg] = useState('');
 
   useEffect(() => {
     fetch('/api/weights').then(r => r.json()).then(d => {
       if (d.competitors) setCompetitors(d.competitors);
     });
+    // 진행 중 딜 (voting 있는 딜) 목록 — voting → predict 통합용
+    fetch('/api/portfolio').then(r => r.json()).then(d => {
+      if (d.deals) {
+        setOpenDeals(d.deals.filter((x: { voter_count: number }) => x.voter_count > 0));
+      }
+    });
   }, []);
+
+  const loadFromVoting = async (dealId: number) => {
+    setLoadingVote(true);
+    setVoteMsg('');
+    try {
+      const res = await fetch(`/api/vote-tally/${dealId}`);
+      const d = await res.json();
+      if (d.subs) {
+        setSubs(d.subs);
+        setSelectedDealId(dealId);
+        setClientName(d.client_name ?? '');
+        setVoteMsg(`✓ ${d.voter_count}명 voting 결과 불러옴 (avg spread ${d.average_spread?.toFixed(2) ?? '0'})`);
+      } else {
+        setVoteMsg('voting 데이터 없음');
+      }
+    } catch {
+      setVoteMsg('불러오기 실패');
+    } finally {
+      setLoadingVote(false);
+    }
+  };
 
   const pillarScores = pillarScoreFromSubs(subs);
 
@@ -89,6 +127,39 @@ export default function PillarInputTab({ onResult }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* VOTING → PREDICT */}
+      {openDeals.length > 0 && (
+        <Card title="VOTING 결과로 자동 입력 (선택사항)">
+          <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px' }}>
+            voting이 진행 중인 딜을 클릭하면 12개 sub-factor가 역할 가중평균으로 자동 채워집니다.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {openDeals.slice(0, 8).map(d => {
+              const active = selectedDealId === d.id;
+              return (
+                <button key={d.id} onClick={() => loadFromVoting(d.id)} disabled={loadingVote}
+                  style={{
+                    padding: '8px 12px', borderRadius: '8px',
+                    background: active ? 'var(--cyan)' : 'var(--surface2)',
+                    color: active ? '#000' : 'var(--text)',
+                    border: '1px solid ' + (active ? 'var(--cyan)' : 'var(--border)'),
+                    fontSize: '12px', cursor: loadingVote ? 'wait' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                  }}>
+                  <span>{d.client_name}</span>
+                  <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', opacity: 0.7 }}>
+                    ({d.voter_count}명)
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {voteMsg && (
+            <div style={{ fontSize: '12px', color: 'var(--green)', marginTop: '10px' }}>{voteMsg}</div>
+          )}
+        </Card>
+      )}
+
       {/* CLIENT INFO */}
       <Card title="CLIENT INFO">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
