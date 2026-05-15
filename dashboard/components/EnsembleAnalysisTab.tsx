@@ -53,6 +53,26 @@ interface Props {
   onOutcome: (r: 1 | 0) => void;
 }
 
+// 괄호 깊이 추적으로 완전한 JSON 배열만 추출 (greedy regex 대체)
+// 잘린 JSON이면 null 반환 → "잘린 응답" 에러로 구분
+function extractJsonArray(text: string): string | null {
+  const start = text.indexOf('[');
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '[') depth++;
+    if (ch === ']') { depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+  return null;
+}
+
 export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const [cards, setCards] = useState<StrategyCard[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -92,21 +112,20 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
               accumulated += ev.text;
               setStreamingText(accumulated);
             } else if (ev.type === 'done' || ev.type === 'error') {
-              // 마크다운 코드블록 제거 후 JSON 배열 추출
               const clean = accumulated
                 .replace(/```json\s*/gi, '')
                 .replace(/```\s*/g, '');
-              const match = clean.match(/\[[\s\S]*\]/);
-              if (match) {
+              const jsonStr = extractJsonArray(clean);
+              if (jsonStr) {
                 try {
-                  setCards(JSON.parse(match[0]));
+                  setCards(JSON.parse(jsonStr));
                 } catch {
                   setStrategyError('JSON 파싱 실패 — 다시 시도해 주세요');
-                  setCards(null);  // 버튼 복원
+                  setCards(null);
                 }
               } else {
-                setStrategyError('응답에서 카드 데이터를 찾지 못했습니다 — 다시 시도해 주세요');
-                setCards(null);  // 버튼 복원
+                setStrategyError('응답이 잘렸습니다 — 다시 시도해 주세요');
+                setCards(null);
               }
             }
           } catch { /* partial JSON line, skip */ }
