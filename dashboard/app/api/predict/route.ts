@@ -10,12 +10,14 @@ import {
 import { multiCompetitorWinProb } from '@/lib/elo';
 import { monteCarloRun } from '@/lib/montecarlo';
 import { ensemble, EnsembleWeights, MethodProbs } from '@/lib/ensemble';
+import { computeRewardFactors } from '@/lib/mcReward';
 
 interface PredictBody {
   client_name: string;
   deal_size?: string;
   industry?: string;
   expected_revenue?: number;
+  risk?: number;        // 딜 리스크 레벨 1~5 (MC sigma 조정에 사용)
   sub_scores: Partial<SubScores>;
   competitor_ids?: number[];
 }
@@ -78,12 +80,14 @@ export async function POST(req: NextRequest) {
       probElo = multiCompetitorWinProb(ourElo, elos);
     }
 
-    // 6) Method D: Monte Carlo
+    // 6) Method D: Monte Carlo (sigma는 risk/pillar에 따라 차등 적용, mean은 단순평균 유지)
+    const rewardFactors = computeRewardFactors(records, { risk: body.risk });
     const mc = monteCarloRun(subs, {
       iterations: 5000,  // serverless 응답시간 고려
       subFactorStd: 1.0,
       pillarWeights,
       subWeights,
+      rewardFactors,
     });
     const probMC = mc.mean;
 
@@ -161,6 +165,7 @@ export async function POST(req: NextRequest) {
       weaknesses,
       prior_base_rate: Math.round(prior * 1000) / 10,
       data_points: records.length,
+      mc_seed_hash: mc.seedPoolHash,
     });
   } catch (e: unknown) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

@@ -19,13 +19,22 @@ interface PredictResult {
   sub_scores: SubScores;
 }
 
+interface ReasoningTrace {
+  situation: string;
+  complication: string;
+  question: string;
+  answer_summary: string;
+}
+
 interface StrategyCard {
   sub_factor_id: SubFactorId;
+  label?: string;
   cause_hypothesis: string;
+  reasoning_trace?: ReasoningTrace;
   actions: Array<{ step: string; owner: string; duration: string }>;
   expected_score_lift: number;
   expected_probability_lift_pp: number;
-  kt_framework_reference: string;
+  kt_framework_reference?: string;
 }
 
 const PILLAR_COLORS: Record<PillarId, string> = {
@@ -47,20 +56,56 @@ interface Props {
 export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const [cards, setCards] = useState<StrategyCard[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [expandedTrace, setExpandedTrace] = useState<Record<string, boolean>>({});
   const [outcomeSaved, setOutcomeSaved] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
 
   const generateStrategy = async () => {
     setLoading(true);
+    setStreamingText('');
     try {
-      // v0.4: /api/strategy/[deal_id] — Gemini 외부 리서치 + case_studies 통합
       const res = await fetch(`/api/strategy/${result.deal_id}`, { method: 'POST' });
-      const data = await res.json();
-      if (data.cards) setCards(data.cards);
-      // research, customer_context, similar_cases도 함께 받지만 카드 표시에 집중
+      if (!res.body) throw new Error('no stream body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = '';
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          try {
+            const ev = JSON.parse(payload);
+            if (ev.type === 'delta') {
+              accumulated += ev.text;
+              setStreamingText(accumulated);
+            } else if (ev.type === 'done' || ev.type === 'error') {
+              const match = accumulated.match(/\[[\s\S]*\]/);
+              if (match) {
+                try { setCards(JSON.parse(match[0])); } catch { setCards([]); }
+              } else {
+                setCards([]);
+              }
+            }
+          } catch { /* partial JSON line, skip */ }
+        }
+      }
     } catch {
       setCards([]);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+      setStreamingText('');
+    }
   };
 
   const openBrief = async () => {
@@ -206,55 +251,125 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
         </div>
 
         {!cards && (
-          <button onClick={generateStrategy} disabled={loading}
-            style={{
-              marginTop: '16px', width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--cyan)',
-              background: 'transparent', color: 'var(--cyan)',
-              fontFamily: 'IBM Plex Mono', fontSize: '12px', cursor: loading ? 'wait' : 'pointer',
-            }}>
-            {loading ? 'GENERATING ACTIONS...' : '▶  AI 전략 카드 생성'}
-          </button>
+          <>
+            <button onClick={generateStrategy} disabled={loading}
+              style={{
+                marginTop: '16px', width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--cyan)',
+                background: 'transparent', color: loading ? 'var(--text-dim)' : 'var(--cyan)',
+                fontFamily: 'IBM Plex Mono', fontSize: '12px', cursor: loading ? 'wait' : 'pointer',
+              }}>
+              {loading ? 'SCQA 추론 중...' : '▶  AI 전략 카드 생성 (SCQA)'}
+            </button>
+            {streamingText && (
+              <div style={{
+                marginTop: '12px', padding: '12px', borderRadius: '8px',
+                background: 'var(--surface2)', border: '1px solid var(--border)',
+                fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)',
+                maxHeight: '120px', overflow: 'hidden', whiteSpace: 'pre-wrap',
+                position: 'relative',
+              }}>
+                <span style={{ color: 'var(--cyan)', marginRight: '6px' }}>S→C→Q→A</span>
+                {streamingText.slice(-300)}
+                <span style={{ animation: 'none', opacity: 0.6 }}>▊</span>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
-      {/* 전략 카드 */}
+      {/* 전략 카드 (SCQA 추론 경로 포함) */}
       {cards && cards.length > 0 && (
-        <Card title="STRATEGY CARDS (3주 내 실행)">
+        <Card title="STRATEGY CARDS — SCQA 추론 구조 (3주 내 실행)">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {cards.map(card => (
-              <div key={card.sub_factor_id} style={{
-                padding: '16px', background: 'var(--surface2)', borderRadius: '8px',
-                border: '1px solid var(--border)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--cyan)' }}>
-                    {card.sub_factor_id}
-                  </div>
-                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--green)' }}>
-                    예상 +{card.expected_probability_lift_pp}%p
-                  </div>
-                </div>
-                <div style={{ fontSize: '13px', color: 'var(--text)', marginBottom: '12px', fontStyle: 'italic' }}>
-                  {card.cause_hypothesis}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {card.actions.map((a, i) => (
-                    <div key={i} style={{ fontSize: '13px', color: 'var(--text-mid)', display: 'flex', gap: '8px' }}>
-                      <span style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono' }}>›</span>
-                      <span style={{ flex: 1 }}>
-                        {a.step}
-                        <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '8px' }}>
-                          [{a.owner} · {a.duration}]
-                        </span>
-                      </span>
+            {cards.map(card => {
+              const traceOpen = expandedTrace[card.sub_factor_id] ?? false;
+              return (
+                <div key={card.sub_factor_id} style={{
+                  padding: '16px', background: 'var(--surface2)', borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                }}>
+                  {/* 헤더: sub_factor + 예상 lift */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--cyan)' }}>
+                      {card.sub_factor_id}{card.label ? ` · ${card.label}` : ''}
                     </div>
-                  ))}
+                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--green)' }}>
+                      예상 +{card.expected_probability_lift_pp}%p
+                    </div>
+                  </div>
+
+                  {/* Answer: 핵심 원인 */}
+                  <div style={{ fontSize: '13px', color: 'var(--text)', marginBottom: '12px', fontStyle: 'italic' }}>
+                    {card.cause_hypothesis}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {card.actions.map((a, i) => (
+                      <div key={i} style={{ fontSize: '13px', color: 'var(--text-mid)', display: 'flex', gap: '8px' }}>
+                        <span style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono' }}>›</span>
+                        <span style={{ flex: 1 }}>
+                          {a.step}
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '8px' }}>
+                            [{a.owner} · {a.duration}]
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* SCQA 추론 경로 토글 */}
+                  {card.reasoning_trace && (
+                    <div style={{ marginTop: '12px' }}>
+                      <button
+                        onClick={() => setExpandedTrace(prev => ({
+                          ...prev, [card.sub_factor_id]: !traceOpen,
+                        }))}
+                        style={{
+                          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                          fontFamily: 'IBM Plex Mono', fontSize: '10px',
+                          color: 'var(--text-dim)', letterSpacing: '1px',
+                        }}
+                      >
+                        {traceOpen ? '▲ 추론 경로 접기' : '▼ 추론 경로 보기 (Why?)'}
+                      </button>
+
+                      {traceOpen && (
+                        <div style={{
+                          marginTop: '10px', padding: '12px', borderRadius: '6px',
+                          background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)',
+                          display: 'flex', flexDirection: 'column', gap: '10px',
+                        }}>
+                          {(
+                            [
+                              { key: 'situation', label: 'S — Situation', color: 'var(--text-dim)' },
+                              { key: 'complication', label: 'C — Complication', color: 'var(--yellow)' },
+                              { key: 'question', label: 'Q — Question', color: 'var(--cyan)' },
+                              { key: 'answer_summary', label: 'A — Answer', color: 'var(--green)' },
+                            ] as const
+                          ).map(({ key, label, color }) => (
+                            <div key={key}>
+                              <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color, letterSpacing: '1px', marginBottom: '4px' }}>
+                                {label}
+                              </div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-mid)', lineHeight: 1.6 }}>
+                                {card.reasoning_trace![key]}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {card.kt_framework_reference && (
+                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '10px', fontFamily: 'IBM Plex Mono' }}>
+                      KT 프레임워크: {card.kt_framework_reference}
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '10px', fontFamily: 'IBM Plex Mono' }}>
-                  KT 프레임워크: {card.kt_framework_reference}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}

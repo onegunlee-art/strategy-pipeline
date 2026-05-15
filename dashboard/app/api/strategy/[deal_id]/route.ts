@@ -1,4 +1,4 @@
-// 약점 분해 + 외부 리서치 + 유사 case_studies → Claude 전략 카드
+// 약점 분해 + 외부 리서치 + 유사 case_studies → SCQA 추론 구조 전략 카드 (SSE 스트리밍)
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '@/lib/db';
@@ -14,7 +14,6 @@ interface WeaknessRow {
 }
 
 function findWeaknesses(subScores: Record<string, number>): WeaknessRow[] {
-  // 단순화: score가 낮을수록 약점. 점수 5 미만이면 약점 후보
   const sorted = SUB_FACTORS
     .map(f => ({
       sub_factor_id: f.id,
@@ -25,6 +24,10 @@ function findWeaknesses(subScores: Record<string, number>): WeaknessRow[] {
     }))
     .sort((a, b) => a.score - b.score);
   return sorted.slice(0, 3);
+}
+
+function sseEvent(data: object): string {
+  return `data: ${JSON.stringify(data)}\n\n`;
 }
 
 export async function POST(req: NextRequest, ctx: { params: { deal_id: string } }) {
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest, ctx: { params: { deal_id: string } 
     const subScores = (typeof deal.sub_scores === 'string' ? JSON.parse(deal.sub_scores) : deal.sub_scores) ?? {};
     const weaknesses = findWeaknesses(subScores);
 
-    // 2) 외부 리서치 (각 약점 + 고객 컨텍스트)
+    // 2) 외부 리서치 + 고객 컨텍스트 병렬 fetch
     const researchPromises = weaknesses.map(w =>
       fetchResearch(db, dealId, {
         kind: 'weakness',
@@ -83,54 +86,74 @@ export async function POST(req: NextRequest, ctx: { params: { deal_id: string } 
       [deal.industry ?? '']
     );
 
-    // 4) Claude 호출 — 외부 리서치 + 유사 사례 + 약점
+    // API 키 없으면 SSE로 빈 카드 반환 (dev 환경)
     if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json({
-        ok: true,
-        weaknesses,
-        research: researchResults,
-        customer_context: customerCtx,
-        similar_cases: similarCases,
-        cards: [],
-        note: 'ANTHROPIC_API_KEY 미설정 — 카드 미생성. 약점/리서치만 반환.',
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(sseEvent({
+            type: 'meta', weaknesses, similar_cases: similarCases,
+          })));
+          controller.enqueue(encoder.encode(sseEvent({
+            type: 'done', note: 'ANTHROPIC_API_KEY 미설정',
+          })));
+          controller.close();
+        }
+      });
+      return new Response(stream, {
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
       });
     }
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    // 4) SCQA 프롬프트 구성
     const weaknessBlock = weaknesses.map((w, i) => {
       const meta = SUB_FACTORS.find(f => f.id === w.sub_factor_id);
       const r = researchResults[i];
       return `약점 ${i + 1}: [${w.pillar}] ${w.label} (${w.sub_factor_id})
-- 현재: ${w.score.toFixed(1)}/10
+- 현재 점수: ${w.score.toFixed(1)}/10
 - 설명: ${meta?.description ?? ''}
 - 외부 리서치: ${r.text.slice(0, 500) || '(없음)'}`;
     }).join('\n\n');
 
     const similarBlock = similarCases.map((c, i) =>
-      `${i + 1}. ${c.client_name} (${c.industry}) — 실주 원인: ${c.win_loss_cause?.slice(0, 200) ?? ''}
+      `[사례 ${i + 1}] ${c.client_name} (${c.industry ?? '산업 미상'})
+   실주 원인: ${c.win_loss_cause?.slice(0, 200) ?? ''}
    교훈: ${c.lessons_learned?.slice(0, 200) ?? ''}`
-    ).join('\n');
+    ).join('\n\n');
 
-    const prompt = `당신은 KT B2B 수주전략 전문가입니다. 다음 딜의 약점 3개에 대해 3주 내 실행 가능한 액션 카드를 작성하세요.
+    const prompt = `당신은 KT B2B 수주전략 전문가입니다. Minto Pyramid의 SCQA 구조(Situation→Complication→Question→Answer)로 전략 카드를 작성하세요.
 
-## 딜 정보
+## 딜 정보 (Situation 작성 시 이 데이터만 활용 — 추측 금지)
 - 고객사: ${deal.client_name}
 - 산업: ${deal.industry ?? '미상'}
-- 현재 확률: ${deal.predicted_probability ?? 'N/A'}%
-- 고객 컨텍스트 (외부 리서치): ${customerCtx.text.slice(0, 400) || '(없음)'}
+- 현재 수주 확률: ${deal.predicted_probability ?? 'N/A'}%
+- 고객 컨텍스트: ${customerCtx.text.slice(0, 400) || '(없음)'}
 
 ## 약점 Top 3 + 외부 리서치
 ${weaknessBlock}
 
-## 유사 실주 사례 (같은 산업 우선)
+## 유사 실주 사례 (Complication 근거로 사례 번호 인용)
 ${similarBlock || '(유사 사례 없음)'}
 
-## 출력 (JSON 배열만)
+## 출력 규칙
+- JSON 배열만 출력 (설명 텍스트 없음)
+- reasoning_trace.situation: 딜 메타에서 추출한 현황 1-2문장만 (새로운 사실 생성 금지)
+- reasoning_trace.complication: 핵심 장애물 + 유사 사례 인용 시 [사례 N] 번호 명시
+- reasoning_trace.question: Complication에서 도출되는 핵심 질문 1문장
+- reasoning_trace.answer_summary: 아래 actions의 한줄 요약
+
+## 출력 (JSON 배열)
 [
   {
     "sub_factor_id": "...",
     "label": "...",
     "current_score": 4.2,
+    "reasoning_trace": {
+      "situation": "딜 현황 1-2문장",
+      "complication": "핵심 장애물 (유사 사례 [사례 N] 인용)",
+      "question": "극복 방향을 묻는 핵심 질문 1문장",
+      "answer_summary": "아래 3개 액션의 한줄 요약"
+    },
     "cause_hypothesis": "1문장 핵심 원인",
     "external_evidence": "외부 리서치에서 활용한 핵심 한 줄",
     "actions": [
@@ -139,32 +162,64 @@ ${similarBlock || '(유사 사례 없음)'}
       { "step": "...", "owner": "...", "duration": "..." }
     ],
     "expected_score_lift": 2,
-    "expected_probability_lift_pp": 8
-  },
-  ... (3개)
+    "expected_probability_lift_pp": 8,
+    "kt_framework_reference": "KT 프레임워크 참조"
+  }
 ]`;
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2500,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
-    const match = text.match(/\[[\s\S]*\]/);
-    let cards = [];
-    if (match) {
-      try { cards = JSON.parse(match[0]); } catch { cards = []; }
-    }
+    // 5) Claude 스트리밍 호출 + SSE 응답
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const encoder = new TextEncoder();
 
-    return NextResponse.json({
-      ok: true,
-      deal_id: dealId,
-      weaknesses,
-      research: researchResults,
-      customer_context: customerCtx,
-      similar_cases: similarCases,
-      cards,
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          // 메타 이벤트 먼저 전송 (약점 + 유사 사례 즉시 노출)
+          controller.enqueue(encoder.encode(sseEvent({
+            type: 'meta',
+            deal_id: dealId,
+            weaknesses,
+            similar_cases: similarCases,
+          })));
+
+          const stream = client.messages.stream({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 3000,
+            messages: [{ role: 'user', content: prompt }],
+          });
+
+          for await (const event of stream) {
+            if (
+              event.type === 'content_block_delta' &&
+              event.delta.type === 'text_delta'
+            ) {
+              controller.enqueue(encoder.encode(sseEvent({
+                type: 'delta',
+                text: event.delta.text,
+              })));
+            }
+          }
+
+          controller.enqueue(encoder.encode(sseEvent({ type: 'done' })));
+        } catch (err) {
+          controller.enqueue(encoder.encode(sseEvent({
+            type: 'error',
+            message: String(err),
+          })));
+        } finally {
+          controller.close();
+        }
+      }
     });
+
+    return new Response(readable, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+
   } catch (e: unknown) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
