@@ -57,6 +57,7 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const [cards, setCards] = useState<StrategyCard[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
+  const [strategyError, setStrategyError] = useState<string | null>(null);
   const [expandedTrace, setExpandedTrace] = useState<Record<string, boolean>>({});
   const [outcomeSaved, setOutcomeSaved] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -64,6 +65,7 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const generateStrategy = async () => {
     setLoading(true);
     setStreamingText('');
+    setStrategyError(null);
     try {
       const res = await fetch(`/api/strategy/${result.deal_id}`, { method: 'POST' });
       if (!res.body) throw new Error('no stream body');
@@ -90,18 +92,29 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
               accumulated += ev.text;
               setStreamingText(accumulated);
             } else if (ev.type === 'done' || ev.type === 'error') {
-              const match = accumulated.match(/\[[\s\S]*\]/);
+              // 마크다운 코드블록 제거 후 JSON 배열 추출
+              const clean = accumulated
+                .replace(/```json\s*/gi, '')
+                .replace(/```\s*/g, '');
+              const match = clean.match(/\[[\s\S]*\]/);
               if (match) {
-                try { setCards(JSON.parse(match[0])); } catch { setCards([]); }
+                try {
+                  setCards(JSON.parse(match[0]));
+                } catch {
+                  setStrategyError('JSON 파싱 실패 — 다시 시도해 주세요');
+                  setCards(null);  // 버튼 복원
+                }
               } else {
-                setCards([]);
+                setStrategyError('응답에서 카드 데이터를 찾지 못했습니다 — 다시 시도해 주세요');
+                setCards(null);  // 버튼 복원
               }
             }
           } catch { /* partial JSON line, skip */ }
         }
       }
     } catch {
-      setCards([]);
+      setStrategyError('전략 카드 생성 실패 — 다시 시도해 주세요');
+      setCards(null);
     } finally {
       setLoading(false);
       setStreamingText('');
@@ -250,6 +263,15 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
           ))}
         </div>
 
+        {strategyError && (
+          <div style={{
+            marginTop: '12px', padding: '10px 12px', borderRadius: '6px',
+            background: 'rgba(239,83,80,0.1)', border: '1px solid var(--red)',
+            fontSize: '12px', color: 'var(--red)',
+          }}>
+            {strategyError}
+          </div>
+        )}
         {!cards && (
           <>
             <button onClick={generateStrategy} disabled={loading}
