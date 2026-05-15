@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { fetchResearch } from '@/lib/research';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
@@ -99,10 +99,10 @@ export async function POST(
     [dealId]
   );
 
-  // 7) Gemini 브리프 생성
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  // 7) Claude 브리프 생성
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 503 });
+    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 503 });
   }
 
   const winProb = (deal.predicted_probability ?? 0) * 100;
@@ -197,14 +197,17 @@ ${promptContext}
   let briefJson: Record<string, unknown> = {};
   let briefText = '';
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
-    const resp = await model.generateContent(briefPrompt);
-    briefText = resp.response.text();
+    const client = new Anthropic({ apiKey });
+    const msg = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: briefPrompt }],
+    });
+    briefText = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const m = briefText.match(/\{[\s\S]*\}/);
     if (m) briefJson = JSON.parse(m[0]);
   } catch (e) {
-    console.error('[brief] Gemini error:', e);
+    console.error('[brief] Claude error:', e);
     return NextResponse.json({ error: 'brief generation failed' }, { status: 500 });
   }
 
@@ -233,12 +236,12 @@ ${promptContext}
   // 캐시 저장
   await pool.query(
     `INSERT INTO external_research (deal_id, topic, source, result_text, result_json)
-     VALUES ($1, 'brief', 'gemini-2.5-pro', $2, $3)
+     VALUES ($1, 'brief', 'claude-sonnet-4-6', $2, $3)
      ON CONFLICT (deal_id, topic) DO UPDATE
      SET result_text = EXCLUDED.result_text,
          result_json = EXCLUDED.result_json,
          created_at = NOW()`,
-    [dealId, briefText.slice(0, 2000), JSON.stringify(output)]
+    [dealId, briefText.slice(0, 2000), JSON.stringify(output)],
   );
 
   return NextResponse.json({ ...output, cached: false });

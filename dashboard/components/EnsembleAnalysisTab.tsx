@@ -379,7 +379,7 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-              Gemini 2.5 Pro가 정량 결과 + 외부 리서치 (LG CNS/Samsung SDS 동향, AI 대형 사업, KT 뉴스)를 통합하여 1페이지 임원 요약 + 3페이지 전략 액션을 생성합니다.
+              Claude Sonnet이 정량 결과 + 외부 리서치 (LG CNS/Samsung SDS 동향, AI 대형 사업, KT 뉴스)를 통합하여 1페이지 임원 요약 + 3페이지 전략 액션을 생성합니다.
             </div>
             <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <ConfidenceBadge kind="own_data" label="정량 분석 포함" />
