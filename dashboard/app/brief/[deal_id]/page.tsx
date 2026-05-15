@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import BriefSection from '@/components/BriefSection';
 import '../print.css';
 
 interface Props {
-  params: Promise<{ deal_id: string }>;
+  params: { deal_id: string };
 }
 
 export default function BriefPage({ params }: Props) {
-  const { deal_id } = use(params);
+  const { deal_id } = params;
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState('캐시 확인 중...');
