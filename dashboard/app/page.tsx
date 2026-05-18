@@ -63,29 +63,34 @@ export default function Dashboard() {
             <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
             <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>v0.3 · 4-Pillar × 4-Method Ensemble</div>
           </div>
-          <a href="/admin/login" style={{
-            fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)',
-            textDecoration: 'none', padding: '4px 10px', border: '1px solid var(--border)',
-            borderRadius: '4px', letterSpacing: '1px',
-          }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--cyan)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-dim)')}
-          >
-            ADMIN
-          </a>
-          {result && (
-            <div style={{
-              fontFamily: 'IBM Plex Mono', fontSize: '13px',
-              color: result.probability >= 70 ? 'var(--green)' : result.probability >= 45 ? 'var(--yellow)' : 'var(--red)',
-              display: 'flex', alignItems: 'center', gap: '8px',
-            }}>
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>LATEST</span>
-              {result.probability.toFixed(1)}%
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                ({result.confidence_interval.low.toFixed(0)}-{result.confidence_interval.high.toFixed(0)})
-              </span>
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {result && (
+              <div style={{
+                fontFamily: 'IBM Plex Mono', fontSize: '13px',
+                color: result.probability >= 70 ? 'var(--green)' : result.probability >= 45 ? 'var(--yellow)' : 'var(--red)',
+                display: 'flex', alignItems: 'center', gap: '8px',
+              }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>LATEST</span>
+                {result.probability.toFixed(1)}%
+                <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                  ({result.confidence_interval.low.toFixed(0)}-{result.confidence_interval.high.toFixed(0)})
+                </span>
+              </div>
+            )}
+            <a href="/admin/login" style={{
+              fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)',
+              textDecoration: 'none', padding: '4px 10px', border: '1px solid var(--border)',
+              borderRadius: '4px', letterSpacing: '1px',
+            }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--cyan)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-dim)')}
+            >
+              ADMIN
+            </a>
+            <div style={{ width: '1px', height: '24px', background: 'var(--border)' }} />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/kt-logo.svg" alt="KT" style={{ height: '26px', display: 'block' }} />
+          </div>
         </div>
       </header>
 

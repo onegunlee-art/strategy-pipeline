@@ -8,19 +8,19 @@
 }
 
 :root {
-  --bg: #0a0e17;
-  --surface: #111827;
-  --surface2: #1a2333;
-  --border: #1e2d40;
-  --cyan: #00d4ff;
-  --cyan-dim: rgba(0, 212, 255, 0.08);
-  --cyan-mid: rgba(0, 212, 255, 0.25);
-  --green: #00ff88;
-  --red: #ff4466;
-  --yellow: #ffcc00;
-  --text: #e2e8f0;
-  --text-dim: #64748b;
-  --text-mid: #94a3b8;
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface2: #f0f4f8;
+  --border: #e1e8ef;
+  --cyan: #0284c7;
+  --cyan-dim: rgba(2, 132, 199, 0.08);
+  --cyan-mid: rgba(2, 132, 199, 0.20);
+  --green: #16a34a;
+  --red: #dc2626;
+  --yellow: #d97706;
+  --text: #1a202c;
+  --text-dim: #718096;
+  --text-mid: #4a5568;
 }
 
 html, body {
@@ -48,7 +48,7 @@ input[type=range]::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--cyan);
   cursor: pointer;
-  box-shadow: 0 0 8px var(--cyan);
+  box-shadow: 0 0 6px rgba(2, 132, 199, 0.4);
 }
 
 ::-webkit-scrollbar { width: 4px; }

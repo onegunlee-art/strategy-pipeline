@@ -82,15 +82,15 @@ export default function BriefPage({ params }: Props) {
 
   if (error) {
     return (
-      <div style={{ padding: '40px', fontFamily: 'monospace', color: '#e0e0e0', background: '#0d0d0d', minHeight: '100vh' }}>
-        <h1 style={{ color: '#ef5350' }}>Executive Brief 생성 실패</h1>
+      <div style={{ padding: '40px', fontFamily: 'monospace', color: 'var(--text)', background: 'var(--bg)', minHeight: '100vh' }}>
+        <h1 style={{ color: 'var(--red)' }}>Executive Brief 생성 실패</h1>
         <p>deal_id: {deal_id}</p>
-        <pre style={{ background: '#1a1a1a', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', color: '#ef5350' }}>
+        <pre style={{ background: 'var(--surface2)', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', color: 'var(--red)' }}>
           {error}
         </pre>
         <button
           onClick={() => { setError(null); setData(null); setStatusMsg('재시도 중...'); }}
-          style={{ marginTop: '16px', padding: '10px 20px', background: 'transparent', border: '1px solid #4dd0e1', color: '#4dd0e1', borderRadius: '6px', cursor: 'pointer', fontFamily: 'IBM Plex Mono', fontSize: '12px' }}
+          style={{ marginTop: '16px', padding: '10px 20px', background: 'transparent', border: '1px solid var(--cyan)', color: 'var(--cyan)', borderRadius: '6px', cursor: 'pointer', fontFamily: 'IBM Plex Mono', fontSize: '12px' }}
         >
           다시 시도
         </button>
@@ -100,13 +100,13 @@ export default function BriefPage({ params }: Props) {
 
   if (!data) {
     return (
-      <div style={{ padding: '40px', fontFamily: 'monospace', color: '#e0e0e0', background: '#0d0d0d', minHeight: '100vh' }}>
-        <div style={{ color: '#4dd0e1', fontSize: '11px', letterSpacing: '2px' }}>GENERATING EXECUTIVE BRIEF</div>
-        <div style={{ marginTop: '16px', fontSize: '13px', color: '#666' }}>{statusMsg}</div>
+      <div style={{ padding: '40px', fontFamily: 'monospace', color: 'var(--text)', background: 'var(--bg)', minHeight: '100vh' }}>
+        <div style={{ color: 'var(--cyan)', fontSize: '11px', letterSpacing: '2px' }}>GENERATING EXECUTIVE BRIEF</div>
+        <div style={{ marginTop: '16px', fontSize: '13px', color: 'var(--text-dim)' }}>{statusMsg}</div>
         <div style={{ marginTop: '24px', display: 'flex', gap: '6px' }}>
           {[0, 1, 2].map(i => (
             <div key={i} style={{
-              width: '8px', height: '8px', borderRadius: '50%', background: '#4dd0e1',
+              width: '8px', height: '8px', borderRadius: '50%', background: 'var(--cyan)',
               opacity: 0.3 + i * 0.35,
             }} />
           ))}
@@ -116,7 +116,7 @@ export default function BriefPage({ params }: Props) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg, #0d0d0d)', color: 'var(--text, #e0e0e0)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
       <BriefSection data={data as unknown as Parameters<typeof BriefSection>[0]['data']} />
     </div>
   );
