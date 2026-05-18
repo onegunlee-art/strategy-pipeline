@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import {
-  SubScores, SubFactorId, PillarId, PILLAR_COLORS, PILLAR_IDS,
+  SubScores, SubFactorId, PILLAR_COLORS, PILLAR_IDS,
   subFactorsOf, pillarScoreFromSubs, pillarMultiplication,
 } from '@/lib/pillars';
 import { monteCarloRun, MonteCarloResult } from '@/lib/montecarlo';

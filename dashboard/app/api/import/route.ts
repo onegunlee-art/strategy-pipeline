@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { SubScores, PillarId, defaultSubScores, subFactorsOf } from '@/lib/pillars';
+import { SubScores, defaultSubScores, subFactorsOf } from '@/lib/pillars';
 import { simulateEloFromHistory, INITIAL_ELO } from '@/lib/elo';
 
 interface ImportRecord {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { SubScores, SUB_FACTORS, PillarId, PILLAR_COLORS, PILLAR_IDS, pillarScoreFromSubs, pillarMultiplication, defaultSubScores } from '@/lib/pillars';
+import { SubScores, SUB_FACTORS, PILLAR_COLORS, pillarScoreFromSubs, pillarMultiplication, defaultSubScores } from '@/lib/pillars';
 import { monteCarloRun } from '@/lib/montecarlo';
 
 interface Props {
