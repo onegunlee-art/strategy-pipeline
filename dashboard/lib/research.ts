@@ -223,31 +223,17 @@ export async function fetchResearch(
     }
     try {
       const client = new Anthropic({ apiKey: anthropicKey });
-      // web_search_20260209 is a server-side tool — no input_schema needed
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tools: any[] = useGrounding
-        ? [{ type: 'web_search_20260209', name: 'web_search' }]
-        : [];
 
       let messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
-      for (let i = 0; i < 5; i++) {
-        const response = await client.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 2048,
-          ...(tools.length ? { tools } : {}),
-          messages,
-        });
-        const textBlocks = response.content.filter(
-          (b): b is Anthropic.TextBlock => b.type === 'text'
-        );
-        if (textBlocks.length > 0) text = textBlocks.map(b => b.text).join('');
-        if (response.stop_reason !== 'pause_turn') break;
-        messages = [
-          ...messages,
-          { role: 'assistant' as const, content: response.content },
-          { role: 'user' as const, content: 'Continue.' },
-        ];
-      }
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        messages,
+      });
+      const textBlocks = response.content.filter(
+        (b): b is Anthropic.TextBlock => b.type === 'text'
+      );
+      if (textBlocks.length > 0) text = textBlocks.map(b => b.text).join('');
       source = useGrounding ? 'claude-web-search' : 'claude-internal';
     } catch (e) {
       console.error('[research] Claude fallback error:', e);

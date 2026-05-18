@@ -8,7 +8,7 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-// POST /api/brief/[deal_id] — Executive Brief 생성 (24h 캐시)
+// POST /api/brief/[deal_id] — Executive Brief 생성 (SSE 스트리밍, 24h 캐시)
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ deal_id: string }> }
@@ -18,18 +18,22 @@ export async function POST(
   if (isNaN(dealId)) return NextResponse.json({ error: 'invalid deal_id' }, { status: 400 });
 
   const pool = await getDb();
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 503 });
+  }
 
-  // 캐시 확인 (24h 이내)
-  const { rows: cached } = await pool.query(
+  // 캐시 확인 (24h 이내) — 즉시 JSON 반환
+  const { rows: cachedRows } = await pool.query(
     `SELECT result_json, created_at FROM external_research
      WHERE deal_id=$1 AND topic='brief' AND created_at > NOW() - INTERVAL '24 hours'`,
     [dealId]
   );
-  if (cached.length > 0 && cached[0].result_json) {
-    return NextResponse.json({ ...cached[0].result_json, cached: true });
+  if (cachedRows.length > 0 && cachedRows[0].result_json) {
+    return NextResponse.json({ ...cachedRows[0].result_json, cached: true });
   }
 
-  // 1) 딜 정보
+  // DB 조회 (빠름 — 스트림 시작 전에 처리)
   const { rows: dealRows } = await pool.query(
     `SELECT d.*, o.actual_result,
             p.predicted_probability, p.method_probs, p.pillar_scores,
@@ -44,45 +48,18 @@ export async function POST(
   if (!dealRows.length) return NextResponse.json({ error: 'deal not found' }, { status: 404 });
   const deal = dealRows[0];
 
-  // 2) Voting 집계
   const { rows: voterRows } = await pool.query(
-    `SELECT COUNT(DISTINCT vt.id)::int as voter_count
-     FROM voters vt WHERE vt.deal_id = $1`,
+    `SELECT COUNT(DISTINCT vt.id)::int as voter_count FROM voters vt WHERE vt.deal_id = $1`,
     [dealId]
   );
   const voterCount = voterRows[0]?.voter_count ?? 0;
 
-  // 3) 약점 Top 3 (sub_scores 기반 낮은 점수 3개)
   const subScores: Record<string, number> = deal.sub_scores ?? {};
   const weaknesses = Object.entries(subScores)
     .sort(([, a], [, b]) => a - b)
     .slice(0, 3)
     .map(([id, score]) => ({ id, score }));
 
-  // 4) 외부 리서치 수집 (병렬)
-  const researchPromises = [
-    fetchResearch(pool, dealId, { kind: 'customer_context', clientName: deal.client_name, industry: deal.industry }),
-    fetchResearch(pool, dealId, { kind: 'similar_reference', clientName: deal.client_name, industry: deal.industry }),
-    fetchResearch(pool, dealId, { kind: 'kt_news' }),
-    fetchResearch(pool, dealId, { kind: 'competitor_trend', competitorName: 'LG CNS' }),
-    fetchResearch(pool, dealId, { kind: 'competitor_trend', competitorName: 'Samsung SDS' }),
-    fetchResearch(pool, dealId, { kind: 'ai_mega_project', industry: deal.industry }),
-    fetchResearch(pool, dealId, { kind: 'consortium_trend' }),
-    ...weaknesses.map(w =>
-      fetchResearch(pool, dealId, {
-        kind: 'weakness',
-        subFactorId: w.id as import('@/lib/pillars').SubFactorId,
-        clientName: deal.client_name,
-        industry: deal.industry,
-      })
-    ),
-  ];
-  const researchResults = await Promise.all(researchPromises);
-
-  const [customerCtx, , ktNews, lgCnsTrend, samsungTrend, aiMega, consortiumTrend, ...weaknessResearch] =
-    researchResults;
-
-  // 5) 유사 사례 3건
   const { rows: caseStudies } = await pool.query(
     `SELECT cs.outcome, cs.win_loss_cause, cs.lessons_learned, cs.competitors_named, d.client_name, d.industry
      FROM case_studies cs JOIN deals d ON d.id = cs.deal_id
@@ -90,8 +67,6 @@ export async function POST(
      ORDER BY cs.created_at DESC LIMIT 3`,
     [deal.industry]
   );
-
-  // 6) 경쟁사 정보
   const { rows: competitors } = await pool.query(
     `SELECT c.name, c.current_elo
      FROM deal_competitors dc JOIN competitors c ON c.id = dc.competitor_id
@@ -99,39 +74,58 @@ export async function POST(
     [dealId]
   );
 
-  // 7) Claude 브리프 — SSE 스트리밍 (Vercel timeout 우회)
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 503 });
-  }
-
   const winProb = deal.predicted_probability ?? 0;
   const ciLow = deal.confidence_low ?? 0;
   const ciHigh = deal.confidence_high ?? 0;
   const pillarScores: Record<string, number> = deal.pillar_scores ?? {};
 
-  const meta = {
-    deal_id: dealId,
-    client_name: deal.client_name,
-    industry: deal.industry,
-    generated_at: new Date().toISOString(),
-    layer1_quant: {
-      win_probability: winProb,
-      ci_low: ciLow,
-      ci_high: ciHigh,
-      pillar_scores: pillarScores,
-      voter_count: voterCount,
-      weaknesses,
-    },
-    layer2_ai_context: {
-      kt_news: ktNews.json,
-      competitor_trends: { lg_cns: lgCnsTrend.json, samsung_sds: samsungTrend.json },
-      ai_mega_project: aiMega.json,
-      consortium_trend: consortiumTrend.json,
-    },
-  };
+  const encoder = new TextEncoder();
+  const client = new Anthropic({ apiKey });
 
-  const briefPrompt = `당신은 KT 수주전략팀의 임원 보고서 작성 전문가입니다.
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        // 1) meta 이벤트 즉시 전송 → Vercel timeout 방지
+        const quantMeta = {
+          deal_id: dealId,
+          client_name: deal.client_name,
+          industry: deal.industry,
+          generated_at: new Date().toISOString(),
+          layer1_quant: {
+            win_probability: winProb,
+            ci_low: ciLow,
+            ci_high: ciHigh,
+            pillar_scores: pillarScores,
+            voter_count: voterCount,
+            weaknesses,
+          },
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'meta', ...quantMeta })}\n\n`));
+
+        // 2) 외부 리서치 병렬 fetch (느릴 수 있으나 meta는 이미 전송됨)
+        const researchPromises = [
+          fetchResearch(pool, dealId, { kind: 'customer_context', clientName: deal.client_name, industry: deal.industry }),
+          fetchResearch(pool, dealId, { kind: 'similar_reference', clientName: deal.client_name, industry: deal.industry }),
+          fetchResearch(pool, dealId, { kind: 'kt_news' }),
+          fetchResearch(pool, dealId, { kind: 'competitor_trend', competitorName: 'LG CNS' }),
+          fetchResearch(pool, dealId, { kind: 'competitor_trend', competitorName: 'Samsung SDS' }),
+          fetchResearch(pool, dealId, { kind: 'ai_mega_project', industry: deal.industry }),
+          fetchResearch(pool, dealId, { kind: 'consortium_trend' }),
+          ...weaknesses.map(w =>
+            fetchResearch(pool, dealId, {
+              kind: 'weakness',
+              subFactorId: w.id as import('@/lib/pillars').SubFactorId,
+              clientName: deal.client_name,
+              industry: deal.industry,
+            })
+          ),
+        ];
+        const researchResults = await Promise.all(researchPromises);
+        const [customerCtx, , ktNews, lgCnsTrend, samsungTrend, aiMega, consortiumTrend, ...weaknessResearch] =
+          researchResults;
+
+        // 3) 프롬프트 구성
+        const briefPrompt = `당신은 KT 수주전략팀의 임원 보고서 작성 전문가입니다.
 아래 딜 분석 데이터를 바탕으로 임원용 Executive Brief를 작성하세요.
 
 **중요 원칙:**
@@ -200,15 +194,7 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
   "sources": ["출처 URL 또는 근거 1", "출처 2"]
 }`;
 
-  const encoder = new TextEncoder();
-  const client = new Anthropic({ apiKey });
-
-  const readable = new ReadableStream({
-    async start(controller) {
-      try {
-        // meta 이벤트 즉시 전송 → Vercel timeout 방지
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'meta', ...meta })}\n\n`));
-
+        // 4) Claude 스트리밍
         const stream = client.messages.stream({
           model: 'claude-sonnet-4-6',
           max_tokens: 8192,
@@ -223,7 +209,7 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
           }
         }
 
-        // JSON 파싱 후 캐시 저장
+        // 5) JSON 파싱 후 캐시 저장
         let briefJson: Record<string, unknown> = {};
         try {
           const clean = briefText.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
@@ -233,7 +219,14 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
           console.error('[brief] JSON parse failed:', briefText.slice(0, 300));
         }
 
-        const output = { ...meta, ...briefJson, cached: false };
+        const layer2AiContext = {
+          kt_news: ktNews.json,
+          competitor_trends: { lg_cns: lgCnsTrend.json, samsung_sds: samsungTrend.json },
+          ai_mega_project: aiMega.json,
+          consortium_trend: consortiumTrend.json,
+        };
+        const output = { ...quantMeta, layer2_ai_context: layer2AiContext, ...briefJson, cached: false };
+
         try {
           await pool.query(
             `INSERT INTO external_research (deal_id, topic, source, result_text, result_json)
@@ -248,7 +241,7 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
           console.error('[brief] cache save failed:', e);
         }
 
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done', ...output })}\n\n`));
       } catch (err) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', message: String(err) })}\n\n`));
       } finally {
