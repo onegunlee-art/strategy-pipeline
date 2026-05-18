@@ -40,10 +40,11 @@ export default function BriefPage({ params }: Props) {
         const decoder = new TextDecoder();
         let metaData: Record<string, unknown> = {};
         let buf = '';
+        let done = false;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        while (!done) {
+          const { done: streamDone, value } = await reader.read();
+          if (streamDone) break;
           buf += decoder.decode(value, { stream: true });
 
           const lines = buf.split('\n');
@@ -58,17 +59,13 @@ export default function BriefPage({ params }: Props) {
                 metaData = ev;
                 if (!cancelled) setStatusMsg('AI 분석 중...');
               } else if (ev.type === 'done') {
-                // 캐시에서 완성본 읽기 (캐시 저장 완료 타이밍)
-                try {
-                  const cached = await fetch(`/api/brief/${deal_id}`);
-                  if (cached.ok) {
-                    const json = await cached.json();
-                    if (!cancelled && !json.error) { setData(json); return; }
-                  }
-                } catch { /* fallback to metaData */ }
-                if (!cancelled) setData({ ...metaData, cached: false });
+                // done 이벤트에 전체 결과가 포함됨 (race condition 없음)
+                const { type: _t, ...output } = ev;
+                if (!cancelled) setData(Object.keys(output).length > 0 ? output : { ...metaData, cached: false });
+                done = true;
               } else if (ev.type === 'error') {
                 if (!cancelled) setError(ev.message ?? 'brief 생성 실패');
+                done = true;
               }
             } catch { /* partial line */ }
           }

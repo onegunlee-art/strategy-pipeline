@@ -185,8 +185,7 @@ ${similarBlock || '(유사 사례 없음)'}
 
           const stream = client.messages.stream({
             model: 'claude-sonnet-4-6',
-            max_tokens: 8000,
-            thinking: { type: 'adaptive' as const },
+            max_tokens: 6000,
             messages: [{ role: 'user', content: prompt }],
           });
 
