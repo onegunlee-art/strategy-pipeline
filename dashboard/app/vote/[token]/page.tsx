@@ -182,7 +182,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
                       style={{
                         padding: '10px 8px', borderRadius: '6px',
                         border: '1px solid ' + (role === id ? 'var(--cyan)' : 'var(--border)'),
-                        background: role === id ? 'rgba(77,208,225,0.15)' : 'var(--surface2)',
+                        background: role === id ? 'var(--cyan-dim)' : 'var(--surface2)',
                         color: role === id ? 'var(--cyan)' : 'var(--text)',
                         fontSize: '12px', cursor: 'pointer', textAlign: 'center',
                       }}>
@@ -202,7 +202,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
               style={{
                 padding: '14px', borderRadius: '10px', border: 'none',
                 background: name.trim() ? 'var(--cyan)' : 'var(--surface2)',
-                color: name.trim() ? '#000' : 'var(--text-dim)',
+                color: name.trim() ? '#fff' : 'var(--text-dim)',
                 fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600,
                 cursor: name.trim() ? 'pointer' : 'default',
               }}>
@@ -311,7 +311,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
                 padding: '16px', borderRadius: '10px',
                 border: answeredQ < totalQ ? '1px solid var(--border)' : 'none',
                 background: submitting ? 'var(--surface2)' : answeredQ === totalQ ? 'var(--cyan)' : 'var(--surface)',
-                color: submitting ? 'var(--text-dim)' : answeredQ === totalQ ? '#000' : 'var(--text-dim)',
+                color: submitting ? 'var(--text-dim)' : answeredQ === totalQ ? '#fff' : 'var(--text-dim)',
                 fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600,
                 cursor: submitting ? 'wait' : 'pointer',
               }}>

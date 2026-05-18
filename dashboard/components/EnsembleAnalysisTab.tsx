@@ -76,7 +76,6 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [strategyError, setStrategyError] = useState<string | null>(null);
-  const [expandedTrace, setExpandedTrace] = useState<Record<string, boolean>>({});
   const [outcomeSaved, setOutcomeSaved] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
 
@@ -207,20 +206,20 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
         </div>
       </div>
 
-      {/* 4 Method 분해 */}
-      <Card title="4-METHOD ENSEMBLE BREAKDOWN">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-          {(['pillar', 'bayesian', 'elo', 'monteCarlo'] as const).map(m => {
+      {/* 분석 모델 분해 (Pillar + Bayesian) */}
+      <Card title="ENSEMBLE BREAKDOWN">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+          {(['pillar', 'bayesian'] as const).map(m => {
             const v = result.method_probs[m];
             return (
-              <div key={m} style={{ padding: '14px', background: 'var(--surface2)', borderRadius: '8px' }}>
-                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--cyan)', letterSpacing: '1px' }}>
+              <div key={m} style={{ padding: '16px', background: 'var(--surface2)', borderRadius: '8px' }}>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '1px' }}>
                   {METHOD_LABELS[m].label}
                 </div>
-                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '28px', color: 'var(--text)', marginTop: '6px' }}>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '32px', color: 'var(--text)', marginTop: '6px', fontWeight: 600 }}>
                   {v.toFixed(1)}%
                 </div>
-                <div style={{ height: '4px', background: 'var(--border)', borderRadius: '2px', marginTop: '8px', overflow: 'hidden' }}>
+                <div style={{ height: '3px', background: 'var(--border)', borderRadius: '2px', marginTop: '10px', overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${v}%`, background: 'var(--cyan)' }} />
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '8px' }}>
@@ -316,99 +315,106 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
         )}
       </Card>
 
-      {/* 전략 카드 (SCQA 추론 경로 포함) */}
+      {/* 전략 카드 — SCQA 좌→우 흐름 */}
       {cards && cards.length > 0 && (
-        <Card title="STRATEGY CARDS — SCQA 추론 구조 (3주 내 실행)">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {cards.map(card => {
-              const traceOpen = expandedTrace[card.sub_factor_id] ?? false;
-              return (
-                <div key={card.sub_factor_id} style={{
-                  padding: '16px', background: 'var(--surface2)', borderRadius: '8px',
-                  border: '1px solid var(--border)',
+        <Card title="STRATEGY CARDS — S → C → Q → A">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {cards.map(card => (
+              <div key={card.sub_factor_id} style={{
+                borderRadius: '10px', border: '1px solid var(--border)', overflow: 'hidden',
+              }}>
+                {/* 카드 헤더 */}
+                <div style={{
+                  padding: '12px 16px', background: 'var(--surface2)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  borderBottom: '1px solid var(--border)',
                 }}>
-                  {/* 헤더: sub_factor + 예상 lift */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--cyan)' }}>
-                      {card.sub_factor_id}{card.label ? ` · ${card.label}` : ''}
-                    </div>
-                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--green)' }}>
-                      예상 +{card.expected_probability_lift_pp}%p
-                    </div>
+                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-mid)', fontWeight: 600 }}>
+                    {card.label ?? card.sub_factor_id}
                   </div>
-
-                  {/* Answer: 핵심 원인 */}
-                  <div style={{ fontSize: '13px', color: 'var(--text)', marginBottom: '12px', fontStyle: 'italic' }}>
-                    {card.cause_hypothesis}
+                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: 'var(--green)', fontWeight: 700 }}>
+                    +{card.expected_probability_lift_pp}%p ↑
                   </div>
+                </div>
 
-                  {/* Actions */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {card.actions.map((a, i) => (
-                      <div key={i} style={{ fontSize: '13px', color: 'var(--text-mid)', display: 'flex', gap: '8px' }}>
-                        <span style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono' }}>›</span>
-                        <span style={{ flex: 1 }}>
-                          {a.step}
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '8px' }}>
-                            [{a.owner} · {a.duration}]
-                          </span>
-                        </span>
+                {/* S → C → Q → A 4-box 가로 레이아웃 */}
+                {card.reasoning_trace ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.4fr' }}>
+                    {([
+                      { key: 'situation', label: 'S', title: 'Situation', text: card.reasoning_trace.situation },
+                      { key: 'complication', label: 'C', title: 'Complication', text: card.reasoning_trace.complication },
+                      { key: 'question', label: 'Q', title: 'Question', text: card.reasoning_trace.question },
+                    ] as const).map(({ key, label, title, text }, idx) => (
+                      <div key={key} style={{
+                        padding: '16px',
+                        background: 'var(--surface)',
+                        borderRight: '1px solid var(--border)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                          <span style={{
+                            fontFamily: 'IBM Plex Mono', fontSize: '11px', fontWeight: 700,
+                            color: '#fff', background: 'var(--text-mid)',
+                            width: '20px', height: '20px', borderRadius: '4px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>{label}</span>
+                          <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px' }}>{title}</span>
+                          {idx < 2 && <span style={{ marginLeft: 'auto', color: 'var(--border)', fontSize: '16px', lineHeight: 1 }}>→</span>}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-mid)', lineHeight: 1.65 }}>{text}</div>
                       </div>
                     ))}
+                    {/* A — Answer (Actions) */}
+                    <div style={{ padding: '16px', background: 'var(--surface)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                        <span style={{
+                          fontFamily: 'IBM Plex Mono', fontSize: '11px', fontWeight: 700,
+                          color: '#fff', background: 'var(--cyan)',
+                          width: '20px', height: '20px', borderRadius: '4px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>A</span>
+                        <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px' }}>Actions</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {card.actions.map((a, i) => (
+                          <div key={i} style={{ fontSize: '12px', color: 'var(--text)', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                            <span style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '13px', lineHeight: '18px', flexShrink: 0 }}>›</span>
+                            <span style={{ flex: 1 }}>
+                              {a.step}
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
+                                {a.owner} · {a.duration}
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-
-                  {/* SCQA 추론 경로 토글 */}
-                  {card.reasoning_trace && (
-                    <div style={{ marginTop: '12px' }}>
-                      <button
-                        onClick={() => setExpandedTrace(prev => ({
-                          ...prev, [card.sub_factor_id]: !traceOpen,
-                        }))}
-                        style={{
-                          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                          fontFamily: 'IBM Plex Mono', fontSize: '10px',
-                          color: 'var(--text-dim)', letterSpacing: '1px',
-                        }}
-                      >
-                        {traceOpen ? '▲ 추론 경로 접기' : '▼ 추론 경로 보기 (Why?)'}
-                      </button>
-
-                      {traceOpen && (
-                        <div style={{
-                          marginTop: '10px', padding: '12px', borderRadius: '6px',
-                          background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)',
-                          display: 'flex', flexDirection: 'column', gap: '10px',
-                        }}>
-                          {(
-                            [
-                              { key: 'situation', label: 'S — Situation', color: 'var(--text-dim)' },
-                              { key: 'complication', label: 'C — Complication', color: 'var(--yellow)' },
-                              { key: 'question', label: 'Q — Question', color: 'var(--cyan)' },
-                              { key: 'answer_summary', label: 'A — Answer', color: 'var(--green)' },
-                            ] as const
-                          ).map(({ key, label, color }) => (
-                            <div key={key}>
-                              <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color, letterSpacing: '1px', marginBottom: '4px' }}>
-                                {label}
-                              </div>
-                              <div style={{ fontSize: '12px', color: 'var(--text-mid)', lineHeight: 1.6 }}>
-                                {card.reasoning_trace![key]}
-                              </div>
-                            </div>
-                          ))}
+                ) : (
+                  // reasoning_trace 없는 경우: 원인 + 액션만 표시
+                  <div style={{ padding: '16px', background: 'var(--surface)' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-mid)', marginBottom: '12px', fontStyle: 'italic' }}>
+                      {card.cause_hypothesis}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {card.actions.map((a, i) => (
+                        <div key={i} style={{ fontSize: '13px', color: 'var(--text-mid)', display: 'flex', gap: '8px' }}>
+                          <span style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono' }}>›</span>
+                          <span style={{ flex: 1 }}>{a.step}
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '8px' }}>[{a.owner} · {a.duration}]</span>
+                          </span>
                         </div>
-                      )}
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {card.kt_framework_reference && (
-                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '10px', fontFamily: 'IBM Plex Mono' }}>
-                      KT 프레임워크: {card.kt_framework_reference}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                {card.kt_framework_reference && (
+                  <div style={{ padding: '8px 16px', background: 'var(--surface2)', borderTop: '1px solid var(--border)', fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
+                    KT 프레임워크: {card.kt_framework_reference}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </Card>
       )}
