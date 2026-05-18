@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { fetchResearch } from '@/lib/research';
 import Anthropic from '@anthropic-ai/sdk';
+import {
+  SubScores, findWeaknesses, migrateLegacySubScores,
+  pillarScoreFromSubs, PILLAR_META, PILLAR_IDS,
+} from '@/lib/pillars';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
@@ -29,7 +33,8 @@ export async function POST(
      WHERE deal_id=$1 AND topic='brief' AND created_at > NOW() - INTERVAL '24 hours'`,
     [dealId]
   );
-  if (cachedRows.length > 0 && cachedRows[0].result_json) {
+  // executive_summary 없는 깨진 캐시는 무시하고 재생성
+  if (cachedRows.length > 0 && cachedRows[0].result_json?.executive_summary) {
     return NextResponse.json({ ...cachedRows[0].result_json, cached: true });
   }
 
@@ -54,11 +59,10 @@ export async function POST(
   );
   const voterCount = voterRows[0]?.voter_count ?? 0;
 
-  const subScores: Record<string, number> = deal.sub_scores ?? {};
-  const weaknesses = Object.entries(subScores)
-    .sort(([, a], [, b]) => a - b)
-    .slice(0, 3)
-    .map(([id, score]) => ({ id, score }));
+  // 구버전/신버전 sub_scores 모두 신버전 15개 ID로 정규화 후 SHAP 기반 약점 분석
+  const rawSubScores: Record<string, number> = deal.sub_scores ?? {};
+  const subScores: SubScores = migrateLegacySubScores(rawSubScores);
+  const weaknesses = findWeaknesses(subScores, 3);
 
   const { rows: caseStudies } = await pool.query(
     `SELECT cs.outcome, cs.win_loss_cause, cs.lessons_learned, cs.competitors_named, d.client_name, d.industry
@@ -77,7 +81,8 @@ export async function POST(
   const winProb = deal.predicted_probability ?? 0;
   const ciLow = deal.confidence_low ?? 0;
   const ciHigh = deal.confidence_high ?? 0;
-  const pillarScores: Record<string, number> = deal.pillar_scores ?? {};
+  // DB pillar_scores 재계산 (신버전 5-Pillar 기준)
+  const pillarScores = pillarScoreFromSubs(subScores);
 
   const encoder = new TextEncoder();
   const client = new Anthropic({ apiKey });
@@ -114,7 +119,7 @@ export async function POST(
           ...weaknesses.map(w =>
             fetchResearch(pool, dealId, {
               kind: 'weakness',
-              subFactorId: w.id as import('@/lib/pillars').SubFactorId,
+              subFactorId: w.id,
               clientName: deal.client_name,
               industry: deal.industry,
             })
@@ -140,9 +145,9 @@ export async function POST(
 
 ## 정량 분석 결과 (🟢 자체 데이터 기반 — 신뢰)
 - 최종 수주 확률: ${winProb.toFixed(1)}% (95% CI: ${ciLow.toFixed(1)}%~${ciHigh.toFixed(1)}%)
-- Pillar 점수: V=${((pillarScores.V ?? 0) * 10).toFixed(1)}/10, P=${((pillarScores.P ?? 0) * 10).toFixed(1)}/10, D=${((pillarScores.D ?? 0) * 10).toFixed(1)}/10, E=${((pillarScores.E ?? 0) * 10).toFixed(1)}/10
+- Pillar 점수: ${PILLAR_IDS.map(p => `${p}(${PILLAR_META[p].label})=${((pillarScores[p] ?? 0) * 10).toFixed(1)}/10`).join(', ')}
 - Voting 참여자: ${voterCount}명
-- 주요 약점: ${weaknesses.map(w => `${w.id}(${w.score.toFixed(1)}/10)`).join(', ')}
+- 주요 약점: ${weaknesses.map(w => `${w.label}(${w.score.toFixed(1)}/10)`).join(', ')}
 - 경쟁사: ${competitors.map(c => `${c.name}(Elo ${c.current_elo.toFixed(0)})`).join(', ') || '미확인'}
 
 ## AI 컨텍스트 (🟡 참고용)
@@ -156,7 +161,7 @@ Samsung SDS: ${samsungTrend.text.slice(0, 1500)}
 ### AI 대형 사업 트렌드
 ${aiMega.text.slice(0, 2000)}
 ### 약점별 외부 근거
-${weaknesses.map((w, i) => `${w.id}: ${weaknessResearch[i]?.text?.slice(0, 1000) ?? 'N/A'}`).join('\n')}
+${weaknesses.map((w, i) => `[${w.label}] ${weaknessResearch[i]?.text?.slice(0, 1000) ?? 'N/A'}`).join('\n')}
 ## 유사 사례 (자체 DB)
 ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.win_loss_cause ?? c.lessons_learned ?? ''}`).join('\n')}
 
