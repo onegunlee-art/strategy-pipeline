@@ -77,20 +77,22 @@ export async function POST() {
 
     const prompt = `당신은 KT B2B 수주 예측 모델의 가중치를 최적화하는 전문가입니다.
 
-## 4-Pillar 구조 (V/P/D/E)
+## 5-Pillar 구조 (S/V/D/P/E)
+- S (사전영업): ${PILLAR_META.S.description}
 - V (Value Impact): ${PILLAR_META.V.description}
-- P (Price): ${PILLAR_META.P.description}
-- D (Differentiation): ${PILLAR_META.D.description}
-- E (Execution): ${PILLAR_META.E.description}
+- D (차별화): ${PILLAR_META.D.description}
+- P (가격경쟁력): ${PILLAR_META.P.description}
+- E (Delivery): ${PILLAR_META.E.description}
 
-## 현재 Sub-Factor 가중치 (12개, pillar별 sum=1.0)
+## 현재 Sub-Factor 가중치 (15개, pillar별 sum=1.0)
 ${subFactorList}
 
 ## 현재 Pillar 가중치 (sum=1.0)
-- pillar_V: ${((currentWeights.pillar_V ?? 0.25) * 100).toFixed(1)}%
-- pillar_P: ${((currentWeights.pillar_P ?? 0.25) * 100).toFixed(1)}%
-- pillar_D: ${((currentWeights.pillar_D ?? 0.25) * 100).toFixed(1)}%
-- pillar_E: ${((currentWeights.pillar_E ?? 0.25) * 100).toFixed(1)}%
+- pillar_S: ${((currentWeights.pillar_S ?? 0.20) * 100).toFixed(1)}%
+- pillar_V: ${((currentWeights.pillar_V ?? 0.20) * 100).toFixed(1)}%
+- pillar_D: ${((currentWeights.pillar_D ?? 0.20) * 100).toFixed(1)}%
+- pillar_P: ${((currentWeights.pillar_P ?? 0.20) * 100).toFixed(1)}%
+- pillar_E: ${((currentWeights.pillar_E ?? 0.20) * 100).toFixed(1)}%
 
 ## 최근 ${cases.length}건 (Pillar method 평균 Brier: ${avgBrier.toFixed(3)})
 ${casesSummary}
@@ -99,18 +101,19 @@ ${casesSummary}
 예측 정확도를 높이기 위한 새 가중치를 JSON으로 반환하세요.
 
 규칙:
-- pillar_V + pillar_P + pillar_D + pillar_E = 1.0 (각 0.15 ~ 0.40)
-- 각 pillar 내부 sub-factor 3개 합 = 1.0 (각 0.20 ~ 0.50)
+- pillar_S + pillar_V + pillar_D + pillar_P + pillar_E = 1.0 (각 0.10 ~ 0.35)
+- 각 pillar 내부 sub-factor 3개 합 = 1.0 (각 0.15 ~ 0.50)
 - 오차가 큰 케이스의 패턴 분석 반영
 
 JSON 형식만 출력:
 {
-  "pillar_weights": { "V": 0.25, "P": 0.25, "D": 0.25, "E": 0.25 },
+  "pillar_weights": { "S": 0.20, "V": 0.20, "D": 0.20, "P": 0.20, "E": 0.20 },
   "sub_weights": {
-    "v_customer_kpi": 0.40, "v_problem_fit": 0.30, "v_dm_empathy": 0.30,
-    "p_tco_advantage": 0.40, "p_roi_clarity": 0.30, "p_partner_cost": 0.30,
-    "d_why_us": 0.40, "d_tech_edge": 0.30, "d_references": 0.30,
-    "e_similar_cases": 0.40, "e_risk_response": 0.30, "e_aidd_productivity": 0.30
+    "s_key_man_contact": 0.40, "s_evaluator_rfp": 0.40, "s_poc_proposal": 0.20,
+    "v_needs_painpoint": 0.40, "v_value_proposition": 0.40, "v_presentation": 0.20,
+    "d_competitive_strategy": 0.40, "d_tech_reference": 0.40, "d_partner": 0.20,
+    "p_budget_fit": 0.30, "p_price_competition": 0.40, "p_cost_value": 0.30,
+    "e_track_record": 0.40, "e_risk_management": 0.40, "e_execution_team": 0.20
   },
   "reasoning": "한국어 2-3문장 핵심 이유"
 }`;

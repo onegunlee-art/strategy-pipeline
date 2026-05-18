@@ -1,13 +1,20 @@
-// 4-Pillar 구조 — KT Win Ratio 프레임워크 기반
-// Win Ratio = f(Value Impact × 가격경쟁력 × 차별화 × 실행경쟁력)
+// 5-Pillar 구조 — Win Possibility Framework (PDF v1)
+// S(사전영업) × V(Value Impact) × D(차별화) × P(가격경쟁력) × E(Delivery)
+// 각 Pillar 동일 가중치 20%
 
-export type PillarId = 'V' | 'P' | 'D' | 'E';
+export type PillarId = 'S' | 'V' | 'D' | 'P' | 'E';
 
 export type SubFactorId =
-  | 'v_customer_kpi' | 'v_problem_fit' | 'v_dm_empathy'
-  | 'p_tco_advantage' | 'p_roi_clarity' | 'p_partner_cost'
-  | 'd_why_us' | 'd_tech_edge' | 'd_references'
-  | 'e_similar_cases' | 'e_risk_response' | 'e_aidd_productivity';
+  // S — 사전영업
+  | 's_key_man_contact' | 's_evaluator_rfp' | 's_poc_proposal'
+  // V — Value Impact
+  | 'v_needs_painpoint' | 'v_value_proposition' | 'v_presentation'
+  // D — 차별화
+  | 'd_competitive_strategy' | 'd_tech_reference' | 'd_partner'
+  // P — 가격경쟁력
+  | 'p_budget_fit' | 'p_price_competition' | 'p_cost_value'
+  // E — Delivery
+  | 'e_track_record' | 'e_risk_management' | 'e_execution_team';
 
 export interface SubFactorMeta {
   id: SubFactorId;
@@ -18,72 +25,79 @@ export interface SubFactorMeta {
 }
 
 export const SUB_FACTORS: SubFactorMeta[] = [
-  // V (Value Impact)
-  { id: 'v_customer_kpi', pillar: 'V', label: '고객 KPI 적중도',
-    description: '고객의 핵심 성과지표(비용/효율/매출/리스크)에 미치는 Impact가 명확한가',
-    defaultWeight: 0.40 },
-  { id: 'v_problem_fit', pillar: 'V', label: 'Problem-Solution Fit',
-    description: '고객이 진짜 원하는 것을 터치했는가',
-    defaultWeight: 0.30 },
-  { id: 'v_dm_empathy', pillar: 'V', label: '의사결정자 공감',
-    description: '의사결정자가 가치를 직접 체감하는가',
-    defaultWeight: 0.30 },
+  // S 사전영업
+  { id: 's_key_man_contact', pillar: 'S', label: 'Key Man 접촉',
+    description: 'Key Man 발굴·접촉·관계 형성 여부', defaultWeight: 0.40 },
+  { id: 's_evaluator_rfp', pillar: 'S', label: '평가자·RFP 파악',
+    description: '평가자 파악 및 RFP 사전 확인 여부', defaultWeight: 0.40 },
+  { id: 's_poc_proposal', pillar: 'S', label: 'PoC·제안 기회',
+    description: 'PoC·파일럿·제안 기회 확보 여부', defaultWeight: 0.20 },
 
-  // P (Price)
-  { id: 'p_tco_advantage', pillar: 'P', label: 'TCO 경쟁사 대비 우위',
-    description: '경쟁사 대비 총비용을 낮출 수 있는가 (ROI/TCO 또는 Cost-driven 경쟁력)',
-    defaultWeight: 0.40 },
-  { id: 'p_roi_clarity', pillar: 'P', label: 'ROI 명확성',
-    description: 'ROI를 정량적으로 제시할 수 있는가',
-    defaultWeight: 0.30 },
-  { id: 'p_partner_cost', pillar: 'P', label: '협력사 단가 우위',
-    description: '협력사 단가 경쟁력 확보 여부',
-    defaultWeight: 0.30 },
+  // V Value Impact
+  { id: 'v_needs_painpoint', pillar: 'V', label: '니즈·Pain Point',
+    description: '고객 핵심 니즈·Pain Point 파악 깊이', defaultWeight: 0.40 },
+  { id: 'v_value_proposition', pillar: 'V', label: '가치 제안',
+    description: '고객 KPI 연계 가치 제안 명확성', defaultWeight: 0.40 },
+  { id: 'v_presentation', pillar: 'V', label: 'C-Level 발표',
+    description: 'C-Level 프레젠테이션 기회 및 임팩트', defaultWeight: 0.20 },
 
-  // D (Differentiation)
-  { id: 'd_why_us', pillar: 'D', label: 'Why Us 논리',
-    description: '우리가 아니면 안되는 이유가 있는가 (Why KT, 타사 대비 선택/차별 요소)',
-    defaultWeight: 0.40 },
-  { id: 'd_tech_edge', pillar: 'D', label: '기술 차별화',
-    description: 'PoC, 특허 등 기술적 우위 보유 여부',
-    defaultWeight: 0.30 },
-  { id: 'd_references', pillar: 'D', label: '레퍼런스 보유',
-    description: '동일/유사 영역에서 검증된 레퍼런스 보유',
-    defaultWeight: 0.30 },
+  // D 차별화
+  { id: 'd_competitive_strategy', pillar: 'D', label: '차별화 전략',
+    description: '경쟁사 대비 차별화·Why Us 논리 강도', defaultWeight: 0.40 },
+  { id: 'd_tech_reference', pillar: 'D', label: '기술·레퍼런스',
+    description: '기술 우위(PoC·특허)·유사 레퍼런스 보유', defaultWeight: 0.40 },
+  { id: 'd_partner', pillar: 'D', label: '파트너·컨소시엄',
+    description: '파트너·컨소시엄 구성 차별성 및 보완성', defaultWeight: 0.20 },
 
-  // E (Execution)
-  { id: 'e_similar_cases', pillar: 'E', label: '유사사례 보유',
-    description: '안정적 수행 신뢰 확보 가능 — 유사 레퍼런스, 리스크 제거',
-    defaultWeight: 0.40 },
-  { id: 'e_risk_response', pillar: 'E', label: '리스크 대응 설계',
-    description: '리스크와 대응 전략을 사전에 제시할 수 있는가',
-    defaultWeight: 0.30 },
-  { id: 'e_aidd_productivity', pillar: 'E', label: 'AIDD 생산성',
-    description: 'AIDD 기반 수행 생산성 근거 제시 가능',
-    defaultWeight: 0.30 },
+  // P 가격경쟁력
+  { id: 'p_budget_fit', pillar: 'P', label: '예산 적합성',
+    description: '고객 예산 규모 파악 및 사업 규모 적합성', defaultWeight: 0.30 },
+  { id: 'p_price_competition', pillar: 'P', label: '경쟁 가격 우위',
+    description: '경쟁사·협력사 단가 대비 가격 경쟁력', defaultWeight: 0.40 },
+  { id: 'p_cost_value', pillar: 'P', label: 'ROI·TCO',
+    description: 'ROI·TCO 정량 제시 및 가성비 논리', defaultWeight: 0.30 },
+
+  // E Delivery
+  { id: 'e_track_record', pillar: 'E', label: '수주·이행 실적',
+    description: '동종 사업 수주·이행 실적 및 레퍼런스', defaultWeight: 0.40 },
+  { id: 'e_risk_management', pillar: 'E', label: '리스크 관리',
+    description: '리스크 사전 식별 및 대응 방안 구체화', defaultWeight: 0.40 },
+  { id: 'e_execution_team', pillar: 'E', label: '전담팀·PM',
+    description: '전담 수행팀 구성 및 PM·AIDD 생산성', defaultWeight: 0.20 },
 ];
 
 export const PILLAR_META: Record<PillarId, { label: string; description: string; defaultWeight: number }> = {
-  V: { label: 'Value Impact', description: '고객 가치 영향 — 진짜 원하는 것을 터치했는가', defaultWeight: 0.35 },
-  P: { label: 'Price', description: '가격 경쟁력 — 총비용 우위', defaultWeight: 0.15 },
-  D: { label: 'Differentiation', description: '차별화 — Why Us', defaultWeight: 0.20 },
-  E: { label: 'Execution', description: '실행 경쟁력 — 진짜 이행할 수 있는가', defaultWeight: 0.30 },
+  S: { label: '사전영업', description: 'Key Man 접촉·평가자 파악·PoC 기회 확보', defaultWeight: 0.20 },
+  V: { label: 'Value Impact', description: '고객 니즈·Pain Point·KPI 연계 가치 제안', defaultWeight: 0.20 },
+  D: { label: '차별화', description: 'Why Us·기술 우위·파트너 차별성', defaultWeight: 0.20 },
+  P: { label: '가격경쟁력', description: '예산 적합·가격 우위·ROI·TCO', defaultWeight: 0.20 },
+  E: { label: 'Delivery', description: '이행 실적·리스크 관리·전담팀 역량', defaultWeight: 0.20 },
 };
 
-export type SubScores = Record<SubFactorId, number>;  // 각 값 1-10
-export type PillarScores = Record<PillarId, number>;  // 각 값 0-1
+export const PILLAR_COLORS: Record<PillarId, string> = {
+  S: '#7c3aed',
+  V: '#0ea5e9',
+  D: '#10b981',
+  P: '#f59e0b',
+  E: '#ef4444',
+};
+
+export type SubScores = Record<SubFactorId, number>;   // 각 값 1-10
+export type PillarScores = Record<PillarId, number>;   // 각 값 0-1
+
+export const PILLAR_IDS: PillarId[] = ['S', 'V', 'D', 'P', 'E'];
 
 export function subFactorsOf(pillar: PillarId): SubFactorMeta[] {
   return SUB_FACTORS.filter(s => s.pillar === pillar);
 }
 
-// sub-factor 점수(1-10)들을 normalize 가중평균 → [0,1] pillar score
+// sub-factor 점수(1-10)를 normalize 가중평균 → [0,1] pillar score
 export function pillarScoreFromSubs(
   subs: SubScores,
   subWeights?: Partial<Record<SubFactorId, number>>
 ): PillarScores {
-  const out: PillarScores = { V: 0, P: 0, D: 0, E: 0 };
-  for (const p of ['V', 'P', 'D', 'E'] as PillarId[]) {
+  const out: PillarScores = { S: 0, V: 0, D: 0, P: 0, E: 0 };
+  for (const p of PILLAR_IDS) {
     const factors = subFactorsOf(p);
     let weighted = 0, totalW = 0;
     for (const f of factors) {
@@ -104,20 +118,13 @@ export function pillarMultiplication(
   pillarWeights?: Partial<Record<PillarId, number>>
 ): number {
   const epsilon = 0.05;
-  const w = {
-    V: pillarWeights?.V ?? PILLAR_META.V.defaultWeight,
-    P: pillarWeights?.P ?? PILLAR_META.P.defaultWeight,
-    D: pillarWeights?.D ?? PILLAR_META.D.defaultWeight,
-    E: pillarWeights?.E ?? PILLAR_META.E.defaultWeight,
-  };
-  // 로그 곱: 가중치 × log(score+ε) 합산 후 sigmoid
-  const logSum =
-    Math.log(pillarScores.V + epsilon) * w.V +
-    Math.log(pillarScores.P + epsilon) * w.P +
-    Math.log(pillarScores.D + epsilon) * w.D +
-    Math.log(pillarScores.E + epsilon) * w.E;
-  const totalW = w.V + w.P + w.D + w.E;
-  const avgLog = logSum / totalW;
+  let logSum = 0, totalW = 0;
+  for (const p of PILLAR_IDS) {
+    const w = pillarWeights?.[p] ?? PILLAR_META[p].defaultWeight;
+    logSum += Math.log((pillarScores[p] ?? 0) + epsilon) * w;
+    totalW += w;
+  }
+  const avgLog = totalW > 0 ? logSum / totalW : logSum;
   // avgLog ∈ [log(0.05), log(1.05)] ≈ [-3.0, 0.05]
   // 매핑: -3.0 → 약 0.05, 0.05 → 약 0.95
   const scaled = (avgLog + 1.5) * 3;
@@ -131,12 +138,10 @@ export function subFactorContributions(
   pillarWeights?: Partial<Record<PillarId, number>>,
   subWeights?: Partial<Record<SubFactorId, number>>
 ): { id: SubFactorId; label: string; pillar: PillarId; score: number; contribution: number }[] {
-  // baseline: 전부 5점일 때 확률
   const baselineSubs = Object.fromEntries(SUB_FACTORS.map(f => [f.id, 5])) as SubScores;
   const baseline = pillarMultiplication(pillarScoreFromSubs(baselineSubs, subWeights), pillarWeights);
 
   return SUB_FACTORS.map(f => {
-    // 이 sub-factor만 현재값, 나머지는 5점일 때 확률
     const test: SubScores = { ...baselineSubs, [f.id]: subs[f.id] };
     const probWith = pillarMultiplication(pillarScoreFromSubs(test, subWeights), pillarWeights);
     return {
@@ -144,7 +149,7 @@ export function subFactorContributions(
       label: f.label,
       pillar: f.pillar,
       score: subs[f.id],
-      contribution: probWith - baseline,  // 양수 = 끌어올림, 음수 = 끌어내림
+      contribution: probWith - baseline,
     };
   });
 }
@@ -165,14 +170,35 @@ export function defaultSubScores(): SubScores {
   return Object.fromEntries(SUB_FACTORS.map(f => [f.id, 5])) as SubScores;
 }
 
-// 레거시 7-변수 → 4-Pillar sub-factor 매핑 (마이그레이션용)
+// 구버전(4-Pillar 12개) → 신버전(5-Pillar 15개) 매핑
+export function migrateLegacySubScores(legacy: Record<string, number>): SubScores {
+  const out = defaultSubScores();
+  // V pillar 매핑
+  if (legacy.v_customer_kpi != null) out.v_needs_painpoint = legacy.v_customer_kpi;
+  if (legacy.v_problem_fit != null) out.v_value_proposition = legacy.v_problem_fit;
+  if (legacy.v_dm_empathy != null) out.v_presentation = legacy.v_dm_empathy;
+  // P pillar 매핑
+  if (legacy.p_tco_advantage != null) out.p_price_competition = legacy.p_tco_advantage;
+  if (legacy.p_roi_clarity != null) out.p_cost_value = legacy.p_roi_clarity;
+  if (legacy.p_partner_cost != null) out.p_budget_fit = legacy.p_partner_cost;
+  // D pillar 매핑
+  if (legacy.d_why_us != null) out.d_competitive_strategy = legacy.d_why_us;
+  if (legacy.d_tech_edge != null) out.d_tech_reference = legacy.d_tech_edge;
+  if (legacy.d_references != null) out.d_partner = legacy.d_references;
+  // E pillar 매핑
+  if (legacy.e_similar_cases != null) out.e_track_record = legacy.e_similar_cases;
+  if (legacy.e_risk_response != null) out.e_risk_management = legacy.e_risk_response;
+  if (legacy.e_aidd_productivity != null) out.e_execution_team = legacy.e_aidd_productivity;
+  return out;
+}
+
+// 7변수 레거시 → 신버전 (마이그레이션용)
 export function migrateLegacyVariables(legacy: Record<string, number>): SubScores {
   const out = defaultSubScores();
-  if (legacy.decision_maker_access != null) out.v_dm_empathy = legacy.decision_maker_access;
-  if (legacy.past_win_history != null) out.d_references = legacy.past_win_history;
-  if (legacy.price_competitiveness != null) out.p_tco_advantage = legacy.price_competitiveness;
-  if (legacy.tech_differentiation != null) out.d_tech_edge = legacy.tech_differentiation;
-  if (legacy.budget_confirmed != null) out.v_problem_fit = legacy.budget_confirmed;
-  // lg_cns_threat, samsung_sds_threat은 경쟁사 Elo 모델로 이전 — sub-factor에 매핑 안 함
+  if (legacy.decision_maker_access != null) out.v_presentation = legacy.decision_maker_access;
+  if (legacy.past_win_history != null) out.e_track_record = legacy.past_win_history;
+  if (legacy.price_competitiveness != null) out.p_price_competition = legacy.price_competitiveness;
+  if (legacy.tech_differentiation != null) out.d_tech_reference = legacy.tech_differentiation;
+  if (legacy.budget_confirmed != null) out.p_budget_fit = legacy.budget_confirmed;
   return out;
 }

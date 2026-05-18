@@ -13,9 +13,10 @@ export interface DealMeta {
   risk?: number;  // 1~5
 }
 
-// V pillar: 고객 접근은 외부 변수 많아 불확실성 높음
+// S pillar: 사전영업은 현장 상황 변수 많아 불확실성 최고
 // P pillar: 가격은 상대적으로 예측 가능
 export const PILLAR_SIGMA_WEIGHTS: Record<PillarId, number> = {
+  S: 1.3,
   V: 1.2,
   E: 1.1,
   D: 1.0,

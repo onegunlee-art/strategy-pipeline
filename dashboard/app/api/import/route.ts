@@ -31,7 +31,7 @@ function expandPillarToSubs(rec: ImportRecord): SubScores {
   if (rec.sub_scores) {
     Object.assign(subs, rec.sub_scores);
   }
-  for (const p of ['V', 'P', 'D', 'E'] as PillarId[]) {
+  for (const p of ['V', 'P', 'D', 'E'] as Array<'V' | 'P' | 'D' | 'E'>) {
     const pVal = rec[p];
     if (pVal == null) continue;
     // 해당 pillar의 sub_score가 명시 안 된 항목에만 pillar 값 채움

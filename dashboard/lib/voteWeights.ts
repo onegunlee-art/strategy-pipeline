@@ -22,14 +22,14 @@ export const ROLE_LABEL: Record<VoterRole, string> = {
   reviewer: '검토자',
 };
 
-// 역할별 pillar 보정 — 영업대표 V 1.3, BM P 1.5, PMO E 1.3 등
+// 역할별 pillar 보정 — 영업대표 S/V 1.3, BM P 1.5, PMO E 1.3 등
 export const ROLE_FACTOR_BONUS: Record<VoterRole, Partial<Record<PillarId, number>>> = {
-  sales_rep:   { V: 1.3, P: 1.0, D: 1.0, E: 0.9 },
-  proposal_pm: { V: 1.0, P: 1.0, D: 1.1, E: 1.4 },
-  bm:          { V: 1.0, P: 1.5, D: 1.0, E: 1.0 },
-  pmo:         { V: 1.0, P: 1.0, D: 1.0, E: 1.3 },
-  executive:   { V: 1.2, P: 1.1, D: 1.1, E: 1.1 },
-  reviewer:    { V: 1.0, P: 1.0, D: 1.0, E: 1.0 },
+  sales_rep:   { S: 1.4, V: 1.3, D: 1.0, P: 1.0, E: 0.9 },
+  proposal_pm: { S: 1.1, V: 1.0, D: 1.1, P: 1.0, E: 1.4 },
+  bm:          { S: 1.0, V: 1.0, D: 1.0, P: 1.5, E: 1.0 },
+  pmo:         { S: 1.0, V: 1.0, D: 1.0, P: 1.0, E: 1.3 },
+  executive:   { S: 1.2, V: 1.2, D: 1.1, P: 1.1, E: 1.1 },
+  reviewer:    { S: 1.0, V: 1.0, D: 1.0, P: 1.0, E: 1.0 },
 };
 
 export function isVoterRole(s: string): s is VoterRole {
