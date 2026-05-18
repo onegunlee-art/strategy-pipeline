@@ -3,14 +3,12 @@
 import { useState } from 'react';
 import PillarInputTab from '@/components/PillarInputTab';
 import EnsembleAnalysisTab from '@/components/EnsembleAnalysisTab';
-import MonteCarloTab from '@/components/MonteCarloTab';
-import CompetitorTab from '@/components/CompetitorTab';
 import PortfolioTab from '@/components/PortfolioTab';
 import PortfolioView from '@/components/PortfolioView';
 import ScenarioCompare from '@/components/ScenarioCompare';
 import { PillarId, SubFactorId, SubScores, defaultSubScores } from '@/lib/pillars';
 
-type Tab = 'pillar' | 'analysis' | 'simulator' | 'compare' | 'competitor' | 'portfolio_view' | 'portfolio';
+type Tab = 'pillar' | 'analysis' | 'compare' | 'portfolio_view' | 'portfolio';
 
 interface PredictResult {
   deal_id: number;
@@ -29,13 +27,11 @@ interface PredictResult {
 }
 
 const TABS: { id: Tab; label: string; short: string }[] = [
-  { id: 'pillar',         label: 'Pillar 진단',     short: '01' },
-  { id: 'analysis',       label: '확률 & 약점',      short: '02' },
-  { id: 'simulator',      label: '시나리오 (MC)',    short: '03' },
-  { id: 'compare',        label: '액션 비교',        short: '04' },
-  { id: 'competitor',     label: '경쟁구도 (Elo)',   short: '05' },
-  { id: 'portfolio_view', label: '포트폴리오',       short: '06' },
-  { id: 'portfolio',      label: '학습 & 데이터',    short: '07' },
+  { id: 'pillar',         label: 'Pillar 진단',  short: '01' },
+  { id: 'analysis',       label: '확률 & 전략',  short: '02' },
+  { id: 'compare',        label: '시나리오 비교', short: '03' },
+  { id: 'portfolio_view', label: '포트폴리오',   short: '04' },
+  { id: 'portfolio',      label: '데이터',       short: '05' },
 ];
 
 export default function Dashboard() {
@@ -145,7 +141,7 @@ export default function Dashboard() {
       )}
 
       <div style={{
-        background: 'rgba(77,208,225,0.05)',
+        background: 'var(--surface2)',
         borderBottom: '1px solid var(--border)',
         padding: '8px 32px',
       }}>
@@ -162,15 +158,9 @@ export default function Dashboard() {
           <EnsembleAnalysisTab result={result} onOutcome={() => setRefreshKey(k => k + 1)} />
         ) : <EmptyState label="Pillar 진단 탭에서 먼저 분석을 실행하세요" />)}
 
-        {tab === 'simulator' && (result ? (
-          <MonteCarloTab initialSubs={result.sub_scores} baseProb={result.probability} />
-        ) : <MonteCarloTab initialSubs={defaultSubScores()} baseProb={50} />)}
-
         {tab === 'compare' && (
           <ScenarioCompare initialSubs={result?.sub_scores ?? defaultSubScores()} />
         )}
-
-        {tab === 'competitor' && <CompetitorTab refreshKey={refreshKey} />}
 
         {tab === 'portfolio_view' && <PortfolioView refreshKey={refreshKey} />}
 

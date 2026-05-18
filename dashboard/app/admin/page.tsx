@@ -65,7 +65,7 @@ const S = {
   td: { padding: '10px 12px', borderBottom: '1px solid var(--border)' },
   btn: (color = 'var(--cyan)') => ({
     padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer',
-    background: color, color: color === 'var(--cyan)' ? '#000' : '#fff',
+    background: color, color: '#fff',
     fontFamily: 'IBM Plex Mono', fontSize: '11px', fontWeight: 600,
   } as React.CSSProperties),
   input: { background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '6px 10px', color: 'var(--text)', fontSize: '13px', fontFamily: 'inherit' } as React.CSSProperties,
@@ -436,7 +436,7 @@ function VotersTab() {
             <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {tally.conflicts.map((c, i) => (
                 <div key={i} style={{
-                  padding: '8px 12px', background: 'rgba(255,183,77,0.10)',
+                  padding: '8px 12px', background: 'rgba(217,119,6,0.08)',
                   borderRadius: '6px', borderLeft: '3px solid var(--yellow)',
                   fontSize: '12px',
                 }}>
@@ -817,7 +817,7 @@ function ImportTab() {
           </button>
           {rows.length > 0 && (
             <button onClick={handleConfirm} disabled={confirming}
-              style={{ ...S.btn('var(--green)'), color: '#000' }}>
+              style={S.btn('var(--green)')}>
               {confirming ? '저장 중...' : `▶  ${rows.length}건 확정 Import`}
             </button>
           )}
@@ -1028,7 +1028,7 @@ function CompetitorsTab() {
                   <td style={S.td}>
                     {est ? (
                       <div>
-                        <span style={{ fontFamily: 'IBM Plex Mono', color: '#ffd54f' }}>
+                        <span style={{ fontFamily: 'IBM Plex Mono', color: 'var(--yellow)' }}>
                           {est.estimated_elo_range[0]}~{est.estimated_elo_range[1]}
                         </span>
                         <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>{est.summary}</div>
@@ -1090,7 +1090,7 @@ function CompetitorsTab() {
                   <td style={S.td}>
                     {est ? (
                       <div>
-                        <span style={{ fontFamily: 'IBM Plex Mono', color: '#ffd54f' }}>
+                        <span style={{ fontFamily: 'IBM Plex Mono', color: 'var(--yellow)' }}>
                           {(est.estimated_win_rate_range[0] * 100).toFixed(0)}~{(est.estimated_win_rate_range[1] * 100).toFixed(0)}%
                         </span>
                         <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>{est.summary}</div>
