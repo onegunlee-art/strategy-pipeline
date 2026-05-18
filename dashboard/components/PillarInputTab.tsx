@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  SubScores, SubFactorId, PillarId, PILLAR_META,
+  SubScores, SubFactorId, PillarId, PILLAR_META, PILLAR_COLORS, PILLAR_IDS,
   defaultSubScores, pillarScoreFromSubs, subFactorsOf,
 } from '@/lib/pillars';
 
@@ -23,9 +23,7 @@ interface Props {
   onResult: (data: PredictResponse & { client_name: string; deal_size: string; competitors: string[]; sub_scores: SubScores }) => void;
 }
 
-const PILLAR_COLORS: Record<PillarId, string> = {
-  V: '#4dd0e1', P: '#81c784', D: '#ffb74d', E: '#ba68c8',
-};
+// PILLAR_COLORS imported from pillars.ts
 
 interface OpenDeal {
   id: number;
@@ -198,7 +196,7 @@ export default function PillarInputTab({ onResult }: Props) {
       {/* 4-PILLAR SCORES */}
       <Card title="4-PILLAR DIAGNOSIS (Win Ratio = V × P × D × E)">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
-          {(['V', 'P', 'D', 'E'] as PillarId[]).map(p => (
+          {PILLAR_IDS.map(p => (
             <div key={p} style={{
               padding: '14px', borderRadius: '8px',
               background: 'var(--surface2)', borderLeft: `3px solid ${PILLAR_COLORS[p]}`,
@@ -219,7 +217,7 @@ export default function PillarInputTab({ onResult }: Props) {
           ))}
         </div>
 
-        {(['V', 'P', 'D', 'E'] as PillarId[]).map(p => (
+        {PILLAR_IDS.map(p => (
           <div key={p} style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
               <div style={{ width: '20px', height: '2px', background: PILLAR_COLORS[p] }} />

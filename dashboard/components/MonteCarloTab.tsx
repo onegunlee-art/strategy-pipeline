@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import {
-  SubScores, SubFactorId, PillarId, subFactorsOf,
-  pillarScoreFromSubs, pillarMultiplication,
+  SubScores, SubFactorId, PILLAR_COLORS, PILLAR_IDS,
+  subFactorsOf, pillarScoreFromSubs, pillarMultiplication,
 } from '@/lib/pillars';
 import { monteCarloRun, MonteCarloResult } from '@/lib/montecarlo';
 
@@ -12,9 +12,7 @@ interface Props {
   baseProb: number;
 }
 
-const PILLAR_COLORS: Record<PillarId, string> = {
-  V: '#4dd0e1', P: '#81c784', D: '#ffb74d', E: '#ba68c8',
-};
+// PILLAR_COLORS imported from pillars.ts
 
 export default function MonteCarloTab({ initialSubs, baseProb }: Props) {
   const [subs, setSubs] = useState<SubScores>(initialSubs);
@@ -130,7 +128,7 @@ export default function MonteCarloTab({ initialSubs, baseProb }: Props) {
         <div style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '11px', letterSpacing: '2px', marginBottom: '16px' }}>
           SCENARIO ADJUSTMENT
         </div>
-        {(['V', 'P', 'D', 'E'] as PillarId[]).map(p => (
+        {PILLAR_IDS.map(p => (
           <div key={p} style={{ marginBottom: '20px' }}>
             <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: PILLAR_COLORS[p], marginBottom: '8px' }}>
               {p}

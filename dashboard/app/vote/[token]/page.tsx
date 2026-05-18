@@ -2,6 +2,18 @@
 
 import { useEffect, useState } from 'react';
 
+interface QuestionItem {
+  id: number;
+  question_no: number;
+  sub_factor_id: string;
+  lv1_category: string;
+  lv2_group: string;
+  lv3_label: string;
+  question_text: string;
+  importance: string;
+  display_order: number;
+}
+
 interface SubFactorLabel {
   id: string; pillar: string; label: string; description: string;
 }
@@ -15,14 +27,24 @@ interface VoteData {
   is_closed: boolean;
   labels: SubFactorLabel[];
   pillar_labels: Record<string, PillarMeta>;
+  questions: QuestionItem[];
   my_voter: { id: number; display_name: string; role: string; weight: number } | null;
   my_votes: Record<string, number>;
   voter_count: number;
 }
 
+type AnswerLevel = 'low' | 'mid' | 'high';
+
 const PILLAR_COLORS: Record<string, string> = {
-  V: '#4dd0e1', P: '#81c784', D: '#ffb74d', E: '#ba68c8',
+  S: '#7c3aed', V: '#0ea5e9', D: '#10b981', P: '#f59e0b', E: '#ef4444',
 };
+
+const PILLAR_LABELS: Record<string, string> = {
+  S: '사전영업', V: 'Value Impact', D: '차별화', P: '가격경쟁력', E: 'Delivery',
+};
+
+const LEVEL_LABELS: Record<AnswerLevel, string> = { low: '하', mid: '중', high: '상' };
+const LEVEL_SCORES: Record<AnswerLevel, string> = { low: '(2점)', mid: '(6점)', high: '(9점)' };
 
 export default function VotePage({ params }: { params: { token: string } }) {
   const { token } = params;
@@ -31,7 +53,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
   const [step, setStep] = useState<'name' | 'vote' | 'done'>('name');
   const [name, setName] = useState('');
   const [role, setRole] = useState<string>('reviewer');
-  const [scores, setScores] = useState<Record<string, number>>({});
+  const [answers, setAnswers] = useState<Record<number, AnswerLevel>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitMsg, setSubmitMsg] = useState('');
   const [voterCount, setVoterCount] = useState(0);
@@ -44,14 +66,6 @@ export default function VotePage({ params }: { params: { token: string } }) {
         setData(d);
         setVoterCount(d.voter_count);
 
-        // 기본값: 이전 표 or 5
-        const init: Record<string, number> = {};
-        for (const f of d.labels) {
-          init[f.id] = d.my_votes[f.id] ?? 5;
-        }
-        setScores(init);
-
-        // 이미 본인 표 있으면 name 스텝 건너뜀
         if (d.my_voter) {
           setName(d.my_voter.display_name);
           if (d.my_voter.role) setRole(d.my_voter.role);
@@ -64,12 +78,20 @@ export default function VotePage({ params }: { params: { token: string } }) {
   }, [token]);
 
   const handleSubmit = async () => {
+    if (!data) return;
+    const totalQuestions = data.questions.length;
+    const answeredCount = Object.keys(answers).length;
+    if (answeredCount < totalQuestions) {
+      setSubmitMsg(`${totalQuestions - answeredCount}개 질문이 아직 선택되지 않았습니다.`);
+      return;
+    }
     setSubmitting(true);
+    setSubmitMsg('');
     try {
       const res = await fetch(`/api/vote/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: name, role, scores }),
+        body: JSON.stringify({ display_name: name, role, question_answers: answers }),
       });
       const d = await res.json();
       if (!res.ok) {
@@ -89,6 +111,17 @@ export default function VotePage({ params }: { params: { token: string } }) {
   if (error) return <FullCenter><ErrorCard msg={error} /></FullCenter>;
   if (!data) return <FullCenter><Spinner /></FullCenter>;
 
+  // 질문 목록을 pillar(lv1_category) 단위로 그룹화
+  const pillarGroups = ['S', 'V', 'D', 'P', 'E'];
+  const questionsByPillar: Record<string, QuestionItem[]> = {};
+  for (const pid of pillarGroups) {
+    questionsByPillar[pid] = data.questions.filter(q => q.lv1_category === pid);
+  }
+
+  const totalQ = data.questions.length;
+  const answeredQ = Object.keys(answers).length;
+  const progress = totalQ > 0 ? Math.round((answeredQ / totalQ) * 100) : 0;
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
       {/* Header */}
@@ -105,7 +138,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
         )}
       </div>
 
-      <div style={{ padding: '24px', maxWidth: '680px', margin: '0 auto' }}>
+      <div style={{ padding: '24px', maxWidth: '720px', margin: '0 auto' }}>
 
         {/* Step: name */}
         {step === 'name' && (
@@ -123,7 +156,7 @@ export default function VotePage({ params }: { params: { token: string } }) {
                 style={{
                   width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
                   borderRadius: '8px', padding: '12px 14px', color: 'var(--text)', fontSize: '16px',
-                  fontFamily: 'inherit',
+                  fontFamily: 'inherit', boxSizing: 'border-box',
                 }}
               />
               <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '8px' }}>
@@ -136,13 +169,13 @@ export default function VotePage({ params }: { params: { token: string } }) {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                   {([
-                    ['executive', '임원'],
-                    ['sales_rep', '영업대표'],
-                    ['proposal_pm', '제안 PM'],
-                    ['bm', 'BM'],
-                    ['pmo', 'PMO'],
-                    ['reviewer', '검토자'],
-                  ] as const).map(([id, label]) => (
+                    ['executive', '임원', '2.5×'],
+                    ['sales_rep', '영업대표', '2.3×'],
+                    ['proposal_pm', '제안 PM', '2.0×'],
+                    ['bm', 'BM', '1.8×'],
+                    ['pmo', 'PMO', '1.6×'],
+                    ['reviewer', '검토자', '1.0×'],
+                  ] as const).map(([id, label, wt]) => (
                     <button
                       key={id}
                       onClick={() => setRole(id)}
@@ -151,14 +184,15 @@ export default function VotePage({ params }: { params: { token: string } }) {
                         border: '1px solid ' + (role === id ? 'var(--cyan)' : 'var(--border)'),
                         background: role === id ? 'rgba(77,208,225,0.15)' : 'var(--surface2)',
                         color: role === id ? 'var(--cyan)' : 'var(--text)',
-                        fontSize: '12px', cursor: 'pointer',
+                        fontSize: '12px', cursor: 'pointer', textAlign: 'center',
                       }}>
-                      {label}
+                      <div>{label}</div>
+                      <div style={{ fontSize: '10px', color: role === id ? 'var(--cyan)' : 'var(--text-dim)', marginTop: '2px' }}>{wt}</div>
                     </button>
                   ))}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '6px' }}>
-                  역할별로 평가 가중치가 달라집니다 (임원 2.5×, 영업대표 2.3×, 검토자 1.0×)
+                  역할별로 평가 가중치가 달라집니다
                 </div>
               </div>
             </div>
@@ -169,53 +203,100 @@ export default function VotePage({ params }: { params: { token: string } }) {
                 padding: '14px', borderRadius: '10px', border: 'none',
                 background: name.trim() ? 'var(--cyan)' : 'var(--surface2)',
                 color: name.trim() ? '#000' : 'var(--text-dim)',
-                fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600, cursor: name.trim() ? 'pointer' : 'default',
+                fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600,
+                cursor: name.trim() ? 'pointer' : 'default',
               }}>
-              ▶  다음 — 평가 입력
+              ▶  다음 — 평가 입력 ({totalQ}개 질문)
             </button>
           </div>
         )}
 
         {/* Step: vote */}
         {step === 'vote' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <span style={{ fontSize: '14px', fontWeight: 600 }}>{name}</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-dim)', marginLeft: '8px' }}>으로 참여 중</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Progress bar */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>{name}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-dim)', marginLeft: '8px' }}>으로 참여 중</span>
+                </div>
+                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)' }}>
+                  {answeredQ}/{totalQ} 완료 · {voterCount}명 참여
+                </span>
               </div>
-              <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)' }}>
-                현재 {voterCount}명 참여
-              </span>
+              <div style={{ height: '4px', background: 'var(--surface2)', borderRadius: '2px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${progress}%`, background: 'var(--cyan)', borderRadius: '2px', transition: 'width 0.2s' }} />
+              </div>
             </div>
 
-            {(['V', 'P', 'D', 'E'] as const).map(pid => (
-              <div key={pid} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px' }}>
-                <div style={{
-                  fontFamily: 'IBM Plex Mono', fontSize: '11px', letterSpacing: '2px',
-                  color: PILLAR_COLORS[pid], marginBottom: '16px',
-                }}>
-                  {pid} — {data.pillar_labels[pid]?.label ?? pid}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {data.labels.filter(f => f.pillar === pid).map(f => (
-                    <div key={f.id}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '13px' }}>{f.label}</span>
-                        <span style={{ fontFamily: 'IBM Plex Mono', color: PILLAR_COLORS[pid], fontWeight: 600, fontSize: '15px', minWidth: '24px', textAlign: 'right' }}>
-                          {scores[f.id] ?? 5}
-                        </span>
+            {/* Pillar 그룹별 질문 카드 */}
+            {pillarGroups.map(pid => {
+              const qs = questionsByPillar[pid] ?? [];
+              if (qs.length === 0) return null;
+              const pillarColor = PILLAR_COLORS[pid] ?? '#888';
+              const pillarLabel = data.pillar_labels[pid]?.label ?? PILLAR_LABELS[pid] ?? pid;
+              const pillarAnswered = qs.filter(q => answers[q.question_no] != null).length;
+              return (
+                <div key={pid} style={{ background: 'var(--surface)', border: `1px solid ${pillarColor}33`, borderRadius: '12px', overflow: 'hidden' }}>
+                  <div style={{ background: `${pillarColor}18`, padding: '14px 20px', borderBottom: `1px solid ${pillarColor}33` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: pillarColor, letterSpacing: '1px', fontWeight: 700 }}>
+                        {pid} — {pillarLabel}
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '6px' }}>{f.description}</div>
-                      <input type="range" min={1} max={10} step={1} value={scores[f.id] ?? 5}
-                        onChange={e => setScores(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
-                        style={{ width: '100%' }}
-                      />
+                      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)' }}>
+                        {pillarAnswered}/{qs.length}
+                      </div>
                     </div>
-                  ))}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                    {qs.map((q, qi) => {
+                      const ans = answers[q.question_no];
+                      return (
+                        <div key={q.question_no} style={{
+                          padding: '16px 20px',
+                          borderBottom: qi < qs.length - 1 ? '1px solid var(--border)' : 'none',
+                          background: ans ? `${pillarColor}08` : 'transparent',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '10px' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>
+                                Q{q.question_no} · {q.lv2_group}
+                                {q.importance === 'high' && (
+                                  <span style={{ marginLeft: '6px', fontSize: '10px', color: pillarColor, background: `${pillarColor}20`, padding: '1px 5px', borderRadius: '3px' }}>중요</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '13px', lineHeight: '1.5', color: 'var(--text)' }}>
+                                {q.question_text}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {(['low', 'mid', 'high'] as AnswerLevel[]).map(level => (
+                              <button
+                                key={level}
+                                onClick={() => setAnswers(prev => ({ ...prev, [q.question_no]: level }))}
+                                style={{
+                                  flex: 1, padding: '10px 6px', borderRadius: '8px', cursor: 'pointer',
+                                  border: `1px solid ${ans === level ? pillarColor : 'var(--border)'}`,
+                                  background: ans === level ? `${pillarColor}25` : 'var(--surface2)',
+                                  color: ans === level ? pillarColor : 'var(--text-dim)',
+                                  fontFamily: 'IBM Plex Mono', fontSize: '14px', fontWeight: ans === level ? 700 : 400,
+                                  transition: 'all 0.1s',
+                                  textAlign: 'center',
+                                }}>
+                                <div>{LEVEL_LABELS[level]}</div>
+                                <div style={{ fontSize: '10px', marginTop: '2px', opacity: 0.7 }}>{LEVEL_SCORES[level]}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {submitMsg && (
               <div style={{ fontSize: '12px', color: 'var(--red)', background: 'rgba(255,68,102,0.08)', padding: '10px', borderRadius: '6px' }}>
@@ -223,14 +304,22 @@ export default function VotePage({ params }: { params: { token: string } }) {
               </div>
             )}
 
-            <button onClick={handleSubmit} disabled={submitting}
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
               style={{
-                padding: '16px', borderRadius: '10px', border: 'none',
-                background: submitting ? 'var(--surface2)' : 'var(--cyan)',
-                color: submitting ? 'var(--text-dim)' : '#000',
-                fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600, cursor: submitting ? 'wait' : 'pointer',
+                padding: '16px', borderRadius: '10px',
+                border: answeredQ < totalQ ? '1px solid var(--border)' : 'none',
+                background: submitting ? 'var(--surface2)' : answeredQ === totalQ ? 'var(--cyan)' : 'var(--surface)',
+                color: submitting ? 'var(--text-dim)' : answeredQ === totalQ ? '#000' : 'var(--text-dim)',
+                fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600,
+                cursor: submitting ? 'wait' : 'pointer',
               }}>
-              {submitting ? 'SUBMITTING...' : '▶  투표 제출'}
+              {submitting
+                ? 'SUBMITTING...'
+                : answeredQ < totalQ
+                  ? `▶  투표 제출 (${totalQ - answeredQ}개 미선택)`
+                  : '▶  투표 제출'}
             </button>
           </div>
         )}
@@ -256,14 +345,15 @@ export default function VotePage({ params }: { params: { token: string } }) {
                     {voterCount}명 참여
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '8px' }}>
-                    평가를 수정하려면 다시 슬라이더를 조정하고 제출하세요
+                    평가를 수정하려면 아래 버튼을 눌러 다시 답변하세요
                   </div>
                 </>
               )}
             </div>
 
-            {!data.is_closed && step === 'done' && (
-              <button onClick={() => setStep('vote')}
+            {!data.is_closed && (
+              <button
+                onClick={() => setStep('vote')}
                 style={{
                   padding: '12px', borderRadius: '8px', border: '1px solid var(--cyan)',
                   background: 'transparent', color: 'var(--cyan)',

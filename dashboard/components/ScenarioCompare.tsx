@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { SubScores, SUB_FACTORS, PillarId, pillarScoreFromSubs, pillarMultiplication, defaultSubScores } from '@/lib/pillars';
+import { SubScores, SUB_FACTORS, PILLAR_COLORS, pillarScoreFromSubs, pillarMultiplication, defaultSubScores } from '@/lib/pillars';
 import { monteCarloRun } from '@/lib/montecarlo';
 
 interface Props {
@@ -15,9 +15,7 @@ interface Scenario {
   ci: [number, number];
 }
 
-const PILLAR_COLORS: Record<PillarId, string> = {
-  V: '#4dd0e1', P: '#81c784', D: '#ffb74d', E: '#ba68c8',
-};
+// PILLAR_COLORS imported from pillars.ts
 
 function computeScenario(subs: SubScores, name: string): Scenario {
   const pillars = pillarScoreFromSubs(subs);

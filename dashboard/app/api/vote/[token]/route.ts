@@ -7,7 +7,47 @@ function generateClientToken(): string {
   return randomBytes(16).toString('hex');
 }
 
-// GET /api/vote/[token] — 딜 정보 + 레이블 + 내 이전 표
+interface QuestionItem {
+  id: number;
+  question_no: number;
+  sub_factor_id: string;
+  lv1_category: string;
+  lv2_group: string;
+  lv3_label: string;
+  question_text: string;
+  importance: string;
+  score_low: number;
+  score_mid: number;
+  score_high: number;
+  display_order: number;
+}
+
+// 중요도 가중치
+const IMPORTANCE_WEIGHT: Record<string, number> = { high: 3, mid: 2, low: 1 };
+
+// 질문별 선택(low/mid/high) → sub_factor 점수 계산
+function computeSubScoresFromQuestions(
+  questionItems: QuestionItem[],
+  questionAnswers: Record<number, 'low' | 'mid' | 'high'>
+): Record<string, number> {
+  const acc: Record<string, { wsum: number; wTotal: number }> = {};
+  for (const q of questionItems) {
+    const ans = questionAnswers[q.question_no];
+    if (!ans) continue;
+    const rawScore = ans === 'low' ? q.score_low : ans === 'mid' ? q.score_mid : q.score_high;
+    const w = IMPORTANCE_WEIGHT[q.importance] ?? 2;
+    const a = acc[q.sub_factor_id] ?? (acc[q.sub_factor_id] = { wsum: 0, wTotal: 0 });
+    a.wsum += rawScore * w;
+    a.wTotal += w;
+  }
+  const out: Record<string, number> = {};
+  for (const [sfid, { wsum, wTotal }] of Object.entries(acc)) {
+    out[sfid] = wTotal > 0 ? Math.round((wsum / wTotal) * 10) / 10 : 5;
+  }
+  return out;
+}
+
+// GET /api/vote/[token] — 딜 정보 + 레이블 + 질문 목록 + 내 이전 표
 export async function GET(
   req: NextRequest,
   { params }: { params: { token: string } }
@@ -59,6 +99,11 @@ export async function GET(
     [link.deal_id]
   );
 
+  // 질문 목록 (active=true, display_order 순)
+  const { rows: questionRows } = await db.query(
+    `SELECT * FROM question_items WHERE active=true ORDER BY display_order`
+  );
+
   const labels = await getLabels();
 
   return NextResponse.json({
@@ -69,6 +114,7 @@ export async function GET(
     is_closed: isClosed,
     labels: labels.subFactors,
     pillar_labels: labels.pillars,
+    questions: questionRows,
     my_voter: myVoter,
     my_votes: myVotes,
     voter_count: countRows[0].voter_count,
@@ -76,13 +122,14 @@ export async function GET(
 }
 
 // POST /api/vote/[token] — 투표 제출 (upsert)
+// Body: { display_name, role, question_answers: Record<number, 'low'|'mid'|'high'> }
+//   or legacy: { display_name, role, scores: Record<sub_factor_id, number> }
 export async function POST(
   req: NextRequest,
   { params }: { params: { token: string } }
 ) {
   const db = await getDb();
 
-  // 링크 유효성 확인
   const { rows: linkRows } = await db.query(
     'SELECT * FROM voting_links WHERE token = $1',
     [params.token]
@@ -95,19 +142,18 @@ export async function POST(
     return NextResponse.json({ error: '마감된 투표입니다.' }, { status: 410 });
   }
 
-  const { display_name, scores, role } = await req.json();
-  // scores: Record<sub_factor_id, number>, role: VoterRole (v1)
+  const body = await req.json();
+  const { display_name, role, question_answers, scores: legacyScores } = body;
+
   if (!display_name?.trim()) {
     return NextResponse.json({ error: 'display_name 필수' }, { status: 400 });
   }
   const v1Roles = ['executive', 'sales_rep', 'proposal_pm', 'bm', 'pmo', 'reviewer'];
   const roleV1 = v1Roles.includes(role) ? role : 'reviewer';
 
-  // client_token 쿠키 — 재방문 식별
   let clientToken = req.cookies.get('wr_voter')?.value;
   if (!clientToken) clientToken = generateClientToken();
 
-  // voters upsert (같은 딜에 같은 이름이면 기존 voter 사용, client_token + role_v1 업데이트)
   const { rows: voterRows } = await db.query(
     `INSERT INTO voters (deal_id, display_name, client_token, role_v1)
      VALUES ($1, $2, $3, $4)
@@ -118,8 +164,21 @@ export async function POST(
   );
   const voterId = voterRows[0].id;
 
+  // 점수 계산 — question_answers 우선, legacyScores 폴백
+  let finalScores: Record<string, number> = {};
+
+  if (question_answers && Object.keys(question_answers).length > 0) {
+    // 질문 목록 로드 후 sub_factor 점수 계산
+    const { rows: questionRows } = await db.query(
+      `SELECT * FROM question_items WHERE active=true ORDER BY display_order`
+    );
+    finalScores = computeSubScoresFromQuestions(questionRows, question_answers);
+  } else if (legacyScores) {
+    finalScores = legacyScores;
+  }
+
   // votes upsert
-  for (const [subId, score] of Object.entries(scores as Record<string, number>)) {
+  for (const [subId, score] of Object.entries(finalScores)) {
     const s = Math.max(1, Math.min(10, Math.round(Number(score))));
     await db.query(
       `INSERT INTO votes (voter_id, sub_factor_id, score, updated_at)
@@ -129,7 +188,6 @@ export async function POST(
     );
   }
 
-  // 집계 voterCount 반환
   const { rows: countRows } = await db.query(
     'SELECT COUNT(DISTINCT id)::int as voter_count FROM voters WHERE deal_id = $1',
     [link.deal_id]

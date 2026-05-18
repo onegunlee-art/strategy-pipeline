@@ -60,6 +60,7 @@ export default function BriefPage({ params }: Props) {
                 if (!cancelled) setStatusMsg('AI 분석 중...');
               } else if (ev.type === 'done') {
                 // done 이벤트에 전체 결과가 포함됨 (race condition 없음)
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { type: _t, ...output } = ev;
                 if (!cancelled) setData(Object.keys(output).length > 0 ? output : { ...metaData, cached: false });
                 done = true;

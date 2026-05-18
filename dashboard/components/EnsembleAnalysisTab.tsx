@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PillarId, SubFactorId, SubScores } from '@/lib/pillars';
+import { PillarId, SubFactorId, SubScores, PILLAR_COLORS, PILLAR_IDS } from '@/lib/pillars';
 import ConfidenceBadge from './ConfidenceBadge';
 
 interface PredictResult {
@@ -37,9 +37,7 @@ interface StrategyCard {
   kt_framework_reference?: string;
 }
 
-const PILLAR_COLORS: Record<PillarId, string> = {
-  V: '#4dd0e1', P: '#81c784', D: '#ffb74d', E: '#ba68c8',
-};
+// PILLAR_COLORS imported from pillars.ts
 
 const METHOD_LABELS: Record<string, { label: string; desc: string }> = {
   pillar: { label: 'A. Pillar Multiplication', desc: 'KT 4축 곱셈 모델' },
@@ -237,7 +235,7 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
       {/* Pillar Scores */}
       <Card title="4-PILLAR SCORES">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-          {(['V', 'P', 'D', 'E'] as PillarId[]).map(p => (
+          {PILLAR_IDS.map(p => (
             <div key={p}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span style={{ fontFamily: 'IBM Plex Mono', color: PILLAR_COLORS[p], fontSize: '12px' }}>{p}</span>
