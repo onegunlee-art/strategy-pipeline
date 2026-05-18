@@ -153,16 +153,16 @@ export async function POST(
 
 ## AI 컨텍스트 (🟡 참고용)
 ### 고객사 현황
-${customerCtx.text.slice(0, 500)}
+${customerCtx.text.slice(0, 3000)}
 ### KT 최근 동향
-${ktNews.text.slice(0, 400)}
+${ktNews.text.slice(0, 2000)}
 ### 경쟁사 동향
-LG CNS: ${lgCnsTrend.text.slice(0, 300)}
-Samsung SDS: ${samsungTrend.text.slice(0, 300)}
+LG CNS: ${lgCnsTrend.text.slice(0, 1500)}
+Samsung SDS: ${samsungTrend.text.slice(0, 1500)}
 ### AI 대형 사업 트렌드
-${aiMega.text.slice(0, 400)}
+${aiMega.text.slice(0, 2000)}
 ### 약점별 외부 근거
-${weaknesses.map((w, i) => `${w.id}: ${weaknessResearch[i]?.text?.slice(0, 200) ?? 'N/A'}`).join('\n')}
+${weaknesses.map((w, i) => `${w.id}: ${weaknessResearch[i]?.text?.slice(0, 1000) ?? 'N/A'}`).join('\n')}
 ## 유사 사례 (자체 DB)
 ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.win_loss_cause ?? c.lessons_learned ?? ''}`).join('\n')}
 
@@ -211,7 +211,7 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
 
         const stream = client.messages.stream({
           model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
+          max_tokens: 8192,
           messages: [{ role: 'user', content: briefPrompt }],
         });
 

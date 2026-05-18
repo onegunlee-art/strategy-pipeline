@@ -1,6 +1,8 @@
 // 외부 리서치 라이브러리 — Google Gemini 2.5 Pro + Search Grounding
+// GEMINI_API_KEY 없을 때 Claude + web_search 폴백
 // 캐시: external_research 테이블 (UNIQUE deal_id + topic)
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
 import type { Pool } from 'pg';
 import type { SubFactorId } from './pillars';
 
@@ -183,32 +185,78 @@ export async function fetchResearch(
     };
   }
 
-  // 2) Gemini 호출 (API 키 없으면 빈 결과)
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
-    return { text: '', json: null, cached: false, source: 'unavailable' };
-  }
-
   const { prompt, useGrounding } = buildPrompt(topic);
 
   let text = '';
   let source = 'gemini-2.5-pro';
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const modelConfig: Parameters<typeof genAI.getGenerativeModel>[0] = {
-      model: 'gemini-2.5-pro',
-    };
-    if (useGrounding) {
-      // @ts-expect-error — tools 키는 SDK 타입에 미반영
-      modelConfig.tools = [{ google_search: {} }];
-      source = 'gemini-2.5-pro-grounded';
+
+  // 2a) Gemini 우선 호출 (API 키 있을 때)
+  // Vercel 등록명이 Gemini_API_Key (mixed case)일 수 있어 3가지 이름 모두 체크
+  const geminiKey =
+    process.env.GEMINI_API_KEY ??
+    process.env.Gemini_API_Key ??
+    process.env.GOOGLE_API_KEY;
+  if (geminiKey) {
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const modelConfig: Parameters<typeof genAI.getGenerativeModel>[0] = {
+        model: 'gemini-2.5-pro',
+      };
+      if (useGrounding) {
+        // @ts-expect-error — tools 키는 SDK 타입에 미반영
+        modelConfig.tools = [{ google_search: {} }];
+        source = 'gemini-2.5-pro-grounded';
+      }
+      const model = genAI.getGenerativeModel(modelConfig);
+      const resp = await model.generateContent(prompt);
+      text = resp.response.text();
+    } catch (e) {
+      console.error('[research] Gemini error:', e);
     }
-    const model = genAI.getGenerativeModel(modelConfig);
-    const resp = await model.generateContent(prompt);
-    text = resp.response.text();
-  } catch (e) {
-    console.error('[research] Gemini error:', e);
-    return { text: '', json: null, cached: false, source: 'error' };
+  }
+
+  // 2b) Claude + web_search 폴백 (Gemini 결과 없을 때)
+  if (!text) {
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (!anthropicKey) {
+      return { text: '', json: null, cached: false, source: 'unavailable' };
+    }
+    try {
+      const client = new Anthropic({ apiKey: anthropicKey });
+      // web_search_20260209 is a server-side tool — no input_schema needed
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tools: any[] = useGrounding
+        ? [{ type: 'web_search_20260209', name: 'web_search' }]
+        : [];
+
+      let messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
+      for (let i = 0; i < 5; i++) {
+        const response = await client.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 2048,
+          ...(tools.length ? { tools } : {}),
+          messages,
+        });
+        const textBlocks = response.content.filter(
+          (b): b is Anthropic.TextBlock => b.type === 'text'
+        );
+        if (textBlocks.length > 0) text = textBlocks.map(b => b.text).join('');
+        if (response.stop_reason !== 'pause_turn') break;
+        messages = [
+          ...messages,
+          { role: 'assistant' as const, content: response.content },
+          { role: 'user' as const, content: 'Continue.' },
+        ];
+      }
+      source = useGrounding ? 'claude-web-search' : 'claude-internal';
+    } catch (e) {
+      console.error('[research] Claude fallback error:', e);
+      return { text: '', json: null, cached: false, source: 'error' };
+    }
+  }
+
+  if (!text) {
+    return { text: '', json: null, cached: false, source: 'unavailable' };
   }
 
   const json = parseJsonFromText(text);

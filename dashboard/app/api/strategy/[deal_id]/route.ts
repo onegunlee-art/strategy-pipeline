@@ -112,7 +112,7 @@ export async function POST(req: NextRequest, ctx: { params: { deal_id: string } 
       return `약점 ${i + 1}: [${w.pillar}] ${w.label} (${w.sub_factor_id})
 - 현재 점수: ${w.score.toFixed(1)}/10
 - 설명: ${meta?.description ?? ''}
-- 외부 리서치: ${r.text.slice(0, 500) || '(없음)'}`;
+- 외부 리서치: ${r.text.slice(0, 2000) || '(없음)'}`;
     }).join('\n\n');
 
     const similarBlock = similarCases.map((c, i) =>
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest, ctx: { params: { deal_id: string } 
 - 고객사: ${deal.client_name}
 - 산업: ${deal.industry ?? '미상'}
 - 현재 수주 확률: ${deal.predicted_probability ?? 'N/A'}%
-- 고객 컨텍스트: ${customerCtx.text.slice(0, 400) || '(없음)'}
+- 고객 컨텍스트: ${customerCtx.text.slice(0, 1500) || '(없음)'}
 
 ## 약점 Top 3 + 외부 리서치
 ${weaknessBlock}
@@ -185,7 +185,8 @@ ${similarBlock || '(유사 사례 없음)'}
 
           const stream = client.messages.stream({
             model: 'claude-sonnet-4-6',
-            max_tokens: 4096,
+            max_tokens: 8000,
+            thinking: { type: 'adaptive' as const },
             messages: [{ role: 'user', content: prompt }],
           });
 
