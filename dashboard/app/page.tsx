@@ -85,7 +85,7 @@ export default function Dashboard() {
             </a>
             <div style={{ width: '1px', height: '24px', background: 'var(--border)' }} />
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/kt-logo.svg" alt="KT" style={{ height: '26px', display: 'block' }} />
+            <img src="/kt-logo.jpg" alt="KT" style={{ height: '32px', display: 'block' }} />
           </div>
         </div>
       </header>
