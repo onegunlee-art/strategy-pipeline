@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { SUB_FACTORS, PILLAR_META } from '@/lib/pillars';
 
-type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors';
+type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -100,6 +100,7 @@ export default function AdminPage() {
     { id: 'links', label: 'Links' },
     { id: 'import', label: 'Import' },
     { id: 'competitors', label: 'Competitors' },
+    { id: 'rfp', label: 'RFP 등록' },
   ];
 
   return (
@@ -132,6 +133,7 @@ export default function AdminPage() {
         {tab === 'links' && <LinksTab />}
         {tab === 'import' && <ImportTab />}
         {tab === 'competitors' && <CompetitorsTab />}
+        {tab === 'rfp' && <RfpImportTab />}
       </main>
     </div>
   );
@@ -1119,6 +1121,281 @@ function CompetitorsTab() {
           ⚠️ &ldquo;적용&rdquo; 버튼을 눌러야만 AI 추정값이 Bayesian prior에 반영됩니다. 자동 주입되지 않습니다.
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── RFP Import Tab ───────────────────────────────────────────────────────────
+
+const HANA_DEFAULTS = {
+  client_name: '하나은행',
+  deal_size: '30억',
+  industry: '금융',
+  duration_months: 8,
+  risk: 3,
+  competitors: ['Samsung SDS'],
+  rfp_summary: '하나은행 비정형데이터 자산화 플랫폼 구축 사업 (2025). 규모: 초기 1TB/100만건, 일 10GB/4,000건 증분. 14개 기능 영역, 8개월. 망분리·DRM·비식별화·전금법 준수 필수.',
+  strategy_memo: '3대 전략: Ready to AI(MCP Server 즉시 연결), 비용최적화(Hot/Warm/Cold 티어+KT Cloud), 데이터 무결성(2-Pass 클렌징). vs 삼성SDS: 락인 리스크 부각, ES 글로벌 금융 표준 포지셔닝, 컴플라이언스 자동화 킬러앱.',
+  sub_scores: {
+    s_key_man_contact: 6, s_evaluator_rfp: 8, s_poc_proposal: 4,
+    v_needs_painpoint: 8, v_value_proposition: 7, v_presentation: 6,
+    d_competitive_strategy: 6, d_tech_reference: 7, d_partner: 5,
+    p_budget_fit: 5, p_price_competition: 3, p_cost_value: 6,
+    e_track_record: 6, e_risk_management: 7, e_execution_team: 7,
+  },
+};
+
+function RfpImportTab() {
+  const [form, setForm] = useState({
+    client_name: HANA_DEFAULTS.client_name,
+    deal_size: HANA_DEFAULTS.deal_size,
+    industry: HANA_DEFAULTS.industry,
+    duration_months: String(HANA_DEFAULTS.duration_months),
+    risk: String(HANA_DEFAULTS.risk),
+    competitors: HANA_DEFAULTS.competitors.join(', '),
+    rfp_summary: HANA_DEFAULTS.rfp_summary,
+    strategy_memo: HANA_DEFAULTS.strategy_memo,
+    voting_days: '7',
+  });
+  const [scores, setScores] = useState<Record<string, number>>(HANA_DEFAULTS.sub_scores);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<null | {
+    ok: boolean; deal_id: number; probability: number;
+    method_probs: Record<string, number>;
+    confidence_interval: { low: number; high: number };
+    weaknesses: Array<{ id: string; label: string; pillar: string; score: number }>;
+    voting_url: string; voting_token: string;
+    pillar_scores: Record<string, number>;
+  }>(null);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    setLoading(true); setError(''); setResult(null);
+    try {
+      const body = {
+        client_name: form.client_name,
+        deal_size: form.deal_size || undefined,
+        industry: form.industry || undefined,
+        duration_months: form.duration_months ? Number(form.duration_months) : undefined,
+        risk: Number(form.risk),
+        competitors: form.competitors.split(',').map(s => s.trim()).filter(Boolean),
+        rfp_summary: form.rfp_summary || undefined,
+        strategy_memo: form.strategy_memo || undefined,
+        voting_days: Number(form.voting_days),
+        sub_scores: scores,
+      };
+      const res = await fetch('/api/admin/rfp-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Unknown error');
+      setResult(data);
+    } catch (e: unknown) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const input = (label: string, key: keyof typeof form, type = 'text') => (
+    <div style={{ marginBottom: '12px' }}>
+      <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>
+        {label}
+      </label>
+      <input
+        type={type} value={form[key]}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+        style={{
+          width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+          color: 'var(--text)', padding: '8px 10px', borderRadius: '4px', fontSize: '13px',
+          fontFamily: 'inherit', boxSizing: 'border-box',
+        }}
+      />
+    </div>
+  );
+
+  const probColor = (p: number) => p >= 60 ? 'var(--green)' : p >= 40 ? 'var(--yellow)' : 'var(--red)';
+
+  return (
+    <div style={{ maxWidth: '960px' }}>
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '13px', color: 'var(--cyan)', marginBottom: '4px' }}>
+          RFP 분석 → 딜 등록 & 수주 확률 산정
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+          RFP 분석 결과를 15개 Sub-Factor 점수로 입력하면 4-Method Ensemble로 수주 확률을 계산하고 팀 투표 링크를 생성합니다.
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        {/* 기본 정보 */}
+        <div>
+          <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '12px', letterSpacing: '1px' }}>
+            DEAL INFO
+          </div>
+          {input('고객사명', 'client_name')}
+          {input('사업 규모', 'deal_size')}
+          {input('산업', 'industry')}
+          {input('사업 기간 (개월)', 'duration_months', 'number')}
+          {input('리스크 레벨 (1-5)', 'risk', 'number')}
+          {input('경쟁사 (쉼표 구분)', 'competitors')}
+          {input('투표 기간 (일)', 'voting_days', 'number')}
+
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>
+              RFP 배경 요약
+            </label>
+            <textarea
+              value={form.rfp_summary}
+              onChange={e => setForm(f => ({ ...f, rfp_summary: e.target.value }))}
+              rows={4}
+              style={{
+                width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+                color: 'var(--text)', padding: '8px 10px', borderRadius: '4px', fontSize: '12px',
+                fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical',
+              }}
+            />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>
+              전략 메모
+            </label>
+            <textarea
+              value={form.strategy_memo}
+              onChange={e => setForm(f => ({ ...f, strategy_memo: e.target.value }))}
+              rows={4}
+              style={{
+                width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+                color: 'var(--text)', padding: '8px 10px', borderRadius: '4px', fontSize: '12px',
+                fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Sub-Factor 점수 */}
+        <div>
+          <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '12px', letterSpacing: '1px' }}>
+            15-FACTOR SCORES (1–10)
+          </div>
+          {SUB_FACTORS.map(f => {
+            const pillarColors: Record<string, string> = {
+              S: '#7c3aed', V: '#0ea5e9', D: '#10b981', P: '#f59e0b', E: '#ef4444',
+            };
+            const col = pillarColors[f.pillar] ?? 'var(--cyan)';
+            return (
+              <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <span style={{
+                  fontFamily: 'IBM Plex Mono', fontSize: '10px', color: col,
+                  width: '16px', textAlign: 'center',
+                }}>{f.pillar}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1, minWidth: 0 }}>{f.label}</span>
+                <input
+                  type="range" min={1} max={10} step={1}
+                  value={scores[f.id] ?? 5}
+                  onChange={e => setScores(s => ({ ...s, [f.id]: Number(e.target.value) }))}
+                  style={{ width: '100px', accentColor: col }}
+                />
+                <span style={{
+                  fontFamily: 'IBM Plex Mono', fontSize: '13px',
+                  color: (scores[f.id] ?? 5) >= 7 ? 'var(--green)' : (scores[f.id] ?? 5) >= 4 ? 'var(--yellow)' : 'var(--red)',
+                  width: '20px', textAlign: 'right',
+                }}>{scores[f.id] ?? 5}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 등록 버튼 */}
+      <div style={{ marginTop: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <button
+          onClick={handleSubmit} disabled={loading}
+          style={{
+            padding: '12px 32px', background: loading ? 'var(--surface2)' : 'var(--cyan)',
+            color: loading ? 'var(--text-dim)' : '#000', border: 'none', borderRadius: '4px',
+            fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '1px',
+          }}>
+          {loading ? 'CALCULATING...' : '딜 등록 & 확률 산출'}
+        </button>
+        {error && <span style={{ color: 'var(--red)', fontSize: '13px' }}>{error}</span>}
+      </div>
+
+      {/* 결과 */}
+      {result && (
+        <div style={{ marginTop: '32px', padding: '24px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '48px', fontWeight: 700, color: probColor(result.probability) }}>
+              {result.probability.toFixed(1)}%
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>수주 확률 (4-Method Ensemble)</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+                CI {result.confidence_interval.low.toFixed(0)}% – {result.confidence_interval.high.toFixed(0)}% &nbsp;|&nbsp; Deal #{result.deal_id}
+              </div>
+            </div>
+          </div>
+
+          {/* 4-Method Breakdown */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+            {Object.entries(result.method_probs).map(([k, v]) => (
+              <div key={k} style={{ padding: '12px', background: 'var(--surface2)', borderRadius: '6px', textAlign: 'center' }}>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>
+                  {k.toUpperCase()}
+                </div>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '20px', color: probColor(v as number) }}>
+                  {(v as number).toFixed(1)}%
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 약점 Top 3 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--red)', fontFamily: 'IBM Plex Mono', marginBottom: '10px', letterSpacing: '1px' }}>
+              ⚠ TOP 3 WEAKNESSES
+            </div>
+            {result.weaknesses.map((w, i) => (
+              <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--red)', width: '20px' }}>
+                  {i + 1}
+                </span>
+                <span style={{ fontSize: '13px', color: 'var(--text)', flex: 1 }}>{w.label}</span>
+                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: 'var(--yellow)' }}>
+                  [{w.pillar}] {w.score}/10
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* 투표 링크 */}
+          <div style={{ padding: '16px', background: 'rgba(0,212,255,0.08)', border: '1px solid var(--cyan)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '8px', letterSpacing: '1px' }}>
+              TEAM VOTING LINK
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <code style={{ fontSize: '13px', color: 'var(--text)', flex: 1, wordBreak: 'break-all' }}>
+                {typeof window !== 'undefined' ? window.location.origin : ''}{result.voting_url}
+              </code>
+              <button
+                onClick={() => navigator.clipboard.writeText(
+                  (typeof window !== 'undefined' ? window.location.origin : '') + result.voting_url
+                )}
+                style={{
+                  padding: '6px 14px', background: 'var(--cyan)', color: '#000',
+                  border: 'none', borderRadius: '4px', fontFamily: 'IBM Plex Mono',
+                  fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap',
+                }}>
+                COPY
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
