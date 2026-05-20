@@ -117,7 +117,7 @@ export function pillarMultiplication(
   pillarScores: PillarScores,
   pillarWeights?: Partial<Record<PillarId, number>>
 ): number {
-  const epsilon = 0.05;
+  const epsilon = 0.01;
   let logSum = 0, totalW = 0;
   for (const p of PILLAR_IDS) {
     const w = pillarWeights?.[p] ?? PILLAR_META[p].defaultWeight;
@@ -125,9 +125,8 @@ export function pillarMultiplication(
     totalW += w;
   }
   const avgLog = totalW > 0 ? logSum / totalW : logSum;
-  // avgLog ∈ [log(0.05), log(1.05)] ≈ [-3.0, 0.05]
-  // 매핑: -3.0 → 약 0.05, 0.05 → 약 0.95
-  const scaled = (avgLog + 1.5) * 3;
+  // 보정: offset=0.6 → 5/10 중립 입력 시 ~50%, 7/10 → ~68%, 9/10 → ~82%
+  const scaled = (avgLog + 0.6) * 3;
   return 1 / (1 + Math.exp(-scaled));
 }
 

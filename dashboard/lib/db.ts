@@ -202,10 +202,16 @@ async function runInit() {
     await pool.query('INSERT INTO our_elo (id, elo) VALUES (1, 1500)');
   }
 
-  const { rows: ensRow } = await pool.query('SELECT COUNT(*)::int as c FROM ensemble_weights');
-  if (ensRow[0].c === 0) {
+  const { rows: ensRow } = await pool.query('SELECT version, pillar_mult FROM ensemble_weights ORDER BY version DESC LIMIT 1');
+  if (ensRow.length === 0) {
+    // 최초 seed: 재보정된 보수적 가중치
     await pool.query(`INSERT INTO ensemble_weights (pillar_mult, bayesian, elo, monte_carlo, version)
-                      VALUES (0.45, 0.30, 0.20, 0.05, 1)`);
+                      VALUES (0.30, 0.40, 0.20, 0.10, 1)`);
+  } else if (ensRow[0].pillar_mult === 0.45) {
+    // 구버전(0.45) 감지 시 새 버전 삽입 — 과대산정 수정 (pillar 편향 제거)
+    const nextVer = (ensRow[0].version ?? 1) + 1;
+    await pool.query(`INSERT INTO ensemble_weights (pillar_mult, bayesian, elo, monte_carlo, version)
+                      VALUES (0.30, 0.40, 0.20, 0.10, $1)`, [nextVer]);
   }
 
   // v0.6: question_items 테이블 (Win Possibility Framework 35개 질문)
