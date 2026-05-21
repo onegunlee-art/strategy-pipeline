@@ -113,14 +113,14 @@ def add_chevron(slide, x, y, w, h, color):
     return sh
 
 
-def add_footer(slide, page_num):
+def add_footer(slide, page_num, total=3):
     add_rect(slide, Cm(1.5), SLIDE_H - Cm(1.0),
              SLIDE_W - Cm(3), Cm(0.04), MID_BLUE)
     add_textbox(slide, FOOTER_TEXT,
                 Cm(1.5), SLIDE_H - Cm(0.9),
                 SLIDE_W - Cm(5), Cm(0.7),
                 font_size=8, color=DARK_TEXT, align=PP_ALIGN.LEFT)
-    add_textbox(slide, f"{page_num} / 2",
+    add_textbox(slide, f"{page_num} / {total}",
                 SLIDE_W - Cm(3.5), SLIDE_H - Cm(0.9),
                 Cm(2), Cm(0.7),
                 font_size=8, color=DARK_TEXT, align=PP_ALIGN.RIGHT)
@@ -443,6 +443,130 @@ def slide_02_operation(prs):
     add_footer(sl, 2)
 
 
+# ─── 슬라이드 3: 클로징 — 감동 장표 ──────────────────────────────────────────────
+
+def slide_03_closing(prs):
+    sl = blank_slide(prs)
+    DEEP_NAVY = RGBColor(0x04, 0x09, 0x16)
+    fill_bg(sl, DEEP_NAVY)
+
+    cx = SLIDE_W / 2
+    cy = SLIDE_H / 2
+
+    # ── 동심원 방사 레이어 (바깥 → 안으로 점점 밝아지는 펄스) ────────────
+    pulse = [
+        (0.97, 0.97, RGBColor(0x06, 0x0E, 0x20)),
+        (0.82, 0.82, RGBColor(0x08, 0x12, 0x28)),
+        (0.67, 0.67, RGBColor(0x0B, 0x18, 0x34)),
+        (0.52, 0.52, RGBColor(0x0E, 0x1F, 0x42)),
+        (0.38, 0.38, RGBColor(0x12, 0x28, 0x50)),
+        (0.26, 0.26, RGBColor(0x16, 0x30, 0x5A)),
+        (0.15, 0.15, RGBColor(0x1A, 0x38, 0x64)),
+    ]
+    for rw, rh, color in pulse:
+        w = SLIDE_W * rw
+        h = SLIDE_H * rh
+        sh = sl.shapes.add_shape(MSO_SHAPE.OVAL, cx - w / 2, cy - h / 2, w, h)
+        sh.fill.solid()
+        sh.fill.fore_color.rgb = color
+        sh.line.fill.background()
+
+    # ── 황금빛 궤도 링 (얇은 선 only) ──────────────────────────────────
+    for rw, rh, color, lw_pt in [
+        (0.72, 0.72, RGBColor(0x30, 0x24, 0x0A), Pt(0.4)),
+        (0.52, 0.52, GOLD,                         Pt(0.6)),
+        (0.32, 0.32, RGBColor(0x00, 0x6A, 0x80),   Pt(0.3)),
+    ]:
+        w = SLIDE_W * rw
+        h = SLIDE_H * rh
+        sh = sl.shapes.add_shape(MSO_SHAPE.OVAL, cx - w / 2, cy - h / 2, w, h)
+        sh.fill.background()
+        sh.line.color.rgb = color
+        sh.line.width = lw_pt
+
+    # ── 중앙 코어 글로우 (GOLD 미세 타원) ───────────────────────────────
+    gw, gh = Cm(14), Cm(7)
+    sh = sl.shapes.add_shape(MSO_SHAPE.OVAL,
+                              cx - gw / 2, cy - gh / 2 - Cm(0.8), gw, gh)
+    sh.fill.solid()
+    sh.fill.fore_color.rgb = RGBColor(0x1C, 0x16, 0x04)
+    sh.line.fill.background()
+
+    # ── 소형 태그 라인 ───────────────────────────────────────────────────
+    add_textbox(sl, "HANA BANK  ×  AI FOUNDATION  ×  KT",
+                Cm(0), Cm(4.9), SLIDE_W, Cm(0.55),
+                font_size=9, color=RGBColor(0x28, 0x3E, 0x5C), align=PP_ALIGN.CENTER)
+
+    # ── 메인 카피 — 라인 1 (흰색, 보통 굵기) ────────────────────────────
+    add_textbox(sl, "통제 가능한 AI 위에서",
+                Cm(0), Cm(5.65), SLIDE_W, Cm(1.3),
+                font_size=30, bold=False, color=WHITE, align=PP_ALIGN.CENTER)
+
+    # ── 메인 카피 — 라인 2 (GOLD, 대형 볼드) ────────────────────────────
+    add_textbox(sl, "하나은행의 모든 판단이 움직인다",
+                Cm(0), Cm(7.1), SLIDE_W, Cm(1.7),
+                font_size=40, bold=True, color=GOLD, align=PP_ALIGN.CENTER)
+
+    # ── 중앙 구분 장식선 ─────────────────────────────────────────────────
+    lw = Cm(5)
+    add_rect(sl, cx - lw / 2, Cm(9.1), lw, Cm(0.025), GOLD)
+    # 좌우 닷
+    d = Cm(0.18)
+    add_rect(sl, cx - lw / 2 - d - Cm(0.1), Cm(9.1) - d / 2 + Cm(0.01),
+             d, d, GOLD, shape=MSO_SHAPE.OVAL)
+    add_rect(sl, cx + lw / 2 + Cm(0.1), Cm(9.1) - d / 2 + Cm(0.01),
+             d, d, GOLD, shape=MSO_SHAPE.OVAL)
+
+    # ── 3대 효과 (3열 수평 배치) ─────────────────────────────────────────
+    sub_items = [
+        (CYAN,   "고객 경험은",  "더 빨라지고"),
+        (YELLOW, "직원 업무는",  "더 효율화되며"),
+        (ORANGE, "리스크는",    "더 정교하게 통제된다"),
+    ]
+    col_w = SLIDE_W / 3
+    sub_y = Cm(9.65)
+    for i, (color, line1, line2) in enumerate(sub_items):
+        col_x = col_w * i
+        dot = Cm(0.45)
+        add_rect(sl, col_x + col_w / 2 - dot / 2, sub_y,
+                 dot, dot, color, shape=MSO_SHAPE.OVAL)
+        add_textbox(sl, line1,
+                    col_x, sub_y + Cm(0.6), col_w, Cm(0.65),
+                    font_size=15, color=LIGHT_GRAY, align=PP_ALIGN.CENTER)
+        add_textbox(sl, line2,
+                    col_x, sub_y + Cm(1.2), col_w, Cm(0.65),
+                    font_size=15, bold=True, color=color, align=PP_ALIGN.CENTER)
+
+    # ── 수평 thin 구분선 ─────────────────────────────────────────────────
+    add_rect(sl, Cm(4), Cm(11.5), SLIDE_W - Cm(8), Cm(0.02),
+             RGBColor(0x18, 0x2A, 0x44))
+
+    # ── 변환 카피 (하단, 드라마틱) ──────────────────────────────────────
+    tr_y = Cm(12.4)
+    # 배경 직사각
+    add_rect(sl, 0, tr_y, SLIDE_W, Cm(2.5), RGBColor(0x06, 0x0E, 0x1E))
+
+    # 왼쪽: 도입 (흐린)
+    add_textbox(sl, "AI를 도입하는 은행에서",
+                Cm(1.0), tr_y + Cm(0.45), SLIDE_W / 2 - Cm(1.5), Cm(0.95),
+                font_size=20, color=DARK_TEXT, align=PP_ALIGN.RIGHT)
+
+    # 화살표
+    add_textbox(sl, "→",
+                cx - Cm(1.0), tr_y + Cm(0.45), Cm(2.0), Cm(0.95),
+                font_size=24, bold=True, color=GOLD, align=PP_ALIGN.CENTER)
+
+    # 오른쪽: 운영 (밝고 볼드)
+    add_textbox(sl, "AI를 운영하는 은행으로",
+                SLIDE_W / 2 + Cm(0.7), tr_y + Cm(0.45), SLIDE_W / 2 - Cm(1.7), Cm(0.95),
+                font_size=24, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+
+    # 슬라이드 하단 미니 서명
+    add_textbox(sl, "KT B2B 수주전략팀  ·  2026.05",
+                Cm(0), SLIDE_H - Cm(0.9), SLIDE_W, Cm(0.65),
+                font_size=9, color=RGBColor(0x20, 0x32, 0x4A), align=PP_ALIGN.CENTER)
+
+
 # ─── 메인 ────────────────────────────────────────────────────────────────────────
 
 def main():
@@ -452,6 +576,7 @@ def main():
 
     slide_01_war(prs)
     slide_02_operation(prs)
+    slide_03_closing(prs)
 
     out = "/home/user/strategy-pipeline/하나은행_AI_통제하는금융.pptx"
     prs.save(out)
