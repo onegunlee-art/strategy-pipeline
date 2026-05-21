@@ -34,6 +34,10 @@ export default function BriefPage({ params }: Props) {
       setStatusMsg('브리프 생성 중 (30~60초 소요)...');
       try {
         const res = await fetch(`/api/brief/${deal_id}`, { method: 'POST' });
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error((errJson as { error?: string }).error ?? `HTTP ${res.status}`);
+        }
         if (!res.body) throw new Error('no stream body');
 
         const reader = res.body.getReader();

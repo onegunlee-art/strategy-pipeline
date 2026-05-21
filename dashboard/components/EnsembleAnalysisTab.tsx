@@ -77,7 +77,6 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const [streamingText, setStreamingText] = useState('');
   const [strategyError, setStrategyError] = useState<string | null>(null);
   const [outcomeSaved, setOutcomeSaved] = useState(false);
-  const [briefLoading, setBriefLoading] = useState(false);
 
   const generateStrategy = async () => {
     setLoading(true);
@@ -85,6 +84,11 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
     setStrategyError(null);
     try {
       const res = await fetch(`/api/strategy/${result.deal_id}`, { method: 'POST' });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        setStrategyError((e as { error?: string }).error ?? `HTTP ${res.status}`);
+        return;
+      }
       if (!res.body) throw new Error('no stream body');
 
       const reader = res.body.getReader();
@@ -137,13 +141,7 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
     }
   };
 
-  const openBrief = async () => {
-    setBriefLoading(true);
-    // Brief 생성 요청 후 새 탭에서 열기
-    try {
-      await fetch(`/api/brief/${result.deal_id}`, { method: 'POST' });
-    } catch { /* brief 페이지에서 재시도 */ }
-    setBriefLoading(false);
+  const openBrief = () => {
     window.open(`/brief/${result.deal_id}`, '_blank');
   };
 
@@ -432,15 +430,15 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
               {result.data_points > 0 && <ConfidenceBadge kind="voting" label="Voting 반영" />}
             </div>
           </div>
-          <button onClick={openBrief} disabled={briefLoading}
+          <button onClick={openBrief}
             style={{
               padding: '12px 20px', borderRadius: '8px',
               border: '1px solid var(--cyan)', background: 'transparent',
-              color: briefLoading ? 'var(--text-dim)' : 'var(--cyan)',
+              color: 'var(--cyan)',
               fontFamily: 'IBM Plex Mono', fontSize: '12px',
-              cursor: briefLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap',
+              cursor: 'pointer', whiteSpace: 'nowrap',
             }}>
-            {briefLoading ? '생성 중...' : '📋 Executive Brief 생성'}
+            📋 Executive Brief 생성
           </button>
         </div>
       </Card>

@@ -220,8 +220,11 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
           const clean = briefText.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
           const m = clean.match(/\{[\s\S]*\}/);
           if (m) briefJson = JSON.parse(m[0]);
-        } catch {
+          else throw new Error('no JSON object in response');
+        } catch (parseErr) {
           console.error('[brief] JSON parse failed:', briefText.slice(0, 300));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', message: `AI 응답 파싱 실패 — 다시 시도해 주세요 (${String(parseErr)})` })}\n\n`));
+          return;
         }
 
         const layer2AiContext = {
