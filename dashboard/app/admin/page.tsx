@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { SUB_FACTORS, PILLAR_META } from '@/lib/pillars';
 
-type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors';
+type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -100,6 +100,9 @@ export default function AdminPage() {
     { id: 'links', label: 'Links' },
     { id: 'import', label: 'Import' },
     { id: 'competitors', label: 'Competitors' },
+    { id: 'rfp', label: 'RFP 등록' },
+    { id: 'vote_analysis', label: '투표 분석' },
+    { id: 'manual_edit', label: '수동 편집' },
   ];
 
   return (
@@ -132,6 +135,9 @@ export default function AdminPage() {
         {tab === 'links' && <LinksTab />}
         {tab === 'import' && <ImportTab />}
         {tab === 'competitors' && <CompetitorsTab />}
+        {tab === 'rfp' && <RfpImportTab />}
+        {tab === 'vote_analysis' && <VoteAnalysisTab />}
+        {tab === 'manual_edit' && <ManualEditTab />}
       </main>
     </div>
   );
@@ -1119,6 +1125,691 @@ function CompetitorsTab() {
           ⚠️ &ldquo;적용&rdquo; 버튼을 눌러야만 AI 추정값이 Bayesian prior에 반영됩니다. 자동 주입되지 않습니다.
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── RFP Import Tab ───────────────────────────────────────────────────────────
+
+const HANA_DEFAULTS = {
+  client_name: '하나은행',
+  deal_size: '30억',
+  industry: '금융',
+  duration_months: 8,
+  risk: 3,
+  competitors: ['Samsung SDS'],
+  rfp_summary: '하나은행 비정형데이터 자산화 플랫폼 구축 사업 (2025). 규모: 초기 1TB/100만건, 일 10GB/4,000건 증분. 14개 기능 영역, 8개월. 망분리·DRM·비식별화·전금법 준수 필수.',
+  strategy_memo: '3대 전략: Ready to AI(MCP Server 즉시 연결), 비용최적화(Hot/Warm/Cold 티어+KT Cloud), 데이터 무결성(2-Pass 클렌징). vs 삼성SDS: 락인 리스크 부각, ES 글로벌 금융 표준 포지셔닝, 컴플라이언스 자동화 킬러앱.',
+  sub_scores: {
+    s_key_man_contact: 6, s_evaluator_rfp: 8, s_poc_proposal: 4,
+    v_needs_painpoint: 8, v_value_proposition: 7, v_presentation: 6,
+    d_competitive_strategy: 6, d_tech_reference: 7, d_partner: 5,
+    p_budget_fit: 5, p_price_competition: 3, p_cost_value: 6,
+    e_track_record: 6, e_risk_management: 7, e_execution_team: 7,
+  },
+};
+
+function RfpImportTab() {
+  const [form, setForm] = useState({
+    client_name: HANA_DEFAULTS.client_name,
+    deal_size: HANA_DEFAULTS.deal_size,
+    industry: HANA_DEFAULTS.industry,
+    duration_months: String(HANA_DEFAULTS.duration_months),
+    risk: String(HANA_DEFAULTS.risk),
+    competitors: HANA_DEFAULTS.competitors.join(', '),
+    rfp_summary: HANA_DEFAULTS.rfp_summary,
+    strategy_memo: HANA_DEFAULTS.strategy_memo,
+    voting_days: '7',
+  });
+  const [scores, setScores] = useState<Record<string, number>>(HANA_DEFAULTS.sub_scores);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<null | {
+    ok: boolean; deal_id: number; probability: number;
+    method_probs: Record<string, number>;
+    confidence_interval: { low: number; high: number };
+    weaknesses: Array<{ id: string; label: string; pillar: string; score: number }>;
+    voting_url: string; voting_token: string;
+    pillar_scores: Record<string, number>;
+  }>(null);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    setLoading(true); setError(''); setResult(null);
+    try {
+      const body = {
+        client_name: form.client_name,
+        deal_size: form.deal_size || undefined,
+        industry: form.industry || undefined,
+        duration_months: form.duration_months ? Number(form.duration_months) : undefined,
+        risk: Number(form.risk),
+        competitors: form.competitors.split(',').map(s => s.trim()).filter(Boolean),
+        rfp_summary: form.rfp_summary || undefined,
+        strategy_memo: form.strategy_memo || undefined,
+        voting_days: Number(form.voting_days),
+        sub_scores: scores,
+      };
+      const res = await fetch('/api/admin/rfp-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Unknown error');
+      setResult(data);
+    } catch (e: unknown) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const input = (label: string, key: keyof typeof form, type = 'text') => (
+    <div style={{ marginBottom: '12px' }}>
+      <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>
+        {label}
+      </label>
+      <input
+        type={type} value={form[key]}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+        style={{
+          width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+          color: 'var(--text)', padding: '8px 10px', borderRadius: '4px', fontSize: '13px',
+          fontFamily: 'inherit', boxSizing: 'border-box',
+        }}
+      />
+    </div>
+  );
+
+  const probColor = (p: number) => p >= 60 ? 'var(--green)' : p >= 40 ? 'var(--yellow)' : 'var(--red)';
+
+  return (
+    <div style={{ maxWidth: '960px' }}>
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '13px', color: 'var(--cyan)', marginBottom: '4px' }}>
+          RFP 분석 → 딜 등록 & 수주 확률 산정
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+          RFP 분석 결과를 15개 Sub-Factor 점수로 입력하면 4-Method Ensemble로 수주 확률을 계산하고 팀 투표 링크를 생성합니다.
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        {/* 기본 정보 */}
+        <div>
+          <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '12px', letterSpacing: '1px' }}>
+            DEAL INFO
+          </div>
+          {input('고객사명', 'client_name')}
+          {input('사업 규모', 'deal_size')}
+          {input('산업', 'industry')}
+          {input('사업 기간 (개월)', 'duration_months', 'number')}
+          {input('리스크 레벨 (1-5)', 'risk', 'number')}
+          {input('경쟁사 (쉼표 구분)', 'competitors')}
+          {input('투표 기간 (일)', 'voting_days', 'number')}
+
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>
+              RFP 배경 요약
+            </label>
+            <textarea
+              value={form.rfp_summary}
+              onChange={e => setForm(f => ({ ...f, rfp_summary: e.target.value }))}
+              rows={4}
+              style={{
+                width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+                color: 'var(--text)', padding: '8px 10px', borderRadius: '4px', fontSize: '12px',
+                fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical',
+              }}
+            />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>
+              전략 메모
+            </label>
+            <textarea
+              value={form.strategy_memo}
+              onChange={e => setForm(f => ({ ...f, strategy_memo: e.target.value }))}
+              rows={4}
+              style={{
+                width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+                color: 'var(--text)', padding: '8px 10px', borderRadius: '4px', fontSize: '12px',
+                fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Sub-Factor 점수 */}
+        <div>
+          <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '12px', letterSpacing: '1px' }}>
+            15-FACTOR SCORES (1–10)
+          </div>
+          {SUB_FACTORS.map(f => {
+            const pillarColors: Record<string, string> = {
+              S: '#7c3aed', V: '#0ea5e9', D: '#10b981', P: '#f59e0b', E: '#ef4444',
+            };
+            const col = pillarColors[f.pillar] ?? 'var(--cyan)';
+            return (
+              <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <span style={{
+                  fontFamily: 'IBM Plex Mono', fontSize: '10px', color: col,
+                  width: '16px', textAlign: 'center',
+                }}>{f.pillar}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1, minWidth: 0 }}>{f.label}</span>
+                <input
+                  type="range" min={1} max={10} step={1}
+                  value={scores[f.id] ?? 5}
+                  onChange={e => setScores(s => ({ ...s, [f.id]: Number(e.target.value) }))}
+                  style={{ width: '100px', accentColor: col }}
+                />
+                <span style={{
+                  fontFamily: 'IBM Plex Mono', fontSize: '13px',
+                  color: (scores[f.id] ?? 5) >= 7 ? 'var(--green)' : (scores[f.id] ?? 5) >= 4 ? 'var(--yellow)' : 'var(--red)',
+                  width: '20px', textAlign: 'right',
+                }}>{scores[f.id] ?? 5}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 등록 버튼 */}
+      <div style={{ marginTop: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <button
+          onClick={handleSubmit} disabled={loading}
+          style={{
+            padding: '12px 32px', background: loading ? 'var(--surface2)' : 'var(--cyan)',
+            color: loading ? 'var(--text-dim)' : '#000', border: 'none', borderRadius: '4px',
+            fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '1px',
+          }}>
+          {loading ? 'CALCULATING...' : '딜 등록 & 확률 산출'}
+        </button>
+        {error && <span style={{ color: 'var(--red)', fontSize: '13px' }}>{error}</span>}
+      </div>
+
+      {/* 결과 */}
+      {result && (
+        <div style={{ marginTop: '32px', padding: '24px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '48px', fontWeight: 700, color: probColor(result.probability) }}>
+              {result.probability.toFixed(1)}%
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>수주 확률 (4-Method Ensemble)</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+                CI {result.confidence_interval.low.toFixed(0)}% – {result.confidence_interval.high.toFixed(0)}% &nbsp;|&nbsp; Deal #{result.deal_id}
+              </div>
+            </div>
+          </div>
+
+          {/* 4-Method Breakdown */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+            {Object.entries(result.method_probs).map(([k, v]) => (
+              <div key={k} style={{ padding: '12px', background: 'var(--surface2)', borderRadius: '6px', textAlign: 'center' }}>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>
+                  {k.toUpperCase()}
+                </div>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '20px', color: probColor(v as number) }}>
+                  {(v as number).toFixed(1)}%
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 약점 Top 3 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--red)', fontFamily: 'IBM Plex Mono', marginBottom: '10px', letterSpacing: '1px' }}>
+              ⚠ TOP 3 WEAKNESSES
+            </div>
+            {result.weaknesses.map((w, i) => (
+              <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--red)', width: '20px' }}>
+                  {i + 1}
+                </span>
+                <span style={{ fontSize: '13px', color: 'var(--text)', flex: 1 }}>{w.label}</span>
+                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: 'var(--yellow)' }}>
+                  [{w.pillar}] {w.score}/10
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* 투표 링크 */}
+          <div style={{ padding: '16px', background: 'rgba(0,212,255,0.08)', border: '1px solid var(--cyan)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '8px', letterSpacing: '1px' }}>
+              TEAM VOTING LINK
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <code style={{ fontSize: '13px', color: 'var(--text)', flex: 1, wordBreak: 'break-all' }}>
+                {typeof window !== 'undefined' ? window.location.origin : ''}{result.voting_url}
+              </code>
+              <button
+                onClick={() => navigator.clipboard.writeText(
+                  (typeof window !== 'undefined' ? window.location.origin : '') + result.voting_url
+                )}
+                style={{
+                  padding: '6px 14px', background: 'var(--cyan)', color: '#000',
+                  border: 'none', borderRadius: '4px', fontFamily: 'IBM Plex Mono',
+                  fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap',
+                }}>
+                COPY
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Vote Analysis Tab ────────────────────────────────────────────────────────
+
+interface VoteTally {
+  deal_id: number;
+  client_name: string;
+  voter_count: number;
+  vote_count: number;
+  subs: Record<string, number>;
+  spread: Record<string, number>;
+  average_spread: number;
+  pillar_scores: Record<string, number>;
+  probability: number;
+  confidence_interval: { p5: number; p95: number };
+  conflicts: Array<{ subFactorId: string; highRole: string; highVoter: string; highScore: number; lowRole: string; lowVoter: string; lowScore: number; gap: number; message: string }>;
+  heatmap: Array<{ voter_id: number; voter_name: string; role: string; scores: Record<string, number> }>;
+}
+
+const PILLAR_COLORS: Record<string, string> = { S: '#7c3aed', V: '#0ea5e9', D: '#10b981', P: '#f59e0b', E: '#ef4444' };
+
+function scoreColor(score: number): string {
+  if (score >= 8) return 'rgba(16,185,129,0.25)';
+  if (score >= 6) return 'rgba(0,212,255,0.15)';
+  if (score >= 4) return 'rgba(245,158,11,0.20)';
+  return 'rgba(239,68,68,0.25)';
+}
+
+function VoteAnalysisTab() {
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [selectedDeal, setSelectedDeal] = useState<number | null>(null);
+  const [tally, setTally] = useState<VoteTally | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [applyMsg, setApplyMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/deals', { credentials: 'include' }).then(r => r.json()).then(setDeals).catch(() => {});
+  }, []);
+
+  const loadTally = async (dealId: number) => {
+    setLoading(true); setTally(null); setApplyMsg('');
+    const r = await fetch(`/api/vote-tally/${dealId}`, { credentials: 'include' });
+    if (r.ok) setTally(await r.json());
+    setLoading(false);
+  };
+
+  const handleDealChange = (id: number) => { setSelectedDeal(id); loadTally(id); };
+
+  const applyToOfficial = async () => {
+    if (!tally || !selectedDeal) return;
+    setApplyMsg('처리 중...');
+    const res = await fetch('/api/admin/rescore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deal_id: selectedDeal, sub_scores: tally.subs, memo: '투표 가중 평균 점수를 공식 예측에 반영' }),
+      credentials: 'include',
+    });
+    const data = await res.json();
+    if (res.ok) setApplyMsg(`✅ 반영 완료 — 새 확률 ${data.probability.toFixed(1)}%`);
+    else setApplyMsg(`❌ ${data.error}`);
+  };
+
+  const probColor = (p: number) => p >= 60 ? 'var(--green)' : p >= 40 ? 'var(--yellow)' : 'var(--red)';
+
+  return (
+    <div style={{ maxWidth: '1100px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '13px', color: 'var(--cyan)' }}>VOTE ANALYSIS</div>
+        <select
+          value={selectedDeal ?? ''}
+          onChange={e => handleDealChange(Number(e.target.value))}
+          style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)', padding: '6px 10px', borderRadius: '4px', fontSize: '13px' }}
+        >
+          <option value="">딜 선택...</option>
+          {deals.map(d => <option key={d.id} value={d.id}>#{d.id} {d.client_name}</option>)}
+        </select>
+        {loading && <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>LOADING...</span>}
+      </div>
+
+      {tally && (
+        <>
+          {/* 헤더 KPI */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '24px' }}>
+            {[
+              { label: '참여자', value: `${tally.voter_count}명` },
+              { label: '총 투표', value: `${tally.vote_count}건` },
+              { label: '평균 분산', value: tally.average_spread.toFixed(2), warn: tally.average_spread >= 2.0 },
+              { label: '분쟁 항목', value: `${tally.conflicts.length}건`, warn: tally.conflicts.length > 0 },
+              { label: '투표 기반 확률', value: `${(tally.probability * 100).toFixed(1)}%`, color: probColor(tally.probability * 100) },
+            ].map(({ label, value, warn, color }) => (
+              <div key={label} style={{ padding: '14px', background: warn ? 'rgba(239,68,68,0.08)' : 'var(--surface)', border: `1px solid ${warn ? 'var(--red)' : 'var(--border)'}`, borderRadius: '6px', textAlign: 'center' }}>
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginBottom: '4px' }}>{label}</div>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '18px', color: color ?? (warn ? 'var(--red)' : 'var(--text)') }}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 분쟁 경고 */}
+          {tally.conflicts.length > 0 && (
+            <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(245,158,11,0.08)', border: '1px solid var(--yellow)', borderRadius: '6px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--yellow)', fontFamily: 'IBM Plex Mono', marginBottom: '10px', letterSpacing: '1px' }}>⚠ 의견 분쟁 ({tally.conflicts.length}건)</div>
+              {tally.conflicts.map((c, i) => (
+                <div key={i} style={{ fontSize: '12px', color: 'var(--text)', marginBottom: '4px', display: 'flex', gap: '8px' }}>
+                  <span style={{ color: 'var(--yellow)', fontFamily: 'IBM Plex Mono', minWidth: '160px' }}>{c.subFactorId}</span>
+                  <span>{c.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 필라 점수 바 */}
+          <div style={{ marginBottom: '24px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
+            {Object.entries(tally.pillar_scores).map(([p, score]) => {
+              const pct = Math.round((score as number) * 100);
+              return (
+                <div key={p} style={{ padding: '12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: PILLAR_COLORS[p] ?? 'var(--cyan)', marginBottom: '8px' }}>{p} — {(PILLAR_META as Record<string, { label: string }>)[p]?.label ?? p}</div>
+                  <div style={{ height: '6px', background: 'var(--surface2)', borderRadius: '3px', marginBottom: '6px' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: PILLAR_COLORS[p] ?? 'var(--cyan)', borderRadius: '3px' }} />
+                  </div>
+                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '16px', color: 'var(--text)' }}>{pct}%</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 히트맵: 투표자 × Sub-Factor */}
+          {tally.heatmap.length > 0 && (
+            <div style={{ marginBottom: '24px', overflowX: 'auto' }}>
+              <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '10px', letterSpacing: '1px' }}>VOTER HEATMAP</div>
+              <table style={{ borderCollapse: 'collapse', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', background: 'var(--surface)', position: 'sticky', left: 0 }}>역할</th>
+                    <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', background: 'var(--surface)', position: 'sticky', left: 60 }}>이름</th>
+                    {SUB_FACTORS.map(f => (
+                      <th key={f.id} style={{ padding: '4px 6px', color: PILLAR_COLORS[f.pillar] ?? 'var(--text-dim)', fontFamily: 'IBM Plex Mono', fontSize: '9px', background: 'var(--surface)', textAlign: 'center' }}>
+                        {f.label.substring(0, 5)}
+                      </th>
+                    ))}
+                    <th style={{ padding: '4px 8px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', fontSize: '10px', background: 'var(--surface)', textAlign: 'center' }}>평균</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tally.heatmap.map(voter => {
+                    const scores = SUB_FACTORS.map(f => voter.scores[f.id] ?? 0);
+                    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+                    return (
+                      <tr key={voter.voter_id}>
+                        <td style={{ padding: '5px 10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', fontSize: '10px', background: 'var(--surface)', position: 'sticky', left: 0, borderBottom: '1px solid var(--border)' }}>{voter.role}</td>
+                        <td style={{ padding: '5px 10px', color: 'var(--text)', fontSize: '12px', background: 'var(--surface)', position: 'sticky', left: 60, borderBottom: '1px solid var(--border)' }}>{voter.voter_name}</td>
+                        {SUB_FACTORS.map(f => {
+                          const s = voter.scores[f.id];
+                          return (
+                            <td key={f.id} style={{ padding: '5px 6px', textAlign: 'center', background: s != null ? scoreColor(s) : 'transparent', color: s != null ? 'var(--text)' : 'var(--text-dim)', fontFamily: 'IBM Plex Mono', fontSize: '12px', borderBottom: '1px solid var(--border)' }}>
+                              {s ?? '—'}
+                            </td>
+                          );
+                        })}
+                        <td style={{ padding: '5px 8px', textAlign: 'center', fontFamily: 'IBM Plex Mono', fontSize: '12px', color: 'var(--cyan)', borderBottom: '1px solid var(--border)' }}>
+                          {avg.toFixed(1)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* 가중 평균 행 */}
+                  <tr style={{ background: 'rgba(0,212,255,0.06)' }}>
+                    <td colSpan={2} style={{ padding: '6px 10px', fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--cyan)' }}>가중 평균</td>
+                    {SUB_FACTORS.map(f => {
+                      const s = tally.subs[f.id];
+                      return (
+                        <td key={f.id} style={{ padding: '5px 6px', textAlign: 'center', background: s != null ? scoreColor(s) : 'transparent', fontFamily: 'IBM Plex Mono', fontSize: '12px', color: 'var(--cyan)', fontWeight: 700 }}>
+                          {s?.toFixed(1) ?? '—'}
+                        </td>
+                      );
+                    })}
+                    <td style={{ padding: '5px 8px', textAlign: 'center', fontFamily: 'IBM Plex Mono', fontSize: '12px', color: 'var(--cyan)', fontWeight: 700 }}>
+                      {(Object.values(tally.subs).reduce((a, b) => a + b, 0) / Object.values(tally.subs).length).toFixed(1)}
+                    </td>
+                  </tr>
+                  {/* 분산 행 */}
+                  <tr>
+                    <td colSpan={2} style={{ padding: '6px 10px', fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)' }}>분산 (σ)</td>
+                    {SUB_FACTORS.map(f => {
+                      const sp = tally.spread[f.id] ?? 0;
+                      return (
+                        <td key={f.id} style={{ padding: '5px 6px', textAlign: 'center', fontFamily: 'IBM Plex Mono', fontSize: '11px', color: sp >= 2 ? 'var(--red)' : 'var(--text-dim)' }}>
+                          {sp.toFixed(1)}{sp >= 2 ? '⚠' : ''}
+                        </td>
+                      );
+                    })}
+                    <td style={{ padding: '5px 8px', textAlign: 'center', fontFamily: 'IBM Plex Mono', fontSize: '11px', color: tally.average_spread >= 2 ? 'var(--red)' : 'var(--text-dim)' }}>
+                      {tally.average_spread.toFixed(2)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* 공식 예측 반영 버튼 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <button onClick={applyToOfficial} style={{ padding: '10px 24px', background: 'var(--cyan)', color: '#000', border: 'none', borderRadius: '4px', fontFamily: 'IBM Plex Mono', fontSize: '12px', fontWeight: 700, cursor: 'pointer', letterSpacing: '1px' }}>
+              투표 결과 → 공식 예측 반영
+            </button>
+            {applyMsg && <span style={{ fontSize: '13px', color: applyMsg.startsWith('✅') ? 'var(--green)' : 'var(--red)' }}>{applyMsg}</span>}
+          </div>
+        </>
+      )}
+
+      {!tally && !loading && selectedDeal && (
+        <div style={{ color: 'var(--text-dim)', fontSize: '13px', padding: '40px', textAlign: 'center' }}>투표 데이터가 없습니다.</div>
+      )}
+    </div>
+  );
+}
+
+// ─── Manual Edit Tab ──────────────────────────────────────────────────────────
+
+interface PredictionRow {
+  id: number;
+  sub_scores: Record<string, number> | null;
+  predicted_probability: number;
+  created_at: string;
+}
+
+function ManualEditTab() {
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [selectedDeal, setSelectedDeal] = useState<number | null>(null);
+  const [latestPred, setLatestPred] = useState<PredictionRow | null>(null);
+  const [scores, setScores] = useState<Record<string, number>>({});
+  const [memo, setMemo] = useState('');
+  const [traces, setTraces] = useState<Array<{ id: number; stage: string; decision: string; rationale: string; created_at: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ probability: number; method_probs: Record<string, number>; confidence_interval: { low: number; high: number }; weaknesses: Array<{ id: string; label: string; pillar: string; score: number }> } | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/deals', { credentials: 'include' }).then(r => r.json()).then(setDeals).catch(() => {});
+  }, []);
+
+  const loadDeal = async (dealId: number) => {
+    setLoading(true); setResult(null); setError(''); setLatestPred(null);
+    try {
+      const [predRes, traceRes] = await Promise.all([
+        fetch(`/api/admin/deals/${dealId}/latest-prediction`, { credentials: 'include' }),
+        fetch(`/api/admin/deals/${dealId}/traces`, { credentials: 'include' }),
+      ]);
+      if (predRes.ok) {
+        const pred = await predRes.json();
+        setLatestPred(pred);
+        setScores(pred.sub_scores ?? Object.fromEntries(SUB_FACTORS.map(f => [f.id, 5])));
+      } else {
+        setScores(Object.fromEntries(SUB_FACTORS.map(f => [f.id, 5])));
+      }
+      if (traceRes.ok) setTraces(await traceRes.json());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDealChange = (id: number) => { setSelectedDeal(id); loadDeal(id); };
+
+  const handleSave = async () => {
+    if (!selectedDeal) return;
+    setSaving(true); setError(''); setResult(null);
+    const res = await fetch('/api/admin/rescore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deal_id: selectedDeal, sub_scores: scores, memo: memo || undefined }),
+      credentials: 'include',
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setResult(data);
+      setMemo('');
+      loadDeal(selectedDeal);
+    } else {
+      setError(data.error ?? 'Unknown error');
+    }
+    setSaving(false);
+  };
+
+  const probColor = (p: number) => p >= 60 ? 'var(--green)' : p >= 40 ? 'var(--yellow)' : 'var(--red)';
+
+  return (
+    <div style={{ maxWidth: '1000px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '13px', color: 'var(--cyan)' }}>MANUAL EDIT</div>
+        <select
+          value={selectedDeal ?? ''}
+          onChange={e => handleDealChange(Number(e.target.value))}
+          style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)', padding: '6px 10px', borderRadius: '4px', fontSize: '13px' }}
+        >
+          <option value="">딜 선택...</option>
+          {deals.map(d => (
+            <option key={d.id} value={d.id}>#{d.id} {d.client_name} {d.predicted_probability != null ? `(${d.predicted_probability.toFixed(1)}%)` : ''}</option>
+          ))}
+        </select>
+        {loading && <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>LOADING...</span>}
+      </div>
+
+      {selectedDeal && !loading && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          {/* 왼쪽: Sub-Factor 슬라이더 */}
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '12px', letterSpacing: '1px' }}>
+              15-FACTOR SCORES
+              {latestPred && (
+                <span style={{ marginLeft: '12px', color: 'var(--text-dim)', fontSize: '10px' }}>
+                  현재 예측: {latestPred.predicted_probability.toFixed(1)}% (예측 #{latestPred.id})
+                </span>
+              )}
+            </div>
+            {SUB_FACTORS.map(f => {
+              const col = PILLAR_COLORS[f.pillar] ?? 'var(--cyan)';
+              const val = scores[f.id] ?? 5;
+              return (
+                <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '9px' }}>
+                  <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: col, width: '16px', textAlign: 'center' }}>{f.pillar}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.label}</span>
+                  <input
+                    type="range" min={1} max={10} step={1} value={val}
+                    onChange={e => setScores(s => ({ ...s, [f.id]: Number(e.target.value) }))}
+                    style={{ width: '100px', accentColor: col }}
+                  />
+                  <span style={{
+                    fontFamily: 'IBM Plex Mono', fontSize: '13px', width: '20px', textAlign: 'right',
+                    color: val >= 7 ? 'var(--green)' : val >= 4 ? 'var(--yellow)' : 'var(--red)',
+                  }}>{val}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 오른쪽: 메모 + 이력 + 결과 */}
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginBottom: '12px', letterSpacing: '1px' }}>편집 메모 (전략 레포트)</div>
+            <textarea
+              value={memo}
+              onChange={e => setMemo(e.target.value)}
+              placeholder="이번 점수 수정 이유, 전략 변경 사항, 추가 인사이트..."
+              rows={5}
+              style={{
+                width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+                color: 'var(--text)', padding: '10px', borderRadius: '4px', fontSize: '12px',
+                fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical', marginBottom: '16px',
+              }}
+            />
+
+            <button
+              onClick={handleSave} disabled={saving}
+              style={{
+                width: '100%', padding: '12px', background: saving ? 'var(--surface2)' : 'var(--cyan)',
+                color: saving ? 'var(--text-dim)' : '#000', border: 'none', borderRadius: '4px',
+                fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
+                marginBottom: '16px',
+              }}
+            >
+              {saving ? 'RECALCULATING...' : '저장 & 재계산'}
+            </button>
+
+            {error && <div style={{ color: 'var(--red)', fontSize: '13px', marginBottom: '12px' }}>{error}</div>}
+
+            {result && (
+              <div style={{ padding: '16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', marginBottom: '20px' }}>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '32px', color: probColor(result.probability), marginBottom: '8px' }}>
+                  {result.probability.toFixed(1)}%
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '10px' }}>
+                  CI {result.confidence_interval.low.toFixed(0)}–{result.confidence_interval.high.toFixed(0)}%
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px', marginBottom: '12px' }}>
+                  {Object.entries(result.method_probs).map(([k, v]) => (
+                    <div key={k} style={{ padding: '6px 10px', background: 'var(--surface2)', borderRadius: '4px' }}>
+                      <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', color: 'var(--text-dim)' }}>{k.toUpperCase()}</span>
+                      <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '13px', color: probColor(v as number), marginLeft: '8px' }}>{(v as number).toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--red)', fontFamily: 'IBM Plex Mono', marginBottom: '6px' }}>⚠ TOP WEAKNESSES</div>
+                {result.weaknesses.map((w, i) => (
+                  <div key={w.id} style={{ fontSize: '12px', color: 'var(--text)', marginBottom: '3px' }}>
+                    {i + 1}. [{w.pillar}] {w.label} — {w.score}/10
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 편집 이력 */}
+            {traces.length > 0 && (
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginBottom: '10px', letterSpacing: '1px' }}>편집 이력</div>
+                {traces.slice(0, 5).map(t => (
+                  <div key={t.id} style={{ padding: '10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '4px', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--cyan)' }}>{t.stage} / {t.decision}</span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{new Date(t.created_at).toLocaleDateString('ko-KR')}</span>
+                    </div>
+                    {t.rationale && <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.5 }}>{t.rationale}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

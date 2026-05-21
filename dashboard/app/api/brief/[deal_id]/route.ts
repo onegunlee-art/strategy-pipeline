@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { fetchResearch } from '@/lib/research';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   SubScores, findWeaknesses, migrateLegacySubScores,
   pillarScoreFromSubs, PILLAR_META, PILLAR_IDS,
@@ -22,9 +22,9 @@ export async function POST(
   if (isNaN(dealId)) return NextResponse.json({ error: 'invalid deal_id' }, { status: 400 });
 
   const pool = await getDb();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 503 });
+  const geminiKey = process.env.GEMINI_API_KEY ?? process.env.Gemini_API_Key ?? process.env.GOOGLE_API_KEY;
+  if (!geminiKey) {
+    return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 503 });
   }
 
   // 캐시 확인 (24h 이내) — 즉시 JSON 반환
@@ -85,7 +85,8 @@ export async function POST(
   const pillarScores = pillarScoreFromSubs(subScores);
 
   const encoder = new TextEncoder();
-  const client = new Anthropic({ apiKey });
+  const genAI = new GoogleGenerativeAI(geminiKey);
+  const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
   const readable = new ReadableStream({
     async start(controller) {
@@ -199,18 +200,15 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
   "sources": ["출처 URL 또는 근거 1", "출처 2"]
 }`;
 
-        // 4) Claude 스트리밍
-        const stream = client.messages.stream({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 8192,
-          messages: [{ role: 'user', content: briefPrompt }],
-        });
+        // 4) Gemini 스트리밍
+        const geminiStream = await geminiModel.generateContentStream(briefPrompt);
 
         let briefText = '';
-        for await (const event of stream) {
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            briefText += event.delta.text;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'delta', text: event.delta.text })}\n\n`));
+        for await (const chunk of geminiStream.stream) {
+          const delta = chunk.text();
+          if (delta) {
+            briefText += delta;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'delta', text: delta })}\n\n`));
           }
         }
 
@@ -220,8 +218,11 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
           const clean = briefText.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
           const m = clean.match(/\{[\s\S]*\}/);
           if (m) briefJson = JSON.parse(m[0]);
-        } catch {
+          else throw new Error('no JSON object in response');
+        } catch (parseErr) {
           console.error('[brief] JSON parse failed:', briefText.slice(0, 300));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', message: `AI 응답 파싱 실패 — 다시 시도해 주세요 (${String(parseErr)})` })}\n\n`));
+          return;
         }
 
         const layer2AiContext = {

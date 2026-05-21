@@ -23,8 +23,6 @@ interface Props {
   onResult: (data: PredictResponse & { client_name: string; deal_size: string; competitors: string[]; sub_scores: SubScores }) => void;
 }
 
-// PILLAR_COLORS imported from pillars.ts
-
 interface OpenDeal {
   id: number;
   client_name: string;
@@ -51,7 +49,6 @@ export default function PillarInputTab({ onResult }: Props) {
     fetch('/api/weights').then(r => r.json()).then(d => {
       if (d.competitors) setCompetitors(d.competitors);
     });
-    // 진행 중 딜 (voting 있는 딜) 목록 — voting → predict 통합용
     fetch('/api/portfolio').then(r => r.json()).then(d => {
       if (d.deals) {
         setOpenDeals(d.deals.filter((x: { voter_count: number }) => x.voter_count > 0));
@@ -69,9 +66,9 @@ export default function PillarInputTab({ onResult }: Props) {
         setSubs(d.subs);
         setSelectedDealId(dealId);
         setClientName(d.client_name ?? '');
-        setVoteMsg(`✓ ${d.voter_count}명 voting 결과 불러옴 (avg spread ${d.average_spread?.toFixed(2) ?? '0'})`);
+        setVoteMsg(`${d.voter_count}명 Voting 결과 반영 (평균 spread ${d.average_spread?.toFixed(2) ?? '0'})`);
       } else {
-        setVoteMsg('voting 데이터 없음');
+        setVoteMsg('Voting 데이터 없음');
       }
     } catch {
       setVoteMsg('불러오기 실패');
@@ -124,29 +121,30 @@ export default function PillarInputTab({ onResult }: Props) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* VOTING → PREDICT */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+      {/* Voting 자동 입력 */}
       {openDeals.length > 0 && (
-        <Card title="VOTING 결과로 자동 입력 (선택사항)">
-          <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px' }}>
-            voting이 진행 중인 딜을 클릭하면 12개 sub-factor가 역할 가중평균으로 자동 채워집니다.
-          </div>
+        <Card title="Voting 결과로 자동 입력 (선택사항)">
+          <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '12px', margin: '0 0 12px' }}>
+            진행 중인 딜을 선택하면 팀 Voting 평균으로 Sub-Factor가 자동 채워집니다.
+          </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {openDeals.slice(0, 8).map(d => {
               const active = selectedDealId === d.id;
               return (
                 <button key={d.id} onClick={() => loadFromVoting(d.id)} disabled={loadingVote}
                   style={{
-                    padding: '8px 12px', borderRadius: '8px',
-                    background: active ? 'var(--cyan)' : 'var(--surface2)',
-                    color: active ? '#000' : 'var(--text)',
-                    border: '1px solid ' + (active ? 'var(--cyan)' : 'var(--border)'),
+                    padding: '6px 14px', borderRadius: '2px',
+                    background: active ? 'var(--brand)' : 'transparent',
+                    color: active ? '#fff' : 'var(--text-mid)',
+                    border: '1px solid ' + (active ? 'var(--brand)' : 'var(--border)'),
                     fontSize: '12px', cursor: loadingVote ? 'wait' : 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '6px',
+                    fontFamily: 'var(--font-sans)',
                   }}>
-                  <span>{d.client_name}</span>
-                  <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', opacity: 0.7 }}>
-                    ({d.voter_count}명)
+                  {d.client_name}
+                  <span style={{ fontSize: '10px', opacity: 0.7, marginLeft: '6px' }}>
+                    {d.voter_count}명
                   </span>
                 </button>
               );
@@ -158,33 +156,32 @@ export default function PillarInputTab({ onResult }: Props) {
         </Card>
       )}
 
-      {/* CLIENT INFO */}
-      <Card title="CLIENT INFO">
+      {/* Client Info */}
+      <Card title="Client Info">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          <Input label="고객사명 *" value={clientName} onChange={setClientName} placeholder="예: KT 엔터프라이즈" />
+          <Input label="고객사명 *" value={clientName} onChange={setClientName} placeholder="예: 하나은행" />
           <Input label="딜 규모" value={dealSize} onChange={setDealSize} placeholder="예: 50억" />
-          <Input label="산업" value={industry} onChange={setIndustry} placeholder="예: 공공/국방" />
+          <Input label="산업" value={industry} onChange={setIndustry} placeholder="예: 금융" />
           <Input label="예상 매출 (억)" value={expectedRevenue} onChange={setExpectedRevenue} placeholder="예: 50" />
         </div>
       </Card>
 
-      {/* COMPETITORS */}
-      <Card title="COMPETITORS (다중 선택)">
+      {/* Competitors */}
+      <Card title="경쟁사 (다중 선택)">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {competitors.map(c => {
             const active = selectedCompIds.has(c.id);
             return (
               <button key={c.id} onClick={() => toggleComp(c.id)}
                 style={{
-                  padding: '8px 14px', borderRadius: '20px',
-                  background: active ? 'var(--cyan)' : 'var(--surface2)',
-                  color: active ? '#000' : 'var(--text)',
-                  border: active ? 'none' : '1px solid var(--border)',
+                  padding: '6px 14px', borderRadius: '2px',
+                  background: active ? 'var(--brand)' : 'transparent',
+                  color: active ? '#fff' : 'var(--text-mid)',
+                  border: '1px solid ' + (active ? 'var(--brand)' : 'var(--border)'),
                   fontSize: '12px', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '6px',
                 }}>
-                <span>{c.name}</span>
-                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', opacity: 0.7 }}>
+                {c.name}
+                <span style={{ fontSize: '10px', opacity: 0.65, marginLeft: '6px', fontFamily: 'var(--font-num)' }}>
                   {Math.round(c.current_elo)}
                 </span>
               </button>
@@ -193,36 +190,45 @@ export default function PillarInputTab({ onResult }: Props) {
         </div>
       </Card>
 
-      {/* 4-PILLAR SCORES */}
-      <Card title="4-PILLAR DIAGNOSIS (Win Ratio = V × P × D × E)">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+      {/* 5-Pillar Diagnosis */}
+      <Card title="5-Pillar 진단">
+        {/* 점수 요약 카드 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '28px' }}>
           {PILLAR_IDS.map(p => (
             <div key={p} style={{
-              padding: '14px', borderRadius: '8px',
-              background: 'var(--surface2)', borderLeft: `3px solid ${PILLAR_COLORS[p]}`,
+              padding: '14px 12px',
+              background: 'var(--surface2)',
+              borderTop: `3px solid ${PILLAR_COLORS[p]}`,
             }}>
-              <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: PILLAR_COLORS[p], letterSpacing: '1px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 600, color: PILLAR_COLORS[p], letterSpacing: '1px', textTransform: 'uppercase' as const }}>
                 {p}
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-mid)', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
                 {PILLAR_META[p].label}
               </div>
-              <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '22px', color: PILLAR_COLORS[p], marginTop: '8px' }}>
+              <div style={{ fontFamily: 'var(--font-num)', fontSize: '24px', color: PILLAR_COLORS[p], marginTop: '8px', fontWeight: 600 }}>
                 {(pillarScores[p] * 100).toFixed(0)}
               </div>
-              <div style={{ height: '4px', background: 'var(--border)', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
+              <div style={{ height: '3px', background: 'var(--border)', marginTop: '6px', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${pillarScores[p] * 100}%`, background: PILLAR_COLORS[p] }} />
               </div>
             </div>
           ))}
         </div>
 
+        {/* Sub-factor 슬라이더 */}
         {PILLAR_IDS.map(p => (
           <div key={p} style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{ width: '20px', height: '2px', background: PILLAR_COLORS[p] }} />
-              <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: PILLAR_COLORS[p], letterSpacing: '1px' }}>
-                {p} — {PILLAR_META[p].label}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              marginBottom: '14px', paddingBottom: '8px',
+              borderBottom: `1.5px solid ${PILLAR_COLORS[p]}`,
+            }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: PILLAR_COLORS[p], letterSpacing: '1px', textTransform: 'uppercase' as const }}>
+                {p}
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-mid)' }}>
+                {PILLAR_META[p].label}
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -235,20 +241,24 @@ export default function PillarInputTab({ onResult }: Props) {
       </Card>
 
       {error && (
-        <div style={{ background: 'rgba(255,68,102,0.1)', border: '1px solid var(--red)', borderRadius: '8px', padding: '12px', color: 'var(--red)', fontSize: '13px' }}>
+        <div style={{
+          background: 'rgba(204,34,34,0.06)', border: '1px solid var(--red)',
+          borderRadius: '2px', padding: '12px 16px', color: 'var(--red)', fontSize: '13px',
+        }}>
           {error}
         </div>
       )}
 
       <button onClick={handleSubmit} disabled={loading}
         style={{
-          width: '100%', padding: '16px', borderRadius: '10px', border: 'none',
+          width: '100%', padding: '14px', border: 'none',
           cursor: loading ? 'wait' : 'pointer',
-          background: loading ? 'var(--surface2)' : 'var(--cyan)',
-          color: loading ? 'var(--text-dim)' : '#000',
-          fontFamily: 'IBM Plex Mono', fontSize: '13px', fontWeight: 600, letterSpacing: '1px',
+          background: loading ? 'var(--surface2)' : 'var(--brand)',
+          color: loading ? 'var(--text-dim)' : '#fff',
+          fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 600,
+          letterSpacing: '0.5px', borderRadius: '2px',
         }}>
-        {loading ? 'CALCULATING (4-METHOD ENSEMBLE)...' : '▶  ENSEMBLE 확률 계산'}
+        {loading ? '분석 중...' : 'Ensemble 확률 계산'}
       </button>
     </div>
   );
@@ -256,8 +266,12 @@ export default function PillarInputTab({ onResult }: Props) {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px' }}>
-      <div style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '11px', letterSpacing: '2px', marginBottom: '16px' }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '2px', padding: '28px 32px' }}>
+      <div style={{
+        fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px',
+        textTransform: 'uppercase' as const, color: 'var(--brand)',
+        borderBottom: '1.5px solid var(--brand)', paddingBottom: '8px', marginBottom: '20px',
+      }}>
         {title}
       </div>
       {children}
@@ -265,17 +279,23 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-function Input({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+function Input({ label, value, onChange, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
   return (
     <div>
-      <label style={{ fontSize: '12px', color: 'var(--text-mid)', display: 'block', marginBottom: '6px' }}>{label}</label>
+      <label style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-mid)', display: 'block', marginBottom: '6px' }}>
+        {label}
+      </label>
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         style={{
-          width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
-          borderRadius: '8px', padding: '10px 14px', color: 'var(--text)', fontSize: '14px', outline: 'none',
+          width: '100%', background: 'var(--surface2)',
+          border: '1px solid var(--border)', borderRadius: '2px',
+          padding: '9px 12px', color: 'var(--text)', fontSize: '13px', outline: 'none',
+          fontFamily: 'var(--font-sans)',
         }}
       />
     </div>
@@ -294,19 +314,20 @@ function SubFactorRow({ factor, value, onChange, color }: {
           {[2, 5, 8].map((q, i) => (
             <button key={q} onClick={() => onChange(q)}
               style={{
-                padding: '2px 8px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', border: 'none',
+                padding: '2px 8px', borderRadius: '2px', fontSize: '10px', cursor: 'pointer', border: 'none',
                 background: value === q ? color : 'var(--surface2)',
-                color: value === q ? '#000' : 'var(--text-dim)',
+                color: value === q ? '#fff' : 'var(--text-dim)',
+                fontFamily: 'var(--font-sans)',
               }}>
               {['Low', 'Mid', 'High'][i]}
             </button>
           ))}
-          <span style={{ fontFamily: 'IBM Plex Mono', color, fontSize: '15px', fontWeight: 600, minWidth: '24px', textAlign: 'right' }}>
+          <span style={{ fontFamily: 'var(--font-num)', color, fontSize: '15px', fontWeight: 600, minWidth: '22px', textAlign: 'right' as const }}>
             {value}
           </span>
         </div>
       </div>
-      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>{factor.description}</div>
+      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '6px' }}>{factor.description}</div>
       <input type="range" min={1} max={10} step={1} value={value} onChange={e => onChange(Number(e.target.value))} />
     </div>
   );

@@ -1,7 +1,7 @@
-// 재학습: Pillar weight + Ensemble weight + Sub-factor weight (Claude)
+// 재학습: Pillar weight + Ensemble weight + Sub-factor weight (Gemini)
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SUB_FACTORS, SubFactorId, PillarId, PILLAR_META } from '@/lib/pillars';
 import { learnEnsembleWeights, TrainingCase, MethodProbs, brierScore } from '@/lib/ensemble';
 
@@ -118,17 +118,17 @@ JSON 형식만 출력:
   "reasoning": "한국어 2-3문장 핵심 이유"
 }`;
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
+    const geminiKey = process.env.GEMINI_API_KEY ?? process.env.Gemini_API_Key ?? process.env.GOOGLE_API_KEY;
+    if (!geminiKey) {
+      return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 503 });
+    }
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) {
-      return NextResponse.json({ ok: false, message: 'Claude 응답 파싱 실패', raw: text }, { status: 500 });
+      return NextResponse.json({ ok: false, message: 'Gemini 응답 파싱 실패', raw: text }, { status: 500 });
     }
     const parsed = JSON.parse(match[0]) as {
       pillar_weights: Record<PillarId, number>;

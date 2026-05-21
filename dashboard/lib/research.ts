@@ -1,8 +1,6 @@
 // 외부 리서치 라이브러리 — Google Gemini 2.5 Pro + Search Grounding
-// GEMINI_API_KEY 없을 때 Claude + web_search 폴백
 // 캐시: external_research 테이블 (UNIQUE deal_id + topic)
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import Anthropic from '@anthropic-ai/sdk';
 import type { Pool } from 'pg';
 import type { SubFactorId } from './pillars';
 
@@ -212,32 +210,6 @@ export async function fetchResearch(
       text = resp.response.text();
     } catch (e) {
       console.error('[research] Gemini error:', e);
-    }
-  }
-
-  // 2b) Claude + web_search 폴백 (Gemini 결과 없을 때)
-  if (!text) {
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicKey) {
-      return { text: '', json: null, cached: false, source: 'unavailable' };
-    }
-    try {
-      const client = new Anthropic({ apiKey: anthropicKey });
-
-      const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
-      const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
-        messages,
-      });
-      const textBlocks = response.content.filter(
-        (b): b is Anthropic.TextBlock => b.type === 'text'
-      );
-      if (textBlocks.length > 0) text = textBlocks.map(b => b.text).join('');
-      source = useGrounding ? 'claude-web-search' : 'claude-internal';
-    } catch (e) {
-      console.error('[research] Claude fallback error:', e);
-      return { text: '', json: null, cached: false, source: 'error' };
     }
   }
 

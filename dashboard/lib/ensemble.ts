@@ -17,10 +17,10 @@ export interface EnsembleWeights {
 }
 
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  pillar: 0.45,      // KT 4-Pillar 본질 — 가장 큰 비중
-  bayesian: 0.30,    // 시장/산업 base rate — 경험치 보정
+  pillar: 0.30,      // KT 4-Pillar 본질 (재보정: 과대산정 방지로 비중 축소)
+  bayesian: 0.40,    // 시장/산업 base rate — 경험치 보정 (비중 확대)
   elo: 0.20,         // 경쟁구도 — 대칭 압력
-  monteCarlo: 0.05,  // 불확실성 레이어 — confidence modifier
+  monteCarlo: 0.10,  // 불확실성 레이어 — confidence modifier
 };
 
 export function ensemble(probs: MethodProbs, weights: EnsembleWeights = DEFAULT_WEIGHTS): number {

@@ -37,13 +37,11 @@ interface StrategyCard {
   kt_framework_reference?: string;
 }
 
-// PILLAR_COLORS imported from pillars.ts
-
 const METHOD_LABELS: Record<string, { label: string; desc: string }> = {
-  pillar: { label: 'A. Pillar Multiplication', desc: 'KT 4축 곱셈 모델' },
-  bayesian: { label: 'B. Bayesian Update', desc: '과거 base rate × 현재 evidence' },
-  elo: { label: 'C. Competitor Elo', desc: '경쟁사 Elo 매치업' },
-  monteCarlo: { label: 'D. Monte Carlo', desc: '불확실성 10,000회 시뮬' },
+  pillar:     { label: 'A. Pillar Multiplication', desc: 'KT 5축 곱셈 모델' },
+  bayesian:   { label: 'B. Bayesian Update',       desc: '과거 base rate × 현재 evidence' },
+  elo:        { label: 'C. Competitor Elo',         desc: '경쟁사 Elo 매치업' },
+  monteCarlo: { label: 'D. Monte Carlo',            desc: '불확실성 10,000회 시뮬' },
 };
 
 interface Props {
@@ -51,14 +49,10 @@ interface Props {
   onOutcome: (r: 1 | 0) => void;
 }
 
-// 괄호 깊이 추적으로 완전한 JSON 배열만 추출 (greedy regex 대체)
-// 잘린 JSON이면 null 반환 → "잘린 응답" 에러로 구분
 function extractJsonArray(text: string): string | null {
   const start = text.indexOf('[');
   if (start === -1) return null;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
+  let depth = 0; let inString = false; let escaped = false;
   for (let i = start; i < text.length; i++) {
     const ch = text[i];
     if (escaped) { escaped = false; continue; }
@@ -77,150 +71,140 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
   const [streamingText, setStreamingText] = useState('');
   const [strategyError, setStrategyError] = useState<string | null>(null);
   const [outcomeSaved, setOutcomeSaved] = useState(false);
-  const [briefLoading, setBriefLoading] = useState(false);
 
   const generateStrategy = async () => {
-    setLoading(true);
-    setStreamingText('');
-    setStrategyError(null);
+    setLoading(true); setStreamingText(''); setStrategyError(null);
     try {
       const res = await fetch(`/api/strategy/${result.deal_id}`, { method: 'POST' });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        setStrategyError((e as { error?: string }).error ?? `HTTP ${res.status}`);
+        return;
+      }
       if (!res.body) throw new Error('no stream body');
-
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let accumulated = '';
-      let buf = '';
-
+      let accumulated = ''; let buf = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
-
-        const lines = buf.split('\n');
-        buf = lines.pop() ?? '';
-
+        const lines = buf.split('\n'); buf = lines.pop() ?? '';
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
-          const payload = line.slice(6).trim();
           try {
-            const ev = JSON.parse(payload);
-            if (ev.type === 'delta') {
-              accumulated += ev.text;
-              setStreamingText(accumulated);
-            } else if (ev.type === 'done' || ev.type === 'error') {
-              const clean = accumulated
-                .replace(/```json\s*/gi, '')
-                .replace(/```\s*/g, '');
+            const ev = JSON.parse(line.slice(6).trim());
+            if (ev.type === 'delta') { accumulated += ev.text; setStreamingText(accumulated); }
+            else if (ev.type === 'done' || ev.type === 'error') {
+              const clean = accumulated.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
               const jsonStr = extractJsonArray(clean);
               if (jsonStr) {
-                try {
-                  setCards(JSON.parse(jsonStr));
-                } catch {
-                  setStrategyError('JSON 파싱 실패 — 다시 시도해 주세요');
-                  setCards(null);
-                }
+                try { setCards(JSON.parse(jsonStr)); }
+                catch { setStrategyError('JSON 파싱 실패 — 다시 시도해 주세요'); setCards(null); }
               } else {
-                setStrategyError('응답이 잘렸습니다 — 다시 시도해 주세요');
-                setCards(null);
+                setStrategyError('응답이 잘렸습니다 — 다시 시도해 주세요'); setCards(null);
               }
             }
-          } catch { /* partial JSON line, skip */ }
+          } catch { /* skip */ }
         }
       }
     } catch {
-      setStrategyError('전략 카드 생성 실패 — 다시 시도해 주세요');
-      setCards(null);
-    } finally {
-      setLoading(false);
-      setStreamingText('');
-    }
+      setStrategyError('전략 카드 생성 실패 — 다시 시도해 주세요'); setCards(null);
+    } finally { setLoading(false); setStreamingText(''); }
   };
 
-  const openBrief = async () => {
-    setBriefLoading(true);
-    // Brief 생성 요청 후 새 탭에서 열기
-    try {
-      await fetch(`/api/brief/${result.deal_id}`, { method: 'POST' });
-    } catch { /* brief 페이지에서 재시도 */ }
-    setBriefLoading(false);
-    window.open(`/brief/${result.deal_id}`, '_blank');
-  };
+  const openBrief = () => window.open(`/brief/${result.deal_id}`, '_blank');
 
   const recordOutcome = async (r: 1 | 0) => {
     await fetch('/api/outcome', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deal_id: result.deal_id, actual_result: r }),
     });
-    setOutcomeSaved(true);
-    onOutcome(r);
+    setOutcomeSaved(true); onOutcome(r);
   };
 
-  const probColor = result.probability >= 70 ? 'var(--green)' : result.probability >= 45 ? 'var(--yellow)' : 'var(--red)';
-  const gateRecommendation = result.probability >= 60
-    ? { color: 'var(--green)', text: 'GO — 적극 추진' }
+  const probColor = result.probability >= 70 ? 'var(--green)'
+    : result.probability >= 45 ? 'var(--yellow)' : 'var(--red)';
+  const gate = result.probability >= 60
+    ? { color: 'var(--green)', label: 'GO', text: '적극 추진' }
     : result.probability >= 40
-    ? { color: 'var(--yellow)', text: 'PIVOT — 약점 보강 후 재평가' }
-    : { color: 'var(--red)', text: 'NO-GO 검토 — 자원 효율 우선' };
+    ? { color: 'var(--yellow)', label: 'PIVOT', text: '약점 보강 후 재평가' }
+    : { color: 'var(--red)', label: 'NO-GO', text: '자원 효율 우선 검토' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
       {/* 메인 확률 + Gate */}
       <div style={{
-        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px',
-        padding: '32px', display: 'flex', gap: '24px', alignItems: 'center',
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: '2px', padding: '32px',
+        display: 'flex', gap: '32px', alignItems: 'center',
       }}>
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '2px' }}>
-            ENSEMBLE WIN PROBABILITY
+          <div style={{
+            fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px',
+            textTransform: 'uppercase' as const, color: 'var(--text-dim)', marginBottom: '12px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+          }}>
+            Ensemble Win Probability
             <ConfidenceBadge kind="own_data" label={`자체 ${result.data_points}건`} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '8px' }}>
-            <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '64px', color: probColor, fontWeight: 600, lineHeight: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <span style={{ fontFamily: 'var(--font-num)', fontSize: '72px', color: probColor, fontWeight: 700, lineHeight: 1 }}>
               {result.probability.toFixed(1)}
             </span>
-            <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '20px', color: probColor }}>%</span>
+            <span style={{ fontFamily: 'var(--font-num)', fontSize: '28px', color: probColor, fontWeight: 400 }}>%</span>
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '8px' }}>
-            95% CI: <span style={{ fontFamily: 'IBM Plex Mono', color: 'var(--text-mid)' }}>
-              {result.confidence_interval.low.toFixed(1)} — {result.confidence_interval.high.toFixed(1)}%
+          <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '10px' }}>
+            95% CI:&nbsp;
+            <span style={{ fontFamily: 'var(--font-num)', color: 'var(--text-mid)' }}>
+              {result.confidence_interval.low.toFixed(1)} – {result.confidence_interval.high.toFixed(1)}%
             </span>
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
-            Prior(base rate): {result.prior_base_rate.toFixed(1)}% · 학습 데이터 {result.data_points}건
+            <span style={{ marginLeft: '16px' }}>
+              Base rate: <span style={{ fontFamily: 'var(--font-num)', color: 'var(--text-mid)' }}>{result.prior_base_rate.toFixed(1)}%</span>
+            </span>
+            <span style={{ marginLeft: '16px' }}>
+              학습 데이터: <span style={{ fontFamily: 'var(--font-num)', color: 'var(--text-mid)' }}>{result.data_points}건</span>
+            </span>
           </div>
         </div>
 
+        {/* Gate 추천 */}
         <div style={{
-          padding: '20px', borderRadius: '12px',
-          background: `${gateRecommendation.color}15`, border: `2px solid ${gateRecommendation.color}`,
-          minWidth: '220px',
+          padding: '20px 28px', borderRadius: '2px',
+          background: `${gate.color}0D`, borderLeft: `4px solid ${gate.color}`,
+          minWidth: '200px',
         }}>
-          <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: gateRecommendation.color, letterSpacing: '1px' }}>
-            GATE REVIEW
+          <div style={{
+            fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px',
+            textTransform: 'uppercase' as const, color: gate.color, marginBottom: '6px',
+          }}>
+            Gate Review
           </div>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: gateRecommendation.color, marginTop: '6px' }}>
-            {gateRecommendation.text}
+          <div style={{ fontSize: '18px', fontWeight: 700, color: gate.color }}>
+            {gate.label}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-mid)', marginTop: '4px' }}>
+            {gate.text}
           </div>
         </div>
       </div>
 
-      {/* 분석 모델 분해 (Pillar + Bayesian) */}
-      <Card title="ENSEMBLE BREAKDOWN">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-          {(['pillar', 'bayesian'] as const).map(m => {
+      {/* Ensemble Breakdown */}
+      <Card title="Ensemble Breakdown">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+          {(['pillar', 'bayesian', 'elo', 'monteCarlo'] as const).map(m => {
             const v = result.method_probs[m];
             return (
-              <div key={m} style={{ padding: '16px', background: 'var(--surface2)', borderRadius: '8px' }}>
-                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '1px' }}>
+              <div key={m} style={{ padding: '16px 14px', background: 'var(--surface2)', borderRadius: '2px' }}>
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px', marginBottom: '8px' }}>
                   {METHOD_LABELS[m].label}
                 </div>
-                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '32px', color: 'var(--text)', marginTop: '6px', fontWeight: 600 }}>
+                <div style={{ fontFamily: 'var(--font-num)', fontSize: '28px', color: 'var(--text)', fontWeight: 600 }}>
                   {v.toFixed(1)}%
                 </div>
-                <div style={{ height: '3px', background: 'var(--border)', borderRadius: '2px', marginTop: '10px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${v}%`, background: 'var(--cyan)' }} />
+                <div style={{ height: '2px', background: 'var(--border)', marginTop: '10px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${v}%`, background: 'var(--brand)' }} />
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '8px' }}>
                   {METHOD_LABELS[m].desc}
@@ -232,17 +216,17 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
       </Card>
 
       {/* Pillar Scores */}
-      <Card title="4-PILLAR SCORES">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+      <Card title="Pillar Scores">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '14px' }}>
           {PILLAR_IDS.map(p => (
             <div key={p}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontFamily: 'IBM Plex Mono', color: PILLAR_COLORS[p], fontSize: '12px' }}>{p}</span>
-                <span style={{ fontFamily: 'IBM Plex Mono', color: PILLAR_COLORS[p], fontSize: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: PILLAR_COLORS[p], letterSpacing: '1px' }}>{p}</span>
+                <span style={{ fontFamily: 'var(--font-num)', color: PILLAR_COLORS[p], fontSize: '20px', fontWeight: 600 }}>
                   {(result.pillar_scores[p] * 100).toFixed(0)}
                 </span>
               </div>
-              <div style={{ height: '6px', background: 'var(--border)', borderRadius: '3px', marginTop: '6px', overflow: 'hidden' }}>
+              <div style={{ height: '4px', background: 'var(--border)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${result.pillar_scores[p] * 100}%`, background: PILLAR_COLORS[p] }} />
               </div>
             </div>
@@ -250,29 +234,28 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
         </div>
       </Card>
 
-      {/* Top 3 약점 */}
-      <Card title="TOP 3 WEAKNESSES — 확률을 끌어내리는 sub-factor">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {/* Top 3 약점 + 전략 카드 생성 */}
+      <Card title="약점 분석 — 수주 확률을 끌어내리는 Sub-Factor Top 3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {result.weaknesses.map((w, i) => (
             <div key={w.id} style={{
-              padding: '14px', background: 'var(--surface2)', borderRadius: '8px',
+              padding: '14px 16px', background: 'var(--surface2)',
               borderLeft: `3px solid ${PILLAR_COLORS[w.pillar]}`,
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              borderRadius: '0 2px 2px 0',
             }}>
               <div>
-                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)' }}>
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px', marginBottom: '4px' }}>
                   #{i + 1} · {w.pillar}
                 </div>
-                <div style={{ fontSize: '14px', color: 'var(--text)', marginTop: '4px' }}>
-                  {w.label}
-                </div>
+                <div style={{ fontSize: '14px', color: 'var(--text)', fontWeight: 500 }}>{w.label}</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '20px', color: PILLAR_COLORS[w.pillar] }}>
+              <div style={{ textAlign: 'right' as const }}>
+                <div style={{ fontFamily: 'var(--font-num)', fontSize: '20px', color: PILLAR_COLORS[w.pillar], fontWeight: 600 }}>
                   {w.score}/10
                 </div>
-                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--red)' }}>
-                  {(w.contribution * 100).toFixed(1)}%p
+                <div style={{ fontFamily: 'var(--font-num)', fontSize: '11px', color: 'var(--red)' }}>
+                  −{(w.contribution * 100).toFixed(1)}%p
                 </div>
               </div>
             </div>
@@ -281,63 +264,65 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
 
         {strategyError && (
           <div style={{
-            marginTop: '12px', padding: '10px 12px', borderRadius: '6px',
-            background: 'rgba(239,83,80,0.1)', border: '1px solid var(--red)',
-            fontSize: '12px', color: 'var(--red)',
+            marginTop: '14px', padding: '10px 14px',
+            background: 'rgba(204,34,34,0.06)', border: '1px solid var(--red)',
+            fontSize: '12px', color: 'var(--red)', borderRadius: '2px',
           }}>
             {strategyError}
           </div>
         )}
+
         {!cards && (
           <>
             <button onClick={generateStrategy} disabled={loading}
               style={{
-                marginTop: '16px', width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--cyan)',
-                background: 'transparent', color: loading ? 'var(--text-dim)' : 'var(--cyan)',
-                fontFamily: 'IBM Plex Mono', fontSize: '12px', cursor: loading ? 'wait' : 'pointer',
+                marginTop: '16px', width: '100%', padding: '11px',
+                border: '1px solid var(--brand)', borderRadius: '2px',
+                background: 'transparent',
+                color: loading ? 'var(--text-dim)' : 'var(--brand)',
+                fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 500,
+                cursor: loading ? 'wait' : 'pointer', letterSpacing: '0.5px',
               }}>
-              {loading ? 'SCQA 추론 중...' : '▶  AI 전략 카드 생성 (SCQA)'}
+              {loading ? 'AI 전략 카드 분석 중...' : 'AI 전략 카드 생성 (SCQA)'}
             </button>
             {streamingText && (
               <div style={{
-                marginTop: '12px', padding: '12px', borderRadius: '8px',
+                marginTop: '12px', padding: '12px 14px',
                 background: 'var(--surface2)', border: '1px solid var(--border)',
-                fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)',
-                maxHeight: '120px', overflow: 'hidden', whiteSpace: 'pre-wrap',
-                position: 'relative',
+                fontSize: '11px', color: 'var(--text-dim)',
+                maxHeight: '100px', overflow: 'hidden', whiteSpace: 'pre-wrap' as const,
+                fontFamily: 'var(--font-num)',
               }}>
-                <span style={{ color: 'var(--cyan)', marginRight: '6px' }}>S→C→Q→A</span>
+                <span style={{ color: 'var(--brand)', marginRight: '8px', fontSize: '10px', fontWeight: 600 }}>S→C→Q→A</span>
                 {streamingText.slice(-300)}
-                <span style={{ animation: 'none', opacity: 0.6 }}>▊</span>
+                <span style={{ opacity: 0.5 }}>▊</span>
               </div>
             )}
           </>
         )}
       </Card>
 
-      {/* 전략 카드 — SCQA 좌→우 흐름 */}
+      {/* 전략 카드 */}
       {cards && cards.length > 0 && (
-        <Card title="STRATEGY CARDS — S → C → Q → A">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <Card title="전략 실행 카드 — S → C → Q → A">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {cards.map(card => (
               <div key={card.sub_factor_id} style={{
-                borderRadius: '10px', border: '1px solid var(--border)', overflow: 'hidden',
+                border: '1px solid var(--border)', overflow: 'hidden', borderRadius: '2px',
               }}>
-                {/* 카드 헤더 */}
                 <div style={{
-                  padding: '12px 16px', background: 'var(--surface2)',
+                  padding: '10px 16px', background: 'var(--surface2)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   borderBottom: '1px solid var(--border)',
                 }}>
-                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-mid)', fontWeight: 600 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-mid)' }}>
                     {card.label ?? card.sub_factor_id}
                   </div>
-                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: 'var(--green)', fontWeight: 700 }}>
+                  <div style={{ fontFamily: 'var(--font-num)', fontSize: '12px', color: 'var(--green)', fontWeight: 700 }}>
                     +{card.expected_probability_lift_pp}%p ↑
                   </div>
                 </div>
 
-                {/* S → C → Q → A 4-box 가로 레이아웃 */}
                 {card.reasoning_trace ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.4fr' }}>
                     {([
@@ -346,38 +331,36 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
                       { key: 'question', label: 'Q', title: 'Question', text: card.reasoning_trace.question },
                     ] as const).map(({ key, label, title, text }, idx) => (
                       <div key={key} style={{
-                        padding: '16px',
-                        background: 'var(--surface)',
+                        padding: '14px', background: 'var(--surface)',
                         borderRight: '1px solid var(--border)',
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                           <span style={{
-                            fontFamily: 'IBM Plex Mono', fontSize: '11px', fontWeight: 700,
-                            color: '#fff', background: 'var(--text-mid)',
-                            width: '20px', height: '20px', borderRadius: '4px',
+                            fontSize: '10px', fontWeight: 700, color: '#fff',
+                            background: 'var(--text-mid)',
+                            width: '18px', height: '18px', borderRadius: '2px',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>{label}</span>
-                          <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px' }}>{title}</span>
-                          {idx < 2 && <span style={{ marginLeft: 'auto', color: 'var(--border)', fontSize: '16px', lineHeight: 1 }}>→</span>}
+                          <span style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px' }}>{title}</span>
+                          {idx < 2 && <span style={{ marginLeft: 'auto', color: 'var(--border)', fontSize: '14px' }}>→</span>}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-mid)', lineHeight: 1.65 }}>{text}</div>
                       </div>
                     ))}
-                    {/* A — Answer (Actions) */}
-                    <div style={{ padding: '16px', background: 'var(--surface)' }}>
+                    <div style={{ padding: '14px', background: 'var(--surface)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                         <span style={{
-                          fontFamily: 'IBM Plex Mono', fontSize: '11px', fontWeight: 700,
-                          color: '#fff', background: 'var(--cyan)',
-                          width: '20px', height: '20px', borderRadius: '4px',
+                          fontSize: '10px', fontWeight: 700, color: '#fff',
+                          background: 'var(--brand)',
+                          width: '18px', height: '18px', borderRadius: '2px',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>A</span>
-                        <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px' }}>Actions</span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px' }}>Actions</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {card.actions.map((a, i) => (
                           <div key={i} style={{ fontSize: '12px', color: 'var(--text)', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                            <span style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '13px', lineHeight: '18px', flexShrink: 0 }}>›</span>
+                            <span style={{ color: 'var(--brand)', fontWeight: 600, fontSize: '13px', lineHeight: '18px', flexShrink: 0 }}>›</span>
                             <span style={{ flex: 1 }}>
                               {a.step}
                               <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
@@ -390,15 +373,14 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
                     </div>
                   </div>
                 ) : (
-                  // reasoning_trace 없는 경우: 원인 + 액션만 표시
                   <div style={{ padding: '16px', background: 'var(--surface)' }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-mid)', marginBottom: '12px', fontStyle: 'italic' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-mid)', marginBottom: '12px', fontStyle: 'italic' as const }}>
                       {card.cause_hypothesis}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {card.actions.map((a, i) => (
                         <div key={i} style={{ fontSize: '13px', color: 'var(--text-mid)', display: 'flex', gap: '8px' }}>
-                          <span style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono' }}>›</span>
+                          <span style={{ color: 'var(--brand)', fontWeight: 600 }}>›</span>
                           <span style={{ flex: 1 }}>{a.step}
                             <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '8px' }}>[{a.owner} · {a.duration}]</span>
                           </span>
@@ -409,7 +391,11 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
                 )}
 
                 {card.kt_framework_reference && (
-                  <div style={{ padding: '8px 16px', background: 'var(--surface2)', borderTop: '1px solid var(--border)', fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
+                  <div style={{
+                    padding: '7px 16px', background: 'var(--surface2)',
+                    borderTop: '1px solid var(--border)',
+                    fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.3px',
+                  }}>
                     KT 프레임워크: {card.kt_framework_reference}
                   </div>
                 )}
@@ -419,61 +405,64 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
         </Card>
       )}
 
-      {/* Executive Brief 생성 */}
-      <Card title="EXECUTIVE BRIEF">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+      {/* Executive Brief */}
+      <Card title="Executive Brief">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '12px', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-              Claude Sonnet이 정량 결과 + 외부 리서치 (LG CNS/Samsung SDS 동향, AI 대형 사업, KT 뉴스)를 통합하여 1페이지 임원 요약 + 3페이지 전략 액션을 생성합니다.
+            <div style={{ fontSize: '13px', color: 'var(--text-mid)', lineHeight: 1.7, marginBottom: '10px' }}>
+              정량 결과 + 외부 리서치(경쟁사 동향, AI 대형 사업, KT 뉴스)를 통합하여 1페이지 임원 요약 + 3페이지 전략 액션을 생성합니다.
             </div>
-            <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const }}>
               <ConfidenceBadge kind="own_data" label="정량 분석 포함" />
               <ConfidenceBadge kind="ai_estimate" label="AI 컨텍스트 포함" />
               {result.data_points > 0 && <ConfidenceBadge kind="voting" label="Voting 반영" />}
             </div>
           </div>
-          <button onClick={openBrief} disabled={briefLoading}
+          <button onClick={openBrief}
             style={{
-              padding: '12px 20px', borderRadius: '8px',
-              border: '1px solid var(--cyan)', background: 'transparent',
-              color: briefLoading ? 'var(--text-dim)' : 'var(--cyan)',
-              fontFamily: 'IBM Plex Mono', fontSize: '12px',
-              cursor: briefLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap',
+              padding: '10px 20px', borderRadius: '2px',
+              border: '1px solid var(--brand)', background: 'transparent',
+              color: 'var(--brand)', fontFamily: 'var(--font-sans)',
+              fontSize: '12px', fontWeight: 500,
+              cursor: 'pointer', whiteSpace: 'nowrap' as const,
+              letterSpacing: '0.3px',
             }}>
-            {briefLoading ? '생성 중...' : '📋 Executive Brief 생성'}
+            Executive Brief 생성
           </button>
         </div>
       </Card>
 
-      {/* 결과 기록 */}
+      {/* Outcome 기록 */}
       {!outcomeSaved ? (
-        <Card title="OUTCOME (수주 결과 기록)">
+        <Card title="수주 결과 기록">
           <div style={{ display: 'flex', gap: '12px' }}>
             <button onClick={() => recordOutcome(1)}
               style={{
-                flex: 1, padding: '14px', borderRadius: '8px', border: '1px solid var(--green)',
-                background: 'transparent', color: 'var(--green)',
-                fontFamily: 'IBM Plex Mono', fontSize: '13px', cursor: 'pointer',
+                flex: 1, padding: '12px', borderRadius: '2px',
+                border: '1px solid var(--green)', background: 'transparent',
+                color: 'var(--green)', fontFamily: 'var(--font-sans)',
+                fontSize: '13px', fontWeight: 500, cursor: 'pointer',
               }}>
-              ✓  수주 (WIN)
+              수주 (WIN)
             </button>
             <button onClick={() => recordOutcome(0)}
               style={{
-                flex: 1, padding: '14px', borderRadius: '8px', border: '1px solid var(--red)',
-                background: 'transparent', color: 'var(--red)',
-                fontFamily: 'IBM Plex Mono', fontSize: '13px', cursor: 'pointer',
+                flex: 1, padding: '12px', borderRadius: '2px',
+                border: '1px solid var(--red)', background: 'transparent',
+                color: 'var(--red)', fontFamily: 'var(--font-sans)',
+                fontSize: '13px', fontWeight: 500, cursor: 'pointer',
               }}>
-              ✗  실패 (LOSS)
+              실패 (LOSS)
             </button>
           </div>
         </Card>
       ) : (
         <div style={{
-          padding: '14px', background: 'rgba(102, 187, 106, 0.1)',
-          border: '1px solid var(--green)', borderRadius: '8px',
-          color: 'var(--green)', fontSize: '13px', textAlign: 'center',
+          padding: '14px 16px', background: 'rgba(26, 127, 60, 0.06)',
+          border: '1px solid var(--green)',
+          color: 'var(--green)', fontSize: '13px', textAlign: 'center' as const,
         }}>
-          ✓ 결과 기록 완료 · 경쟁사 Elo 자동 업데이트됨
+          결과 기록 완료 · 경쟁사 Elo 자동 업데이트됨
         </div>
       )}
     </div>
@@ -482,8 +471,12 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px' }}>
-      <div style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '11px', letterSpacing: '2px', marginBottom: '16px' }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '2px', padding: '28px 32px' }}>
+      <div style={{
+        fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px',
+        textTransform: 'uppercase' as const, color: 'var(--brand)',
+        borderBottom: '1.5px solid var(--brand)', paddingBottom: '8px', marginBottom: '20px',
+      }}>
         {title}
       </div>
       {children}

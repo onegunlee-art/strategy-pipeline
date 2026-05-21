@@ -1,6 +1,6 @@
 // 약점 분해 + 외부 리서치 + 유사 case_studies → SCQA 추론 구조 전략 카드 (SSE 스트리밍)
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getDb } from '@/lib/db';
 import { SUB_FACTORS, SubFactorId } from '@/lib/pillars';
 import { fetchResearch } from '@/lib/research';
@@ -87,7 +87,8 @@ export async function POST(req: NextRequest, ctx: { params: { deal_id: string } 
     );
 
     // API 키 없으면 SSE로 빈 카드 반환 (dev 환경)
-    if (!process.env.ANTHROPIC_API_KEY) {
+    const geminiKey = process.env.GEMINI_API_KEY ?? process.env.Gemini_API_Key ?? process.env.GOOGLE_API_KEY;
+    if (!geminiKey) {
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         start(controller) {
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest, ctx: { params: { deal_id: string } 
             type: 'meta', weaknesses, similar_cases: similarCases,
           })));
           controller.enqueue(encoder.encode(sseEvent({
-            type: 'done', note: 'ANTHROPIC_API_KEY 미설정',
+            type: 'done', note: 'GEMINI_API_KEY 미설정',
           })));
           controller.close();
         }
@@ -168,8 +169,9 @@ ${similarBlock || '(유사 사례 없음)'}
   }
 ]`;
 
-    // 5) Claude 스트리밍 호출 + SSE 응답
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    // 5) Gemini 스트리밍 호출 + SSE 응답
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
     const encoder = new TextEncoder();
 
     const readable = new ReadableStream({
@@ -183,21 +185,12 @@ ${similarBlock || '(유사 사례 없음)'}
             similar_cases: similarCases,
           })));
 
-          const stream = client.messages.stream({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 6000,
-            messages: [{ role: 'user', content: prompt }],
-          });
+          const stream = await model.generateContentStream(prompt);
 
-          for await (const event of stream) {
-            if (
-              event.type === 'content_block_delta' &&
-              event.delta.type === 'text_delta'
-            ) {
-              controller.enqueue(encoder.encode(sseEvent({
-                type: 'delta',
-                text: event.delta.text,
-              })));
+          for await (const chunk of stream.stream) {
+            const text = chunk.text();
+            if (text) {
+              controller.enqueue(encoder.encode(sseEvent({ type: 'delta', text })));
             }
           }
 

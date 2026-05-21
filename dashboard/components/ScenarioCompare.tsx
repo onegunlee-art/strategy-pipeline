@@ -15,8 +15,6 @@ interface Scenario {
   ci: [number, number];
 }
 
-// PILLAR_COLORS imported from pillars.ts
-
 function computeScenario(subs: SubScores, name: string): Scenario {
   const pillars = pillarScoreFromSubs(subs);
   const prob = pillarMultiplication(pillars) * 100;
@@ -36,15 +34,20 @@ export default function ScenarioCompare({ initialSubs }: Props) {
   const delta = (s: Scenario) => s.prob - currentResult.prob;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px' }}>
-        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--cyan)', letterSpacing: '2px', marginBottom: '12px' }}>
-          ◈ SCENARIO COMPARE — 액션 시나리오 효과 시뮬레이션
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* 시나리오 결과 비교 */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '24px 28px' }}>
+        <div style={{
+          fontSize: '10px', fontWeight: 600, color: 'var(--brand)',
+          letterSpacing: '1.5px', textTransform: 'uppercase' as const,
+          borderBottom: '1.5px solid var(--brand)', paddingBottom: '8px', marginBottom: '8px',
+          fontFamily: 'var(--font-sans)',
+        }}>
+          Scenario Compare — 액션 시나리오 효과 시뮬레이션
         </div>
         <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '20px' }}>
           오른쪽 두 열에서 sub-factor를 조정하여 &quot;이 액션 하면 +몇%?&quot; 확인. 좌측은 현재 상태.
         </div>
-
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
           {[currentResult, aResult, bResult].map((s, idx) => (
             <ResultCard key={idx} scenario={s} deltaPp={idx === 0 ? 0 : delta(s)} highlight={idx === 0} />
@@ -53,8 +56,8 @@ export default function ScenarioCompare({ initialSubs }: Props) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-        <div /> {/* Current는 조정 안 됨 */}
-        <ScenarioEditor name="Scenario A" subs={scenarioA} onChange={setScenarioA} accent="var(--cyan)" />
+        <div />
+        <ScenarioEditor name="Scenario A" subs={scenarioA} onChange={setScenarioA} accent="var(--brand)" />
         <ScenarioEditor name="Scenario B" subs={scenarioB} onChange={setScenarioB} accent="var(--green)" />
       </div>
     </div>
@@ -66,20 +69,21 @@ function ResultCard({ scenario, deltaPp, highlight }: { scenario: Scenario; delt
   return (
     <div style={{
       background: highlight ? 'var(--surface2)' : 'var(--surface)',
-      border: '1px solid ' + (highlight ? 'var(--cyan)' : 'var(--border)'),
-      borderRadius: '8px', padding: '16px',
+      border: '1px solid ' + (highlight ? 'var(--brand)' : 'var(--border)'),
+      borderTop: highlight ? '3px solid var(--brand)' : '3px solid var(--border)',
+      padding: '16px 18px',
     }}>
-      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '1px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '1px', fontFamily: 'var(--font-sans)', textTransform: 'uppercase' as const }}>
         {scenario.name}
       </div>
-      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '32px', color: 'var(--cyan)', marginTop: '8px' }}>
+      <div style={{ fontFamily: 'var(--font-num)', fontSize: '32px', fontWeight: 700, color: highlight ? 'var(--text)' : 'var(--brand)', marginTop: '8px' }}>
         {scenario.prob.toFixed(1)}%
       </div>
-      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
+      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', fontFamily: 'var(--font-num)' }}>
         CI: {scenario.ci[0].toFixed(0)}–{scenario.ci[1].toFixed(0)}%
       </div>
       {!highlight && (
-        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '14px', color: deltaColor, marginTop: '8px' }}>
+        <div style={{ fontFamily: 'var(--font-num)', fontSize: '16px', fontWeight: 600, color: deltaColor, marginTop: '10px' }}>
           {deltaPp >= 0 ? '+' : ''}{deltaPp.toFixed(1)} pp
         </div>
       )}
@@ -94,17 +98,22 @@ function ScenarioEditor({ name, subs, onChange, accent }: {
   accent: string;
 }) {
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
-      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: accent, letterSpacing: '1px', marginBottom: '12px' }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px 18px' }}>
+      <div style={{
+        fontSize: '10px', fontWeight: 600, color: accent,
+        letterSpacing: '1px', textTransform: 'uppercase' as const,
+        borderBottom: `1.5px solid ${accent}`, paddingBottom: '6px', marginBottom: '14px',
+        fontFamily: 'var(--font-sans)',
+      }}>
         {name} 조정
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {SUB_FACTORS.map(f => (
           <div key={f.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
-              <span style={{ color: PILLAR_COLORS[f.pillar] }}>[{f.pillar}]</span>
+              <span style={{ color: PILLAR_COLORS[f.pillar], fontWeight: 600 }}>[{f.pillar}]</span>
               <span style={{ flex: 1, marginLeft: '6px', color: 'var(--text-dim)' }}>{f.label}</span>
-              <span style={{ fontFamily: 'IBM Plex Mono', color: accent, minWidth: '22px', textAlign: 'right' }}>
+              <span style={{ fontFamily: 'var(--font-num)', fontWeight: 700, color: accent, minWidth: '22px', textAlign: 'right' as const }}>
                 {(subs[f.id] ?? 5).toFixed(1)}
               </span>
             </div>

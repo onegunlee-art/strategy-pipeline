@@ -1,4 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap');
+@font-face {
+  font-family: 'LogoSans';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2108@1.1/LogoSans.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,49 +15,85 @@
 }
 
 :root {
-  --bg: #f8fafc;
-  --surface: #ffffff;
-  --surface2: #f1f5f9;
-  --border: #e2e8f0;
-  --cyan: #e6001c;
-  --cyan-dim: rgba(230, 0, 28, 0.07);
-  --cyan-mid: rgba(230, 0, 28, 0.14);
-  --green: #16a34a;
-  --red: #dc2626;
-  --yellow: #d97706;
-  --text: #0f172a;
-  --text-dim: #94a3b8;
-  --text-mid: #475569;
+  --bg:        #F5F5F5;
+  --surface:   #FFFFFF;
+  --surface2:  #EFEFEF;
+  --border:    #E0E0E0;
+
+  --brand:     #E6001C;
+  --brand-dim: rgba(230, 0, 28, 0.06);
+  --brand-mid: rgba(230, 0, 28, 0.12);
+
+  /* alias for backward compat */
+  --cyan:      #E6001C;
+  --cyan-dim:  rgba(230, 0, 28, 0.06);
+  --cyan-mid:  rgba(230, 0, 28, 0.12);
+
+  --green:     #1A7F3C;
+  --red:       #CC2222;
+  --yellow:    #C07A00;
+
+  --text:      #1A1A1A;
+  --text-mid:  #555555;
+  --text-dim:  #A0A0A0;
+
+  --font-sans: 'LogoSans', 'Inter', -apple-system, sans-serif;
+  --font-num:  'Inter', -apple-system, sans-serif;
 }
 
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'IBM Plex Sans KR', 'IBM Plex Mono', monospace;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ── Bain-style 카드 & 섹션 ──────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 28px 32px;
+}
+
+.section-label {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--brand);
+  border-bottom: 1.5px solid var(--brand);
+  padding-bottom: 8px;
+  margin-bottom: 20px;
+}
+
+/* ── 슬라이더 ────────────────────────────────────────────────── */
 input[type=range] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 4px;
+  height: 3px;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: 0;
   outline: none;
 }
 
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--cyan);
+  background: var(--brand);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(230, 0, 28, 0.3);
+  box-shadow: none;
 }
 
+/* ── 스크롤바 ────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }

@@ -1,6 +1,6 @@
-// 약점 sub-factor → Claude API → 액션 카드 생성
+// 약점 sub-factor → Gemini API → 액션 카드 생성
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SUB_FACTORS, SubFactorId } from '@/lib/pillars';
 
 interface StrategyBody {
@@ -21,7 +21,13 @@ interface StrategyBody {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as StrategyBody;
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const geminiKey = process.env.GEMINI_API_KEY ?? process.env.Gemini_API_Key ?? process.env.GOOGLE_API_KEY;
+    if (!geminiKey) {
+      return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 503 });
+    }
+
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
     const weaknessSummary = body.weaknesses.map((w, i) => {
       const meta = SUB_FACTORS.find(f => f.id === w.id);
@@ -62,16 +68,11 @@ ${weaknessSummary}
   }
 ]`;
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) {
-      return NextResponse.json({ ok: false, message: 'Claude 응답 파싱 실패', raw: text }, { status: 500 });
+      return NextResponse.json({ ok: false, message: 'Gemini 응답 파싱 실패', raw: text }, { status: 500 });
     }
     const cards = JSON.parse(match[0]);
 
