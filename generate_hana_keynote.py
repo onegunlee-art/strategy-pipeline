@@ -126,161 +126,279 @@ def add_footer(slide, page_num, total=3):
                 font_size=8, color=DARK_TEXT, align=PP_ALIGN.RIGHT)
 
 
-# ─── 슬라이드 1: Why Now × Why KT ───────────────────────────────────────────────
+# ─── 슬라이드 1: 4계층 토대 구조 — KT 인프라 위에 쌓인 안정감 ───────────────────
 
 def slide_01_war(prs):
     sl = blank_slide(prs)
     fill_bg(sl, NAVY)
 
     # ── 상단 헤더 띠 ──────────────────────────────────────────────────────
-    add_rect(sl, 0, 0, SLIDE_W, Cm(3.4), NAVY2)
-    add_rect(sl, 0, 0, Cm(0.25), Cm(3.4), KT_RED)
+    add_rect(sl, 0, 0, SLIDE_W, Cm(2.9), NAVY2)
+    add_rect(sl, 0, 0, Cm(0.25), Cm(2.9), GOLD)
 
-    # 경고 태그
-    add_rect(sl, Cm(1.2), Cm(0.45), Cm(8.0), Cm(0.55), KT_RED)
-    add_textbox(sl, "AI 시대 금융의 통제권 전쟁  ·  WHY NOW",
-                Cm(1.2), Cm(0.45), Cm(8.0), Cm(0.55),
-                font_size=10, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    # 태그
+    add_rect(sl, Cm(1.2), Cm(0.35), Cm(9.5), Cm(0.5), GOLD)
+    add_textbox(sl, "관통 메시지  ·  THE FOUNDATION OF TRUST",
+                Cm(1.2), Cm(0.35), Cm(9.5), Cm(0.5),
+                font_size=9, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
 
-    # 메인 헤드라인 (강렬한 문구)
+    # 메인 헤드라인
     add_textbox(sl,
-                "AI는 이미 충분히 똑똑해졌습니다. 이제 경쟁력은 통제력입니다.",
-                Cm(1.2), Cm(1.1), SLIDE_W - Cm(2.4), Cm(1.2),
-                font_size=26, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+                "리스크를 통제할 때, 고객과 직원의 안정감이 지속됩니다.",
+                Cm(1.2), Cm(0.95), SLIDE_W - Cm(2.4), Cm(1.05),
+                font_size=23, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
 
-    # 서브 — 굵게
+    # 서브
     add_rich_textbox(sl, [
-        ("은행은 ", 14, False, LIGHT_GRAY),
-        ("답변하는 조직", 14, True, DARK_TEXT),
-        ("이 아니라  ─  ", 14, False, LIGHT_GRAY),
-        ("책임지는 조직", 14, True, GOLD),
-        ("입니다.", 14, False, LIGHT_GRAY),
-    ], Cm(1.2), Cm(2.5), SLIDE_W - Cm(2.4), Cm(0.7))
+        ("수집부터 가공까지  ─  ", 12, False, LIGHT_GRAY),
+        ("AI 통제 가능한 비정형 데이터 플랫폼", 12, True, CYAN),
+        ("이 그 토대입니다.", 12, False, LIGHT_GRAY),
+    ], Cm(1.2), Cm(2.1), SLIDE_W - Cm(2.4), Cm(0.6))
 
-    # ── 좌·우 2 컬럼 영역 ────────────────────────────────────────────────
-    col_y = Cm(3.85)
-    col_h = Cm(11.2)
-    gap = Cm(0.6)
-    col_w = (SLIDE_W - Cm(2.4) - gap) / 2
+    # 우측 상단 안내선
+    add_textbox(sl, "▼  표면 (사람이 느끼는 것)",
+                SLIDE_W - Cm(8), Cm(0.95), Cm(7), Cm(0.5),
+                font_size=9, italic=True, color=DARK_TEXT, align=PP_ALIGN.RIGHT)
+    add_textbox(sl, "▲  토대 (받쳐주는 것)",
+                SLIDE_W - Cm(8), Cm(1.5), Cm(7), Cm(0.5),
+                font_size=9, italic=True, color=GOLD, align=PP_ALIGN.RIGHT)
 
-    # ===== LEFT — AI Organizational Risk (위기감) =====
-    lx = Cm(1.2)
-    add_rect(sl, lx, col_y, col_w, col_h, NAVY2, RED, Pt(1.0))
-    # 좌측 컬러바
-    add_rect(sl, lx, col_y, Cm(0.18), col_h, RED)
+    # ── 본문 4계층 영역 ───────────────────────────────────────────────────
+    body_x = Cm(1.2)
+    body_w = SLIDE_W - Cm(2.4)
+    label_w = Cm(2.8)
+    layer_x = body_x + label_w + Cm(0.25)
+    layer_w = body_w - label_w - Cm(0.25)
 
-    # 헤더
-    add_rect(sl, lx + Cm(0.6), col_y + Cm(0.5), Cm(2.8), Cm(0.55), RED)
-    add_textbox(sl, "AI ORGANIZATIONAL RISK",
-                lx + Cm(0.6), col_y + Cm(0.5), Cm(2.8), Cm(0.55),
-                font_size=8, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    # ─ LAYER 04 (TOP) ─ 안정감의 지속 ────────────────────────────────
+    L1_y = Cm(3.1)
+    L1_h = Cm(2.7)
+    # 따스한 글로우 배경
+    add_rect(sl, layer_x, L1_y, layer_w, L1_h, RGBColor(0x1A, 0x17, 0x0C),
+             GOLD, Pt(0.6))
+    add_rect(sl, layer_x, L1_y, Cm(0.18), L1_h, GOLD)
+    # 좌측 라벨
+    add_rect(sl, body_x, L1_y, label_w, L1_h, NAVY2, GOLD, Pt(0.4))
+    add_textbox(sl, "LAYER 04",
+                body_x, L1_y + Cm(0.4), label_w, Cm(0.45),
+                font_size=10, bold=True, color=GOLD, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "표면",
+                body_x, L1_y + Cm(0.85), label_w, Cm(0.7),
+                font_size=18, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "Surface",
+                body_x, L1_y + Cm(1.55), label_w, Cm(0.4),
+                font_size=8, italic=True, color=DARK_TEXT, align=PP_ALIGN.CENTER)
 
-    add_textbox(sl, "은행이 직면한 진짜 공포",
-                lx + Cm(0.6), col_y + Cm(1.15), col_w - Cm(1.2), Cm(0.8),
-                font_size=18, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
-    add_textbox(sl,
-                "기술 문제가 아닙니다. 은행의 의사결정 구조가 흔들리는 문제입니다.",
-                lx + Cm(0.6), col_y + Cm(1.95), col_w - Cm(1.2), Cm(0.55),
-                font_size=11, italic=True, color=RED, align=PP_ALIGN.LEFT)
+    # 내부 헤더
+    add_textbox(sl, "안정감의 지속  ─  사람이 흔들리지 않는다",
+                layer_x + Cm(0.5), L1_y + Cm(0.2), layer_w - Cm(1), Cm(0.55),
+                font_size=12, bold=True, color=GOLD, align=PP_ALIGN.LEFT)
 
-    # 4개 공포 박스
-    fears = [
-        ("Q1", "AI가 잘못 판단하면",        "— 누가 책임지는가?"),
-        ("Q2", "직원이 AI만 믿기 시작하면", "— 조직의 판단력은 어디로?"),
-        ("Q3", "최신 규정과 충돌하는 답변이 나가면", "— 어떻게 막는가?"),
-        ("Q4", "감사 시점에 재현이 불가능하면", "— 통제는 존재했다고 할 수 있는가?"),
+    # 2 카드: 대고객 / 대직원
+    card_y = L1_y + Cm(0.85)
+    card_h = L1_h - Cm(1.05)
+    card_gap = Cm(0.4)
+    card_w = (layer_w - Cm(1.0) - card_gap) / 2
+
+    # 대고객
+    cx1 = layer_x + Cm(0.5)
+    add_rect(sl, cx1, card_y, card_w, card_h, NAVY3, CYAN, Pt(0.6))
+    # 아이콘 자리 (오벌)
+    add_rect(sl, cx1 + Cm(0.4), card_y + Cm(0.35), Cm(0.85), Cm(0.85),
+             CYAN, shape=MSO_SHAPE.OVAL)
+    add_textbox(sl, "고",
+                cx1 + Cm(0.4), card_y + Cm(0.35), Cm(0.85), Cm(0.85),
+                font_size=14, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "대고객",
+                cx1 + Cm(1.45), card_y + Cm(0.3), card_w - Cm(1.7), Cm(0.5),
+                font_size=11, bold=True, color=CYAN, align=PP_ALIGN.LEFT)
+    add_textbox(sl, "흔들리지 않는 응대",
+                cx1 + Cm(1.45), card_y + Cm(0.78), card_w - Cm(1.7), Cm(0.65),
+                font_size=15, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+
+    # 대직원
+    cx2 = cx1 + card_w + card_gap
+    add_rect(sl, cx2, card_y, card_w, card_h, NAVY3, YELLOW, Pt(0.6))
+    add_rect(sl, cx2 + Cm(0.4), card_y + Cm(0.35), Cm(0.85), Cm(0.85),
+             YELLOW, shape=MSO_SHAPE.OVAL)
+    add_textbox(sl, "직",
+                cx2 + Cm(0.4), card_y + Cm(0.35), Cm(0.85), Cm(0.85),
+                font_size=14, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "대직원",
+                cx2 + Cm(1.45), card_y + Cm(0.3), card_w - Cm(1.7), Cm(0.5),
+                font_size=11, bold=True, color=YELLOW, align=PP_ALIGN.LEFT)
+    add_textbox(sl, "흔들리지 않는 판단",
+                cx2 + Cm(1.45), card_y + Cm(0.78), card_w - Cm(1.7), Cm(0.65),
+                font_size=15, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+
+    # ↑ 연결 (보호받는다)
+    a1_y = L1_y + L1_h
+    add_textbox(sl, "▲   보호받는다",
+                layer_x, a1_y, layer_w, Cm(0.4),
+                font_size=9, italic=True, color=DARK_TEXT, align=PP_ALIGN.CENTER)
+
+    # ─ LAYER 03 ─ 리스크 통제 (방패) ─────────────────────────────────
+    L2_y = a1_y + Cm(0.45)
+    L2_h = Cm(2.1)
+    add_rect(sl, layer_x, L2_y, layer_w, L2_h, NAVY2, RED, Pt(0.7))
+    add_rect(sl, layer_x, L2_y, Cm(0.18), L2_h, RED)
+    add_rect(sl, body_x, L2_y, label_w, L2_h, NAVY2, RED, Pt(0.4))
+    add_textbox(sl, "LAYER 03",
+                body_x, L2_y + Cm(0.25), label_w, Cm(0.45),
+                font_size=10, bold=True, color=RED, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "통제",
+                body_x, L2_y + Cm(0.7), label_w, Cm(0.7),
+                font_size=18, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "Control",
+                body_x, L2_y + Cm(1.4), label_w, Cm(0.4),
+                font_size=8, italic=True, color=DARK_TEXT, align=PP_ALIGN.CENTER)
+
+    add_textbox(sl, "리스크 통제  ─  4축 가드레일",
+                layer_x + Cm(0.5), L2_y + Cm(0.15), layer_w - Cm(1), Cm(0.5),
+                font_size=12, bold=True, color=RED, align=PP_ALIGN.LEFT)
+
+    # 4축 가드레일 (방패 모양 이미지)
+    axes = [
+        ("출처", "Provenance", YELLOW),
+        ("감사", "Audit",      PURPLE),
+        ("접근", "Access",     CYAN),
+        ("품질", "Quality",    GREEN),
     ]
-    fy = col_y + Cm(2.75)
-    fh = Cm(1.85)
-    for i, (qid, body, suffix) in enumerate(fears):
-        add_rect(sl, lx + Cm(0.6), fy, col_w - Cm(1.2), fh, NAVY3, RED_DEEP, Pt(0.5))
-        # Q번호
-        add_rect(sl, lx + Cm(0.8), fy + Cm(0.3), Cm(1.1), Cm(0.7), RED_DEEP)
-        add_textbox(sl, qid,
-                    lx + Cm(0.8), fy + Cm(0.3), Cm(1.1), Cm(0.7),
-                    font_size=12, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-        # 본문
-        add_textbox(sl, body,
-                    lx + Cm(2.1), fy + Cm(0.25), col_w - Cm(2.8), Cm(0.7),
-                    font_size=13, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
-        add_textbox(sl, suffix,
-                    lx + Cm(2.1), fy + Cm(0.95), col_w - Cm(2.8), Cm(0.7),
-                    font_size=13, bold=True, color=RED, align=PP_ALIGN.LEFT)
-        fy += fh + Cm(0.15)
+    ax_y = L2_y + Cm(0.75)
+    ax_h = L2_h - Cm(0.95)
+    ax_gap = Cm(0.25)
+    ax_w = (layer_w - Cm(1.0) - ax_gap * 3) / 4
+    for i, (name, en, color) in enumerate(axes):
+        ax = layer_x + Cm(0.5) + i * (ax_w + ax_gap)
+        add_rect(sl, ax, ax_y, ax_w, ax_h, NAVY3, color, Pt(0.5),
+                 shape=MSO_SHAPE.PENTAGON)
+        d = Cm(0.32)
+        add_rect(sl, ax + ax_w/2 - d/2, ax_y + Cm(0.15), d, d,
+                 color, shape=MSO_SHAPE.OVAL)
+        add_textbox(sl, name,
+                    ax, ax_y + Cm(0.5), ax_w, Cm(0.55),
+                    font_size=13, bold=True, color=color, align=PP_ALIGN.CENTER)
+        add_textbox(sl, en,
+                    ax, ax_y + Cm(1.0), ax_w, Cm(0.4),
+                    font_size=8, italic=True, color=LIGHT_GRAY, align=PP_ALIGN.CENTER)
 
-    # ===== RIGHT — Why KT (정체성) =====
-    rx = lx + col_w + gap
-    add_rect(sl, rx, col_y, col_w, col_h, NAVY2, CYAN, Pt(1.0))
-    add_rect(sl, rx, col_y, Cm(0.18), col_h, CYAN)
+    # ↑ 연결
+    a2_y = L2_y + L2_h
+    add_textbox(sl, "▲   통제 가능한 형태로 가공되어 올라온다",
+                layer_x, a2_y, layer_w, Cm(0.4),
+                font_size=9, italic=True, color=DARK_TEXT, align=PP_ALIGN.CENTER)
 
-    # 헤더
-    add_rect(sl, rx + Cm(0.6), col_y + Cm(0.5), Cm(2.8), Cm(0.55), CYAN)
+    # ─ LAYER 02 ─ 비정형 데이터 플랫폼 (수집→저장→가공) ──────────────
+    L3_y = a2_y + Cm(0.45)
+    L3_h = Cm(2.3)
+    add_rect(sl, layer_x, L3_y, layer_w, L3_h, NAVY2, CYAN, Pt(0.7))
+    add_rect(sl, layer_x, L3_y, Cm(0.18), L3_h, CYAN)
+    add_rect(sl, body_x, L3_y, label_w, L3_h, NAVY2, CYAN, Pt(0.4))
+    add_textbox(sl, "LAYER 02",
+                body_x, L3_y + Cm(0.3), label_w, Cm(0.45),
+                font_size=10, bold=True, color=CYAN, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "플랫폼",
+                body_x, L3_y + Cm(0.78), label_w, Cm(0.7),
+                font_size=18, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "Platform",
+                body_x, L3_y + Cm(1.5), label_w, Cm(0.4),
+                font_size=8, italic=True, color=DARK_TEXT, align=PP_ALIGN.CENTER)
+
+    add_textbox(sl, "비정형 데이터 플랫폼  ─  수집부터 가공까지 통제 가능한 흐름",
+                layer_x + Cm(0.5), L3_y + Cm(0.15), layer_w - Cm(1), Cm(0.5),
+                font_size=12, bold=True, color=CYAN, align=PP_ALIGN.LEFT)
+
+    # 3단 chevron 흐름 (수집→저장→가공)
+    flow_y = L3_y + Cm(0.75)
+    flow_h = L3_h - Cm(0.95)
+    stages = [
+        ("01", "수집", "Ingest",  "원천 + 출처 태그"),
+        ("02", "저장", "Govern",  "보존 + 접근 통제"),
+        ("03", "가공", "Process", "AI Ready化 + 정합성"),
+    ]
+    fl_total = layer_w - Cm(1.0)
+    fl_gap = Cm(0.2)
+    fl_w = (fl_total - fl_gap * 2 - Cm(0.6)) / 3
+    fl_x = layer_x + Cm(0.5)
+    for i, (idx, ko, en, sub) in enumerate(stages):
+        fx = fl_x + i * (fl_w + fl_gap)
+        add_rect(sl, fx, flow_y, fl_w, flow_h, NAVY3, CYAN, Pt(0.5))
+        # 헤더 바
+        add_rect(sl, fx, flow_y, fl_w, Cm(0.55), CYAN_DIM)
+        add_textbox(sl, idx,
+                    fx + Cm(0.25), flow_y + Cm(0.08), Cm(1), Cm(0.4),
+                    font_size=10, bold=True, color=NAVY, align=PP_ALIGN.LEFT)
+        add_textbox(sl, ko,
+                    fx, flow_y + Cm(0.08), fl_w, Cm(0.4),
+                    font_size=12, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+        add_textbox(sl, en,
+                    fx, flow_y + Cm(0.65), fl_w, Cm(0.4),
+                    font_size=9, italic=True, color=CYAN, align=PP_ALIGN.CENTER)
+        add_textbox(sl, sub,
+                    fx + Cm(0.25), flow_y + Cm(1.05), fl_w - Cm(0.5), Cm(0.5),
+                    font_size=10, color=WHITE, align=PP_ALIGN.CENTER)
+        if i < 2:
+            add_chevron(sl, fx + fl_w + Cm(0.0), flow_y + flow_h/2 - Cm(0.22),
+                        Cm(0.3), Cm(0.45), CYAN)
+
+    # ↑ 연결
+    a3_y = L3_y + L3_h
+    add_textbox(sl, "▲   받쳐주고  ·  멈추지 않게 한다",
+                layer_x, a3_y, layer_w, Cm(0.4),
+                font_size=9, italic=True, color=GOLD, align=PP_ALIGN.CENTER)
+
+    # ─ LAYER 01 (BASE) ─ KT INFRASTRUCTURE ──────────────────────────
+    L4_y = a3_y + Cm(0.45)
+    L4_h = Cm(2.9)
+    # 두꺼운 토대 BAR (KT_RED 강조)
+    add_rect(sl, layer_x, L4_y, layer_w, L4_h, KT_RED)
+    # 받침 그림자
+    add_rect(sl, layer_x + Cm(0.3), L4_y + L4_h,
+             layer_w - Cm(0.6), Cm(0.18), RGBColor(0x60, 0x08, 0x18))
+    # 좌측 라벨
+    add_rect(sl, body_x, L4_y, label_w, L4_h, KT_RED, WHITE, Pt(0.5))
+    add_textbox(sl, "LAYER 01",
+                body_x, L4_y + Cm(0.35), label_w, Cm(0.45),
+                font_size=10, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "토대",
+                body_x, L4_y + Cm(0.85), label_w, Cm(0.85),
+                font_size=22, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "Foundation",
+                body_x, L4_y + Cm(1.7), label_w, Cm(0.4),
+                font_size=8, italic=True, color=LIGHT_GRAY, align=PP_ALIGN.CENTER)
+    # WHY KT 마크
+    add_rect(sl, body_x + Cm(0.4), L4_y + L4_h - Cm(0.75), label_w - Cm(0.8), Cm(0.5),
+             WHITE)
     add_textbox(sl, "WHY KT",
-                rx + Cm(0.6), col_y + Cm(0.5), Cm(2.8), Cm(0.55),
-                font_size=10, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+                body_x + Cm(0.4), L4_y + L4_h - Cm(0.75), label_w - Cm(0.8), Cm(0.5),
+                font_size=10, bold=True, color=KT_RED, align=PP_ALIGN.CENTER)
 
-    add_textbox(sl, "통제권 전쟁의 답 — KT의 정체성",
-                rx + Cm(0.6), col_y + Cm(1.15), col_w - Cm(1.2), Cm(0.8),
-                font_size=18, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+    # 내부 핵심 카피
+    add_textbox(sl, "INFRASTRUCTURE  ·  멈추지 않는 운영 DNA",
+                layer_x + Cm(0.6), L4_y + Cm(0.25), layer_w - Cm(1.2), Cm(0.5),
+                font_size=10, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
 
-    # KT identity declaration (큰 인용)
-    decl_y = col_y + Cm(2.0)
-    decl_h = Cm(2.2)
-    add_rect(sl, rx + Cm(0.6), decl_y, col_w - Cm(1.2), decl_h, NAVY4, GOLD, Pt(0.75))
-    # 인용 마크
-    add_rect(sl, rx + Cm(0.6), decl_y, Cm(0.08), decl_h, GOLD)
+    # 가장 굵직한 한 줄
     add_textbox(sl,
-                "KT는 AI를 화려하게 만드는 회사가 아닙니다.",
-                rx + Cm(0.9), decl_y + Cm(0.3), col_w - Cm(1.8), Cm(0.7),
-                font_size=14, color=LIGHT_GRAY, italic=True, align=PP_ALIGN.LEFT)
+                "통신을 멈추지 않게 운영해온 단 하나의 회사",
+                layer_x + Cm(0.6), L4_y + Cm(0.8), layer_w - Cm(1.2), Cm(0.95),
+                font_size=22, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
     add_textbox(sl,
-                "멈추면 안 되는 시스템을 운영해온 회사입니다.",
-                rx + Cm(0.9), decl_y + Cm(1.0), col_w - Cm(1.8), Cm(0.9),
-                font_size=18, bold=True, color=GOLD, align=PP_ALIGN.LEFT)
+                "이 모든 레이어를 받칠 수 있는 토대는, KT의 인프라 운영 DNA 하나입니다.",
+                layer_x + Cm(0.6), L4_y + Cm(1.85), layer_w - Cm(1.2), Cm(0.55),
+                font_size=12, italic=True, color=WHITE, align=PP_ALIGN.LEFT)
 
-    # KT 정체성 4개 증거 (2x2 그리드)
-    proofs = [
-        ("국가 인프라 DNA",   "통신망 24×365 운영",      "장애 = 국가 단위 영향"),
-        ("미션 크리티컬 관제", "관제 · 장애 대응 · 이중화",  "멈춤이 허용되지 않는 운영"),
-        ("금융 IT 실적",     "전 시중은행급 인프라 운영",  "규제 · 감사 대응 경험"),
-        ("AI Foundation",   "자체 모델 + KT Cloud",      "외부 의존 없는 통제 가능"),
-    ]
-    py = decl_y + decl_h + Cm(0.3)
-    pw = (col_w - Cm(1.2) - Cm(0.2)) / 2
-    ph = (col_h - (py - col_y) - Cm(0.4)) / 2
-    for i, (title, body, tag) in enumerate(proofs):
-        row = i // 2
-        col = i % 2
-        pxn = rx + Cm(0.6) + col * (pw + Cm(0.2))
-        pyn = py + row * (ph + Cm(0.15))
-        add_rect(sl, pxn, pyn, pw, ph, NAVY3, CYAN, Pt(0.5))
-        # 번호 닷
-        add_rect(sl, pxn + Cm(0.3), pyn + Cm(0.3), Cm(0.4), Cm(0.4),
-                 CYAN, shape=MSO_SHAPE.OVAL)
-        add_textbox(sl, str(i+1),
-                    pxn + Cm(0.3), pyn + Cm(0.3), Cm(0.4), Cm(0.4),
-                    font_size=9, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
-        add_textbox(sl, title,
-                    pxn + Cm(0.85), pyn + Cm(0.25), pw - Cm(1.0), Cm(0.6),
-                    font_size=13, bold=True, color=CYAN, align=PP_ALIGN.LEFT)
-        add_textbox(sl, body,
-                    pxn + Cm(0.35), pyn + Cm(0.95), pw - Cm(0.5), Cm(0.55),
-                    font_size=11, color=WHITE, align=PP_ALIGN.LEFT)
-        add_textbox(sl, "▸  " + tag,
-                    pxn + Cm(0.35), pyn + Cm(1.5), pw - Cm(0.5), Cm(0.55),
-                    font_size=10, italic=True, color=GOLD, align=PP_ALIGN.LEFT)
-
-    # ── 하단 결론 띠 ──────────────────────────────────────────────────────
-    concl_y = SLIDE_H - Cm(2.7)
-    add_rect(sl, Cm(1.2), concl_y, SLIDE_W - Cm(2.4), Cm(1.55), GOLD)
-    add_textbox(sl,
-                "통제권을 가진 자가 AI 시대 금융을 이깁니다",
-                Cm(1.5), concl_y + Cm(0.15), SLIDE_W - Cm(3), Cm(0.9),
-                font_size=22, bold=True, color=NAVY, align=PP_ALIGN.LEFT)
-    add_textbox(sl,
-                "AI를 통제하는 금융, 하나은행  ─  KT가 그 통제 인프라를 짓습니다",
-                Cm(1.5), concl_y + Cm(0.95), SLIDE_W - Cm(3), Cm(0.55),
-                font_size=12, color=NAVY, align=PP_ALIGN.LEFT)
+    # 기둥 표현 (인프라가 받치는 시각적 단서)
+    pillar_y = L4_y + L4_h - Cm(0.95)
+    pillar_w = Cm(0.5)
+    pillar_h = Cm(0.7)
+    pillar_count = 8
+    pillar_total_w = layer_w - Cm(1.2)
+    pillar_gap = (pillar_total_w - pillar_w * pillar_count) / (pillar_count - 1)
+    for i in range(pillar_count):
+        px = layer_x + Cm(0.6) + i * (pillar_w + pillar_gap)
+        add_rect(sl, px, pillar_y, pillar_w, pillar_h,
+                 RGBColor(0xFF, 0xB0, 0xB8), shape=MSO_SHAPE.TRAPEZOID)
 
     add_footer(sl, 1)
 
