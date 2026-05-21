@@ -4,11 +4,10 @@ import { useState } from 'react';
 import PillarInputTab from '@/components/PillarInputTab';
 import EnsembleAnalysisTab from '@/components/EnsembleAnalysisTab';
 import PortfolioTab from '@/components/PortfolioTab';
-import PortfolioView from '@/components/PortfolioView';
 import ScenarioCompare from '@/components/ScenarioCompare';
 import { PillarId, SubFactorId, SubScores, defaultSubScores } from '@/lib/pillars';
 
-type Tab = 'pillar' | 'analysis' | 'compare' | 'portfolio_view' | 'portfolio';
+type Tab = 'pillar' | 'analysis' | 'compare' | 'portfolio';
 
 interface PredictResult {
   deal_id: number;
@@ -27,11 +26,10 @@ interface PredictResult {
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'pillar',         label: 'Pillar 진단'  },
-  { id: 'analysis',       label: '확률 & 전략'  },
-  { id: 'compare',        label: '시나리오 비교' },
-  { id: 'portfolio_view', label: '포트폴리오'   },
-  { id: 'portfolio',      label: '데이터'       },
+  { id: 'pillar',    label: 'Pillar 진단'  },
+  { id: 'analysis',  label: '확률 & 전략'  },
+  { id: 'compare',   label: '시나리오 비교' },
+  { id: 'portfolio', label: '데이터'       },
 ];
 
 export default function Dashboard() {
@@ -189,8 +187,6 @@ export default function Dashboard() {
         {tab === 'compare' && (
           <ScenarioCompare initialSubs={result?.sub_scores ?? defaultSubScores()} />
         )}
-
-        {tab === 'portfolio_view' && <PortfolioView refreshKey={refreshKey} />}
 
         {tab === 'portfolio' && <PortfolioTab refreshKey={refreshKey} />}
       </main>
