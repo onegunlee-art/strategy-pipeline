@@ -2,34 +2,35 @@
 # -*- coding: utf-8 -*-
 """
 하나은행 관통 장표 2장 — "AI를 통제하는 금융, 하나은행"
-slide 1: 본질 진단 — RFP 한 문장에 숨겨진 진짜 의도
-slide 2: 우리의 답 — 3축 × 3행위 매트릭스 (Ready to AI Foundation)
+slide 1: 대고객·대직원·리스크 → AI 통제 비정형 데이터 플랫폼 구조도
+slide 2: 데이터 출처 → 수집·저장·가공·활용 통제 파이프라인 구조도
 """
 
 from pptx import Presentation
 from pptx.util import Pt, Cm
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_SHAPE
 
-# ─── 색상 팔레트 (generate_pptx.py 와 동일) ────────────────────────────────────
+# ─── 팔레트 ──────────────────────────────────────────────────────────────────────
 NAVY        = RGBColor(0x0A, 0x16, 0x28)
 NAVY2       = RGBColor(0x0D, 0x1F, 0x3C)
-NAVY3       = RGBColor(0x13, 0x2A, 0x4D)   # 매트릭스 셀용 약간 더 밝게
+NAVY3       = RGBColor(0x13, 0x2A, 0x4D)
+NAVY4       = RGBColor(0x18, 0x33, 0x5A)
 CYAN        = RGBColor(0x00, 0xD4, 0xFF)
+CYAN_DIM    = RGBColor(0x00, 0x88, 0xA8)
 ORANGE      = RGBColor(0xFF, 0x6B, 0x35)
 YELLOW      = RGBColor(0xFF, 0xD7, 0x00)
 GREEN       = RGBColor(0x00, 0xE0, 0x96)
+PURPLE      = RGBColor(0xB4, 0x6B, 0xFF)
 WHITE       = RGBColor(0xFF, 0xFF, 0xFF)
 LIGHT_GRAY  = RGBColor(0xCC, 0xD6, 0xE0)
 MID_BLUE    = RGBColor(0x1A, 0x4A, 0x7A)
 DARK_TEXT   = RGBColor(0xA0, 0xB8, 0xCC)
-RED_SOFT    = RGBColor(0xE5, 0x4B, 0x4B)
 
 FONT_KO = "맑은 고딕"
-
 SLIDE_W = Cm(33.87)
 SLIDE_H = Cm(19.05)
-
 FOOTER_TEXT = "하나은행 비정형 데이터 자산화 플랫폼 제안  |  2026.05  |  KT B2B 수주전략팀"
 
 
@@ -45,30 +46,30 @@ def fill_bg(slide, color):
     bg.fore_color.rgb = color
 
 
-def add_rect(slide, x, y, w, h, fill_color, line_color=None, line_width=None):
-    shape = slide.shapes.add_shape(1, x, y, w, h)
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = fill_color
+def add_rect(slide, x, y, w, h, fill_color, line_color=None, line_width=None, shape=MSO_SHAPE.RECTANGLE):
+    sh = slide.shapes.add_shape(shape, x, y, w, h)
+    sh.fill.solid()
+    sh.fill.fore_color.rgb = fill_color
     if line_color:
-        shape.line.color.rgb = line_color
+        sh.line.color.rgb = line_color
         if line_width:
-            shape.line.width = line_width
+            sh.line.width = line_width
     else:
-        shape.line.fill.background()
-    return shape
+        sh.line.fill.background()
+    return sh
 
 
 def add_textbox(slide, text, x, y, w, h,
-                font_size=14, bold=False, color=WHITE,
-                align=PP_ALIGN.LEFT, italic=False, word_wrap=True):
+                font_size=12, bold=False, color=WHITE,
+                align=PP_ALIGN.LEFT, italic=False):
     txb = slide.shapes.add_textbox(x, y, w, h)
-    txb.word_wrap = word_wrap
+    txb.word_wrap = True
     tf = txb.text_frame
-    tf.word_wrap = word_wrap
-    tf.margin_left = Cm(0.1)
-    tf.margin_right = Cm(0.1)
-    tf.margin_top = Cm(0.05)
-    tf.margin_bottom = Cm(0.05)
+    tf.word_wrap = True
+    tf.margin_left = Cm(0.08)
+    tf.margin_right = Cm(0.08)
+    tf.margin_top = Cm(0.04)
+    tf.margin_bottom = Cm(0.04)
     p = tf.paragraphs[0]
     p.alignment = align
     run = p.add_run()
@@ -81,283 +82,372 @@ def add_textbox(slide, text, x, y, w, h,
     return txb
 
 
-def add_rich_textbox(slide, runs, x, y, w, h, align=PP_ALIGN.LEFT, word_wrap=True):
-    """여러 run을 한 단락에 넣어 부분 컬러 강조 가능. runs = [(text, font_size, bold, color), ...]"""
-    txb = slide.shapes.add_textbox(x, y, w, h)
-    txb.word_wrap = word_wrap
-    tf = txb.text_frame
-    tf.word_wrap = word_wrap
-    tf.margin_left = Cm(0.15)
-    tf.margin_right = Cm(0.15)
-    tf.margin_top = Cm(0.1)
-    tf.margin_bottom = Cm(0.1)
-    p = tf.paragraphs[0]
-    p.alignment = align
-    for (text, fs, bold, color) in runs:
-        r = p.add_run()
-        r.text = text
-        r.font.name = FONT_KO
-        r.font.size = Pt(fs)
-        r.font.bold = bold
-        r.font.color.rgb = color
-    return txb
+def add_arrow_down(slide, x, y, w, h, color):
+    """아래 방향 화살표"""
+    sh = slide.shapes.add_shape(MSO_SHAPE.DOWN_ARROW, x, y, w, h)
+    sh.fill.solid()
+    sh.fill.fore_color.rgb = color
+    sh.line.fill.background()
+    return sh
+
+
+def add_arrow_right(slide, x, y, w, h, color):
+    sh = slide.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, x, y, w, h)
+    sh.fill.solid()
+    sh.fill.fore_color.rgb = color
+    sh.line.fill.background()
+    return sh
+
+
+def add_chevron_right(slide, x, y, w, h, color):
+    sh = slide.shapes.add_shape(MSO_SHAPE.CHEVRON, x, y, w, h)
+    sh.fill.solid()
+    sh.fill.fore_color.rgb = color
+    sh.line.fill.background()
+    return sh
 
 
 def add_footer(slide, page_num):
-    add_rect(slide, Cm(1.5), SLIDE_H - Cm(1.2),
+    add_rect(slide, Cm(1.5), SLIDE_H - Cm(1.0),
              SLIDE_W - Cm(3), Cm(0.04), MID_BLUE)
     add_textbox(slide, FOOTER_TEXT,
-                Cm(1.5), SLIDE_H - Cm(1.1),
-                SLIDE_W - Cm(5), Cm(0.9),
+                Cm(1.5), SLIDE_H - Cm(0.9),
+                SLIDE_W - Cm(5), Cm(0.7),
                 font_size=8, color=DARK_TEXT, align=PP_ALIGN.LEFT)
     add_textbox(slide, f"{page_num} / 2",
-                SLIDE_W - Cm(3.5), SLIDE_H - Cm(1.1),
-                Cm(2), Cm(0.9),
+                SLIDE_W - Cm(3.5), SLIDE_H - Cm(0.9),
+                Cm(2), Cm(0.7),
                 font_size=8, color=DARK_TEXT, align=PP_ALIGN.RIGHT)
 
 
-# ─── 슬라이드 1: 본질 진단 ─────────────────────────────────────────────────────
+def header_band(slide, tag_text, title_text, subtitle_text):
+    """슬라이드 상단 캐치프레이즈 띠"""
+    add_rect(slide, 0, 0, SLIDE_W, Cm(2.6), NAVY2)
+    add_rect(slide, 0, 0, Cm(0.25), Cm(2.6), CYAN)
 
-def slide_01_diagnosis(prs):
+    add_rect(slide, Cm(1.2), Cm(0.45), Cm(5.5), Cm(0.55), CYAN)
+    add_textbox(slide, tag_text,
+                Cm(1.2), Cm(0.45), Cm(5.5), Cm(0.55),
+                font_size=9, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+    add_textbox(slide, title_text,
+                Cm(1.2), Cm(1.05), SLIDE_W - Cm(2.4), Cm(1.0),
+                font_size=22, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+    add_textbox(slide, subtitle_text,
+                Cm(1.2), Cm(1.95), SLIDE_W - Cm(2.4), Cm(0.55),
+                font_size=11, color=CYAN, align=PP_ALIGN.LEFT)
+
+
+# ─── 슬라이드 1 — 4-Layer 구조도 ───────────────────────────────────────────────
+
+def slide_01_architecture(prs):
     sl = blank_slide(prs)
     fill_bg(sl, NAVY)
 
-    # ── 상단 캐치프레이즈 띠 ─────────────────────────────────────────────
-    add_rect(sl, 0, 0, SLIDE_W, Cm(3.0), NAVY2)
-    # 좌측 컬러바
-    add_rect(sl, 0, 0, Cm(0.25), Cm(3.0), CYAN)
+    header_band(sl,
+                "MASTER ARCHITECTURE  ·  AI를 통제하는 비정형 데이터 플랫폼",
+                "대고객 · 대직원 · 리스크를 구조적으로 해결하는 단 하나의 플랫폼",
+                "AI를 통제하는 금융, 하나은행 — 통제된 AI Agent 위에서 모든 판단이 움직인다")
 
-    # 작은 태그
-    add_rect(sl, Cm(1.2), Cm(0.55), Cm(4.5), Cm(0.55), CYAN)
-    add_textbox(sl, "MASTER MESSAGE  ·  본질 진단",
-                Cm(1.2), Cm(0.55), Cm(4.5), Cm(0.55),
-                font_size=9, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+    # ── 다이어그램 영역 ────────────────────────────────────────────────────
+    diag_x = Cm(1.2)
+    diag_y = Cm(3.0)
+    diag_w = SLIDE_W - Cm(2.4)
 
-    # 메인 캐치프레이즈
-    add_textbox(sl, "AI를 통제하는 금융, 하나은행",
-                Cm(1.2), Cm(1.15), SLIDE_W - Cm(2.4), Cm(1.3),
-                font_size=32, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+    # ── Layer A (Top): 통제된 AI Agent 결과 ───────────────────────────────
+    la_y = diag_y
+    la_h = Cm(2.6)
 
-    add_textbox(sl, "Ready to AI Foundation — 모든 판단이 AI 실행 자산 위에서 움직이는 첫 번째 은행",
-                Cm(1.2), Cm(2.35), SLIDE_W - Cm(2.4), Cm(0.6),
-                font_size=12, color=CYAN, align=PP_ALIGN.LEFT)
+    # 좌측 레이블
+    label_w = Cm(4.5)
+    add_rect(sl, diag_x, la_y, label_w, la_h, NAVY3, CYAN, Pt(0.75))
+    add_textbox(sl, "LAYER A",
+                diag_x, la_y + Cm(0.2), label_w, Cm(0.5),
+                font_size=9, bold=True, color=CYAN, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "통제된 AI Agent",
+                diag_x, la_y + Cm(0.7), label_w, Cm(0.7),
+                font_size=14, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "각 도메인 의사결정 실행",
+                diag_x, la_y + Cm(1.4), label_w, Cm(0.5),
+                font_size=9, color=DARK_TEXT, align=PP_ALIGN.CENTER)
 
-    # ── 슬라이드 제목 ─────────────────────────────────────────────────────
-    add_textbox(sl, "이 사업은 RAG가 아닙니다. 은행의 OS 교체입니다.",
-                Cm(1.2), Cm(3.4), SLIDE_W - Cm(2.4), Cm(0.9),
-                font_size=18, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+    # 우측 3개 Agent 박스
+    cards_x = diag_x + label_w + Cm(0.4)
+    cards_w = diag_w - label_w - Cm(0.4)
+    card_w = (cards_w - Cm(0.6)) / 3
 
-    # ── RFP 원문 인용 박스 ───────────────────────────────────────────────
-    quote_y = Cm(4.6)
-    quote_h = Cm(2.7)
-    add_rect(sl, Cm(1.2), quote_y, SLIDE_W - Cm(2.4), quote_h, NAVY3, MID_BLUE, Pt(0.75))
-    # 좌측 인용바
-    add_rect(sl, Cm(1.2), quote_y, Cm(0.15), quote_h, YELLOW)
-
-    add_rect(sl, Cm(1.6), quote_y + Cm(0.25), Cm(3.5), Cm(0.5), YELLOW)
-    add_textbox(sl, "RFP 원문 분석",
-                Cm(1.6), quote_y + Cm(0.25), Cm(3.5), Cm(0.5),
-                font_size=8, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
-
-    # 본문 — rich text 로 핵심 단어 컬러 강조
-    add_rich_textbox(sl, [
-        ('"주요 ', 14, False, LIGHT_GRAY),
-        ('비정형 데이터', 14, True, YELLOW),
-        ('를 대상으로 ', 14, False, LIGHT_GRAY),
-        ('수집 · 저장 · 가공', 14, True, CYAN),
-        ('하여 자산화함으로써  ', 14, False, LIGHT_GRAY),
-        ('대직원 · 대손님 · 리스크', 14, True, ORANGE),
-        (' 등 전 영역에서 생성형 AI Agent를 활용할 수 있는  ', 14, False, LIGHT_GRAY),
-        ('공통 데이터 기반', 14, True, GREEN),
-        (' 플랫폼을 구축한다"', 14, False, LIGHT_GRAY),
-    ], Cm(1.6), quote_y + Cm(0.85), SLIDE_W - Cm(3.2), Cm(1.8), align=PP_ALIGN.LEFT)
-
-    # ── 표면 vs 본질 비교표 ──────────────────────────────────────────────
-    tbl_y = Cm(7.7)
-    col_w = (SLIDE_W - Cm(2.4) - Cm(0.4)) / 2
-    left_x = Cm(1.2)
-    right_x = left_x + col_w + Cm(0.4)
-
-    # 헤더
-    add_rect(sl, left_x, tbl_y, col_w, Cm(0.7), MID_BLUE)
-    add_textbox(sl, "표면 — RFP 문구",
-                left_x, tbl_y, col_w, Cm(0.7),
-                font_size=11, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-    add_rect(sl, right_x, tbl_y, col_w, Cm(0.7), CYAN)
-    add_textbox(sl, "본질 — 하나은행이 진짜 원하는 것",
-                right_x, tbl_y, col_w, Cm(0.7),
-                font_size=11, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
-
-    pairs = [
-        ("비정형 데이터 플랫폼",
-         "은행의 모든 판단 흐름을 AI 중심으로 재구성"),
-        ("생성형 AI Agent 활용",
-         "'사람이 찾는 조직' → 'AI가 즉시 실행하는 조직'"),
-        ("데이터 자산화",
-         "AI Agent 생태계의 기반 인프라"),
-        ("'공통 데이터 기반' (가장 핵심)",
-         "부서별 사일로 제거 → 조직 전체가 동일 컨텍스트 공유"),
+    agent_cards = [
+        ("대고객", "초개인화 상담 Agent", "손님 맥락 즉시 파악 · 상품 추천", CYAN),
+        ("대직원", "업무 실행 Agent", "문서·규정·업무 자동화", YELLOW),
+        ("리스크", "판단·통제 Agent", "사고 예방 · 준법 · 심사 추적", ORANGE),
     ]
-    row_h = Cm(1.25)
-    row_y = tbl_y + Cm(0.8)
-    for i, (surf, ess) in enumerate(pairs):
-        # 좌측 셀 (어두운 회색조)
-        add_rect(sl, left_x, row_y, col_w, row_h, NAVY2, MID_BLUE, Pt(0.5))
-        add_textbox(sl, surf,
-                    left_x + Cm(0.3), row_y, col_w - Cm(0.6), row_h,
-                    font_size=12, color=DARK_TEXT, align=PP_ALIGN.LEFT)
-        # 우측 셀 (강조)
-        emphasis_color = NAVY3 if i < 3 else NAVY3
-        add_rect(sl, right_x, row_y, col_w, row_h, emphasis_color, CYAN, Pt(0.5))
-        bold_flag = i == 3
-        color = YELLOW if i == 3 else WHITE
-        add_textbox(sl, ess,
-                    right_x + Cm(0.3), row_y, col_w - Cm(0.6), row_h,
-                    font_size=12, bold=bold_flag, color=color, align=PP_ALIGN.LEFT)
-        row_y += row_h + Cm(0.1)
+    for i, (domain, agent, desc, color) in enumerate(agent_cards):
+        cx = cards_x + i * (card_w + Cm(0.3))
+        add_rect(sl, cx, la_y, card_w, la_h, NAVY2, color, Pt(1.0))
+        # 좌측 컬러바
+        add_rect(sl, cx, la_y, Cm(0.2), la_h, color)
+        # 도메인 태그
+        add_rect(sl, cx + Cm(0.5), la_y + Cm(0.25), Cm(2.0), Cm(0.5), color)
+        add_textbox(sl, domain,
+                    cx + Cm(0.5), la_y + Cm(0.25), Cm(2.0), Cm(0.5),
+                    font_size=10, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+        # Agent 명
+        add_textbox(sl, agent,
+                    cx + Cm(0.4), la_y + Cm(0.95), card_w - Cm(0.6), Cm(0.8),
+                    font_size=15, bold=True, color=color, align=PP_ALIGN.LEFT)
+        add_textbox(sl, "▸  " + desc,
+                    cx + Cm(0.4), la_y + Cm(1.75), card_w - Cm(0.6), Cm(0.6),
+                    font_size=10, color=LIGHT_GRAY, align=PP_ALIGN.LEFT)
 
-    # ── 하단 결론 띠 (오렌지) ─────────────────────────────────────────────
-    concl_y = SLIDE_H - Cm(3.4)
-    add_rect(sl, Cm(1.2), concl_y, SLIDE_W - Cm(2.4), Cm(1.85), ORANGE)
-    add_textbox(sl, "이번 사업은 Elasticsearch 구축도, RAG 구축도, 데이터 레이크 구축도 아닙니다.",
-                Cm(1.5), concl_y + Cm(0.2), SLIDE_W - Cm(3), Cm(0.7),
-                font_size=14, bold=True, color=NAVY, align=PP_ALIGN.LEFT)
-    add_textbox(sl, "은행의 판단 체계를 AI 기반으로 재설계하는 — 첫 번째 인프라 사업입니다.",
-                Cm(1.5), concl_y + Cm(0.85), SLIDE_W - Cm(3), Cm(0.9),
-                font_size=18, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+    # ── 화살표 1 (Layer A ← Layer B) ──────────────────────────────────────
+    arr_y = la_y + la_h + Cm(0.1)
+    for i in range(3):
+        ax = cards_x + i * (card_w + Cm(0.3)) + card_w/2 - Cm(0.4)
+        add_arrow_down(sl, ax, arr_y, Cm(0.8), Cm(0.55), CYAN_DIM)
+
+    # ── Layer B: AI Governance Layer (통제 계층) ─────────────────────────
+    lb_y = arr_y + Cm(0.7)
+    lb_h = Cm(2.4)
+
+    add_rect(sl, diag_x, lb_y, label_w, lb_h, NAVY3, PURPLE, Pt(0.75))
+    add_textbox(sl, "LAYER B",
+                diag_x, lb_y + Cm(0.2), label_w, Cm(0.5),
+                font_size=9, bold=True, color=PURPLE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "AI Governance",
+                diag_x, lb_y + Cm(0.7), label_w, Cm(0.7),
+                font_size=14, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "통제 · 출처 · 감사",
+                diag_x, lb_y + Cm(1.4), label_w, Cm(0.5),
+                font_size=9, color=DARK_TEXT, align=PP_ALIGN.CENTER)
+
+    # 거버넌스 5개 통제 컴포넌트
+    gov_items = [
+        ("출처 추적", "Provenance"),
+        ("접근 통제", "Access Control"),
+        ("정책 엔진", "Policy"),
+        ("응답 검증", "Validation"),
+        ("감사 로그", "Audit Trail"),
+    ]
+    gov_w = (cards_w - Cm(0.4)) / 5
+    for i, (ko, en) in enumerate(gov_items):
+        gx = cards_x + i * (gov_w + Cm(0.1))
+        add_rect(sl, gx, lb_y, gov_w, lb_h, NAVY2, PURPLE, Pt(0.75))
+        # 작은 아이콘 자리 (원형)
+        add_rect(sl, gx + gov_w/2 - Cm(0.35), lb_y + Cm(0.3), Cm(0.7), Cm(0.7),
+                 PURPLE, shape=MSO_SHAPE.OVAL)
+        add_textbox(sl, ko,
+                    gx, lb_y + Cm(1.1), gov_w, Cm(0.6),
+                    font_size=12, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        add_textbox(sl, en,
+                    gx, lb_y + Cm(1.7), gov_w, Cm(0.5),
+                    font_size=8, color=DARK_TEXT, italic=True, align=PP_ALIGN.CENTER)
+
+    # ── 화살표 2 ──────────────────────────────────────────────────────────
+    arr2_y = lb_y + lb_h + Cm(0.1)
+    add_arrow_down(sl, cards_x + cards_w/2 - Cm(0.4), arr2_y, Cm(0.8), Cm(0.55), PURPLE)
+    add_textbox(sl, "거버넌스가 통과한 데이터만 Agent에게 노출",
+                cards_x, arr2_y, cards_w, Cm(0.55),
+                font_size=9, italic=True, color=PURPLE, align=PP_ALIGN.CENTER)
+
+    # ── Layer C: AI Ready 데이터 자산화 계층 ──────────────────────────────
+    lc_y = arr2_y + Cm(0.7)
+    lc_h = Cm(1.8)
+
+    add_rect(sl, diag_x, lc_y, label_w, lc_h, NAVY3, GREEN, Pt(0.75))
+    add_textbox(sl, "LAYER C",
+                diag_x, lc_y + Cm(0.15), label_w, Cm(0.45),
+                font_size=9, bold=True, color=GREEN, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "AI Ready 자산",
+                diag_x, lc_y + Cm(0.55), label_w, Cm(0.6),
+                font_size=14, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "정형화 · 임베딩 · 메타데이터",
+                diag_x, lc_y + Cm(1.15), label_w, Cm(0.5),
+                font_size=9, color=DARK_TEXT, align=PP_ALIGN.CENTER)
+
+    add_rect(sl, cards_x, lc_y, cards_w, lc_h, NAVY4, GREEN, Pt(1.0))
+    add_textbox(sl,
+                "비정형 데이터 → 임베딩 · 청크 · 메타데이터 · 분류 · 출처 태그가 부착된 AI Ready Data Asset",
+                cards_x, lc_y + Cm(0.2), cards_w, Cm(0.7),
+                font_size=13, bold=True, color=GREEN, align=PP_ALIGN.CENTER)
+    add_textbox(sl,
+                "공통 데이터 기반 — 부서별 사일로 제거, 조직 전체가 동일 컨텍스트 공유",
+                cards_x, lc_y + Cm(0.95), cards_w, Cm(0.6),
+                font_size=11, color=WHITE, italic=True, align=PP_ALIGN.CENTER)
+
+    # ── 화살표 3 ──────────────────────────────────────────────────────────
+    arr3_y = lc_y + lc_h + Cm(0.1)
+    add_arrow_down(sl, cards_x + cards_w/2 - Cm(0.4), arr3_y, Cm(0.8), Cm(0.5), GREEN)
+
+    # ── Layer D: 원천 비정형 데이터 ───────────────────────────────────────
+    ld_y = arr3_y + Cm(0.65)
+    ld_h = Cm(2.3)
+
+    add_rect(sl, diag_x, ld_y, label_w, ld_h, NAVY3, MID_BLUE, Pt(0.75))
+    add_textbox(sl, "LAYER D",
+                diag_x, ld_y + Cm(0.2), label_w, Cm(0.5),
+                font_size=9, bold=True, color=DARK_TEXT, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "원천 비정형 데이터",
+                diag_x, ld_y + Cm(0.7), label_w, Cm(0.7),
+                font_size=14, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    add_textbox(sl, "도메인별 raw source",
+                diag_x, ld_y + Cm(1.4), label_w, Cm(0.5),
+                font_size=9, color=DARK_TEXT, align=PP_ALIGN.CENTER)
+
+    raw_items = [
+        ("대고객 raw", "상담 로그 · VoC · 거래 메모 · 손님 동의서 · 영업 보고서", CYAN),
+        ("대직원 raw", "내규 · 매뉴얼 · 업무 지식 · 결재 문서 · 회의록", YELLOW),
+        ("리스크 raw", "심사 보고서 · 사고 사례 · 감사 의견 · 법규 변경", ORANGE),
+    ]
+    for i, (name, desc, color) in enumerate(raw_items):
+        rx = cards_x + i * (card_w + Cm(0.3))
+        add_rect(sl, rx, ld_y, card_w, ld_h, NAVY2, color, Pt(0.75))
+        add_rect(sl, rx, ld_y, Cm(0.2), ld_h, color)
+        add_textbox(sl, name,
+                    rx + Cm(0.4), ld_y + Cm(0.3), card_w - Cm(0.6), Cm(0.7),
+                    font_size=13, bold=True, color=color, align=PP_ALIGN.LEFT)
+        add_textbox(sl, desc,
+                    rx + Cm(0.4), ld_y + Cm(1.05), card_w - Cm(0.6), Cm(1.2),
+                    font_size=10, color=LIGHT_GRAY, align=PP_ALIGN.LEFT)
 
     add_footer(sl, 1)
 
 
-# ─── 슬라이드 2: 3축 × 3행위 매트릭스 ──────────────────────────────────────────
+# ─── 슬라이드 2 — 수집~활용 통제 파이프라인 구조도 ──────────────────────────────
 
-def slide_02_matrix(prs):
+def slide_02_pipeline(prs):
     sl = blank_slide(prs)
     fill_bg(sl, NAVY)
 
-    # ── 상단 헤더 띠 ──────────────────────────────────────────────────────
-    add_rect(sl, 0, 0, SLIDE_W, Cm(2.6), NAVY2)
-    add_rect(sl, 0, 0, Cm(0.25), Cm(2.6), CYAN)
+    header_band(sl,
+                "CONTROLLABLE AI PIPELINE  ·  데이터 출처부터 활용까지",
+                "데이터 출처를 명확히 하는 — 통제 가능한 AI를 위한 구조",
+                "수집 단계부터 출처가 박힌다 — 모든 AI 응답이 추적 가능해야 통제할 수 있다")
 
-    add_rect(sl, Cm(1.2), Cm(0.45), Cm(4.5), Cm(0.55), CYAN)
-    add_textbox(sl, "OUR ANSWER  ·  3축 × 3행위 매트릭스",
-                Cm(1.2), Cm(0.45), Cm(4.5), Cm(0.55),
-                font_size=9, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+    # ── 다이어그램 영역 ────────────────────────────────────────────────────
+    diag_x = Cm(1.2)
+    diag_y = Cm(3.0)
+    diag_w = SLIDE_W - Cm(2.4)
 
-    add_textbox(sl, "고객 · 직원 · 리스크를 하나의 AI Ready 기반 위에 연결합니다",
-                Cm(1.2), Cm(1.05), SLIDE_W - Cm(2.4), Cm(1.1),
-                font_size=22, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
-    add_textbox(sl, "Enterprise AI Operating Foundation",
-                Cm(1.2), Cm(1.95), SLIDE_W - Cm(2.4), Cm(0.55),
-                font_size=11, color=CYAN, align=PP_ALIGN.LEFT)
-
-    # ── 매트릭스 영역 ─────────────────────────────────────────────────────
-    # 4열 (라벨 + 3 process), 4행 (헤더 + 3 axis)
-    mtx_x = Cm(1.2)
-    mtx_y = Cm(3.2)
-    mtx_w = SLIDE_W - Cm(2.4)
-    label_col_w = Cm(7.2)
-    proc_col_w = (mtx_w - label_col_w) / 3
-    header_row_h = Cm(1.5)
-    axis_row_h = Cm(3.0)
-
-    # ── 상단 헤더 행 (수집 / 저장 / 가공) ────────────────────────────────
-    process_headers = [
-        ("수집", "흩어진 비정형 데이터 통합", "은행의 암묵지를 디지털화", CYAN),
-        ("저장", "AI 활용 가능한 구조화", "'AI Ready 자산 관리 체계'", CYAN),
-        ("가공", "AI가 판단 가능한 형태", "비정형 데이터의 AI Ready 化", ORANGE),
+    # ── 4-stage 파이프라인 ────────────────────────────────────────────────
+    stages = [
+        ("수집", "Ingest",
+         "원천 → 출처 태그 부착",
+         ["• 출처(source) 기록",
+          "• 소유 부서·작성자",
+          "• 분류·민감도 등급",
+          "• 작성 시점 메타"],
+         CYAN),
+        ("저장", "Govern",
+         "출처 보존 + 접근 통제",
+         ["• 접근 권한 매트릭스",
+          "• 버전 관리·이력",
+          "• 감사 로그 자동 적재",
+          "• 보존 기간 정책"],
+         PURPLE),
+        ("가공", "Process",
+         "AI Ready化 + 정합성 검증",
+         ["• 비식별화·마스킹",
+          "• 청킹 + 임베딩",
+          "• 출처 메타 동행 전이",
+          "• 정합성 2-Pass 검증"],
+         GREEN),
+        ("활용", "Serve",
+         "출처 인용 + 응답 검증",
+         ["• 출처 인용 강제",
+          "• 정책 엔진 사전 차단",
+          "• 응답 추적 가능 (XAI)",
+          "• 피드백 → 재학습"],
+         ORANGE),
     ]
-    # 좌상단 공백 셀
-    add_rect(sl, mtx_x, mtx_y, label_col_w, header_row_h, NAVY2, MID_BLUE, Pt(0.5))
-    add_textbox(sl, "3대 의사결정 축",
-                mtx_x, mtx_y + Cm(0.1), label_col_w, Cm(0.6),
-                font_size=10, color=DARK_TEXT, align=PP_ALIGN.CENTER)
-    add_textbox(sl, "▼  3대 데이터 공정 (수집 → 저장 → 가공)  ▶",
-                mtx_x, mtx_y + Cm(0.7), label_col_w, Cm(0.7),
-                font_size=10, bold=True, color=CYAN, align=PP_ALIGN.CENTER)
 
-    for i, (name, desc, msg, accent) in enumerate(process_headers):
-        cx = mtx_x + label_col_w + i * proc_col_w
-        add_rect(sl, cx, mtx_y, proc_col_w, header_row_h, NAVY3, accent, Pt(0.75))
+    # 통제축 (vertical lines across all stages) - 위쪽
+    ctrl_y = diag_y
+    ctrl_h = Cm(1.4)
+    ctrl_axes = [
+        ("출처 (Provenance)", "어디서 왔는지", YELLOW),
+        ("감사 (Audit)",      "무엇이 일어났는지", PURPLE),
+        ("접근 (Access)",     "누가 볼 수 있는지", CYAN),
+        ("품질 (Quality)",    "신뢰할 수 있는지", GREEN),
+    ]
+    add_rect(sl, diag_x, ctrl_y, diag_w, ctrl_h, NAVY3, MID_BLUE, Pt(0.5))
+    add_textbox(sl, "▼  4대 통제축 — 모든 단계를 관통하며 적용 (Cross-cutting Controls)",
+                diag_x + Cm(0.2), ctrl_y + Cm(0.1), diag_w - Cm(0.4), Cm(0.4),
+                font_size=9, italic=True, color=DARK_TEXT, align=PP_ALIGN.LEFT)
+    ctrl_w = (diag_w - Cm(0.4)) / 4
+    for i, (name, desc, color) in enumerate(ctrl_axes):
+        cx = diag_x + Cm(0.2) + i * ctrl_w
+        # 컬러 닷
+        add_rect(sl, cx + Cm(0.1), ctrl_y + Cm(0.55), Cm(0.3), Cm(0.3),
+                 color, shape=MSO_SHAPE.OVAL)
         add_textbox(sl, name,
-                    cx, mtx_y + Cm(0.1), proc_col_w, Cm(0.6),
-                    font_size=16, bold=True, color=accent, align=PP_ALIGN.CENTER)
+                    cx + Cm(0.5), ctrl_y + Cm(0.5), ctrl_w - Cm(0.5), Cm(0.5),
+                    font_size=11, bold=True, color=color, align=PP_ALIGN.LEFT)
         add_textbox(sl, desc,
-                    cx, mtx_y + Cm(0.7), proc_col_w, Cm(0.4),
-                    font_size=9, color=LIGHT_GRAY, align=PP_ALIGN.CENTER)
-        add_textbox(sl, msg,
-                    cx, mtx_y + Cm(1.05), proc_col_w, Cm(0.4),
-                    font_size=8, bold=True, italic=True, color=accent, align=PP_ALIGN.CENTER)
+                    cx + Cm(0.5), ctrl_y + Cm(0.95), ctrl_w - Cm(0.5), Cm(0.4),
+                    font_size=8, color=LIGHT_GRAY, italic=True, align=PP_ALIGN.LEFT)
 
-    # ── 3행 (고객 / 직원 / 리스크) ────────────────────────────────────────
-    axes = [
-        # (이름, 의미, Agent 유형, 컬러, 9칸 채울 내용 [수집, 저장, 가공])
-        ("고객", "수익 창출", "초개인화 상담 Agent", CYAN,
-         ["상담 로그 · VoC 통합",
-          "손님 컨텍스트 자산화",
-          "초개인화 Prompt-Ready"]),
-        ("직원", "생산성 혁신", "업무 실행 Agent", YELLOW,
-         ["규정·매뉴얼·업무지식 수집",
-          "업무 지식 그래프 구축",
-          "업무 흐름별 Skill 화"]),
-        ("리스크", "은행 생존", "판단·통제 Agent", ORANGE,
-         ["심사·사고·감사 데이터 통합",
-          "통제 이력 자산화",
-          "판단 근거 추적 가능화"]),
-    ]
-    ry = mtx_y + header_row_h
-    for axis_name, meaning, agent_type, axis_color, cells in axes:
-        # 좌측 axis 라벨 셀
-        add_rect(sl, mtx_x, ry, label_col_w, axis_row_h, NAVY2, axis_color, Pt(0.75))
-        # 좌측 컬러 바
-        add_rect(sl, mtx_x, ry, Cm(0.2), axis_row_h, axis_color)
-        add_textbox(sl, axis_name,
-                    mtx_x + Cm(0.4), ry + Cm(0.25), label_col_w - Cm(0.6), Cm(0.85),
-                    font_size=22, bold=True, color=axis_color, align=PP_ALIGN.LEFT)
-        add_textbox(sl, meaning,
-                    mtx_x + Cm(0.4), ry + Cm(1.15), label_col_w - Cm(0.6), Cm(0.55),
-                    font_size=10, color=DARK_TEXT, align=PP_ALIGN.LEFT)
-        add_textbox(sl, "▸  " + agent_type,
-                    mtx_x + Cm(0.4), ry + Cm(1.75), label_col_w - Cm(0.6), Cm(0.7),
-                    font_size=12, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+    # ── Pipeline 단계들 ───────────────────────────────────────────────────
+    pipe_y = ctrl_y + ctrl_h + Cm(0.3)
+    pipe_h = Cm(6.3)
 
-        # 우측 3개 셀 (수집/저장/가공)
-        for i, content in enumerate(cells):
-            cx = mtx_x + label_col_w + i * proc_col_w
-            # 가공 컬럼 (마지막)은 강조
-            is_emphasis = (i == 2)
-            cell_bg = NAVY3 if is_emphasis else NAVY2
-            border = ORANGE if is_emphasis else MID_BLUE
-            add_rect(sl, cx, ry, proc_col_w, axis_row_h, cell_bg, border, Pt(0.5))
-            # 상단 작은 인디케이터
-            add_rect(sl, cx + Cm(0.3), ry + Cm(0.3),
-                     Cm(0.25), Cm(0.25), axis_color)
-            color = ORANGE if is_emphasis else WHITE
-            bold = is_emphasis
-            add_textbox(sl, content,
-                        cx + Cm(0.4), ry + Cm(0.8), proc_col_w - Cm(0.5), axis_row_h - Cm(1.0),
-                        font_size=12, bold=bold, color=color, align=PP_ALIGN.LEFT)
-        ry += axis_row_h
+    # 가로로 4단계 + 사이에 화살표
+    gap = Cm(0.25)
+    stage_w = (diag_w - 3 * gap) / 4
+
+    for i, (ko, en, sub, items, color) in enumerate(stages):
+        sx = diag_x + i * (stage_w + gap)
+
+        # 카드 본체
+        add_rect(sl, sx, pipe_y, stage_w, pipe_h, NAVY2, color, Pt(1.0))
+        # 상단 컬러 헤더 바
+        add_rect(sl, sx, pipe_y, stage_w, Cm(1.4), color)
+        add_textbox(sl, f"{i+1}",
+                    sx + Cm(0.3), pipe_y + Cm(0.1), Cm(0.8), Cm(0.5),
+                    font_size=10, bold=True, color=NAVY, align=PP_ALIGN.LEFT)
+        add_textbox(sl, ko,
+                    sx, pipe_y + Cm(0.15), stage_w, Cm(0.7),
+                    font_size=18, bold=True, color=NAVY, align=PP_ALIGN.CENTER)
+        add_textbox(sl, en,
+                    sx, pipe_y + Cm(0.85), stage_w, Cm(0.45),
+                    font_size=9, italic=True, color=NAVY, align=PP_ALIGN.CENTER)
+        # 부제
+        add_textbox(sl, sub,
+                    sx + Cm(0.3), pipe_y + Cm(1.55), stage_w - Cm(0.6), Cm(0.7),
+                    font_size=11, bold=True, color=color, align=PP_ALIGN.LEFT)
+        # 구분선
+        add_rect(sl, sx + Cm(0.3), pipe_y + Cm(2.25),
+                 stage_w - Cm(0.6), Cm(0.04), color)
+        # 항목들
+        iy = pipe_y + Cm(2.4)
+        for item in items:
+            add_textbox(sl, item,
+                        sx + Cm(0.3), iy, stage_w - Cm(0.6), Cm(0.55),
+                        font_size=10, color=WHITE, align=PP_ALIGN.LEFT)
+            iy += Cm(0.55)
+        # 데이터 상태 라벨 (하단)
+        state_y = pipe_y + pipe_h - Cm(0.8)
+        states = ["raw + meta", "stored + audit", "ai-ready", "served + cited"]
+        add_rect(sl, sx + Cm(0.3), state_y, stage_w - Cm(0.6), Cm(0.5), color)
+        add_textbox(sl, "→ " + states[i],
+                    sx + Cm(0.3), state_y, stage_w - Cm(0.6), Cm(0.5),
+                    font_size=9, bold=True, italic=True, color=NAVY, align=PP_ALIGN.CENTER)
+
+        # 화살표 (마지막 단계 뒤에는 없음)
+        if i < 3:
+            arr_x = sx + stage_w + Cm(0.02)
+            arr_y_pos = pipe_y + pipe_h/2 - Cm(0.4)
+            add_chevron_right(sl, arr_x, arr_y_pos, Cm(0.20), Cm(0.8), color)
 
     # ── 하단 결론 띠 ──────────────────────────────────────────────────────
-    concl_y = SLIDE_H - Cm(3.0)
-    add_rect(sl, Cm(1.2), concl_y, SLIDE_W - Cm(2.4), Cm(1.55), CYAN)
+    concl_y = pipe_y + pipe_h + Cm(0.35)
+    add_rect(sl, diag_x, concl_y, diag_w, Cm(1.5), CYAN)
     add_textbox(sl,
-                "우리는 단순 RAG가 아닌, 비정형 데이터를 AI 실행 자산으로 전환하는",
-                Cm(1.5), concl_y + Cm(0.15), SLIDE_W - Cm(3), Cm(0.6),
+                "출처가 박힌 데이터만 학습되고, 인용 가능한 응답만 사용자에게 전달된다",
+                diag_x + Cm(0.4), concl_y + Cm(0.15), diag_w - Cm(0.8), Cm(0.6),
                 font_size=12, color=NAVY, align=PP_ALIGN.LEFT)
     add_textbox(sl,
-                "Enterprise AI Operating Foundation 을 구축합니다.",
-                Cm(1.5), concl_y + Cm(0.65), SLIDE_W - Cm(3), Cm(0.85),
-                font_size=20, bold=True, color=NAVY, align=PP_ALIGN.LEFT)
-    # 우측 사인
-    add_textbox(sl, "Ready to AI  ·  KT B2B 수주전략팀",
-                SLIDE_W - Cm(11), concl_y + Cm(0.9), Cm(9.5), Cm(0.6),
-                font_size=10, bold=True, color=NAVY, align=PP_ALIGN.RIGHT)
-
-    # 핵심 한 문장 (오렌지 띠)
-    quote_y = SLIDE_H - Cm(1.25)
-    add_rect(sl, Cm(1.2), quote_y, SLIDE_W - Cm(2.4), Cm(0.05), ORANGE)
+                "→ 이것이 '통제 가능한 AI' 의 유일한 구현 방법입니다",
+                diag_x + Cm(0.4), concl_y + Cm(0.7), diag_w - Cm(0.8), Cm(0.7),
+                font_size=18, bold=True, color=NAVY, align=PP_ALIGN.LEFT)
 
     add_footer(sl, 2)
 
@@ -369,8 +459,8 @@ def main():
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    slide_01_diagnosis(prs)
-    slide_02_matrix(prs)
+    slide_01_architecture(prs)
+    slide_02_pipeline(prs)
 
     out = "/home/user/strategy-pipeline/하나은행_AI_통제하는금융.pptx"
     prs.save(out)
