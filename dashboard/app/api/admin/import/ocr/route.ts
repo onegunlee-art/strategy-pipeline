@@ -1,7 +1,7 @@
-// PDF OCR — Claude vision으로 수주/실주 데이터 추출
+// PDF OCR — Gemini vision으로 수주/실주 데이터 추출
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminAuthed } from '@/lib/auth';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const OCR_PROMPT = `당신은 B2B 영업 데이터 추출 전문가입니다.
 아래 문서는 수주/실주 현황 표입니다. 모든 데이터 행을 JSON 배열로 추출하세요.
@@ -31,6 +31,11 @@ export async function POST(req: NextRequest) {
   if (!isAdminAuthed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
+    const geminiKey = process.env.GEMINI_API_KEY ?? process.env.Gemini_API_Key ?? process.env.GOOGLE_API_KEY;
+    if (!geminiKey) {
+      return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 503 });
+    }
+
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     if (!file) return NextResponse.json({ error: 'file 필드 없음' }, { status: 400 });
@@ -43,42 +48,21 @@ export async function POST(req: NextRequest) {
 
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString('base64');
+    const mimeType = (
+      ext === 'pdf'  ? 'application/pdf' :
+      ext === 'png'  ? 'image/png' :
+      ext === 'webp' ? 'image/webp' : 'image/jpeg'
+    ) as 'application/pdf' | 'image/png' | 'image/webp' | 'image/jpeg';
 
-    const isPdf = ext === 'pdf';
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
-    const contentBlock = isPdf
-      ? {
-          type: 'document' as const,
-          source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: base64 },
-        }
-      : {
-          type: 'image' as const,
-          source: {
-            type: 'base64' as const,
-            media_type: (
-              ext === 'png' ? 'image/png' :
-              ext === 'webp' ? 'image/webp' : 'image/jpeg'
-            ) as 'image/png' | 'image/jpeg' | 'image/webp',
-            data: base64,
-          },
-        };
+    const result = await model.generateContent([
+      { inlineData: { mimeType, data: base64 } },
+      { text: OCR_PROMPT },
+    ]);
+    const text = result.response.text();
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
-      messages: [{
-        role: 'user',
-        content: [
-          contentBlock,
-          { type: 'text', text: OCR_PROMPT },
-        ],
-      }],
-    });
-
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
-
-    // JSON 배열 파싱
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) {
       return NextResponse.json({
