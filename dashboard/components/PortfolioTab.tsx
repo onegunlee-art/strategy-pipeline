@@ -63,7 +63,6 @@ export default function PortfolioTab({ refreshKey }: Props) {
       });
       const d = await res.json();
       setImportMsg(d.message || d.error || '완료');
-      // refresh
       fetch('/api/weights').then(r => r.json()).then(setData);
     } catch (e: unknown) {
       setImportMsg(String(e));
@@ -87,45 +86,48 @@ export default function PortfolioTab({ refreshKey }: Props) {
     }
   };
 
-  if (!data) return <div style={{ color: 'var(--text-dim)' }}>로딩 중...</div>;
+  if (!data) return <div style={{ color: 'var(--text-dim)', fontSize: '13px', padding: '40px' }}>로딩 중...</div>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* 통계 */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* 통계 카드 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-        <Stat label="TOTAL DEALS" value={data.stats.total_deals.toString()} />
-        <Stat label="WIN RATE" value={`${(data.stats.win_rate * 100).toFixed(1)}%`} />
-        <Stat label="AVG BRIER" value={data.stats.avg_brier.toFixed(3)} small="낮을수록 좋음" />
+        <Stat label="Total Deals" value={data.stats.total_deals.toString()} />
+        <Stat label="Win Rate" value={`${(data.stats.win_rate * 100).toFixed(1)}%`} color="var(--brand)" />
+        <Stat label="Avg Brier Score" value={data.stats.avg_brier.toFixed(3)} note="낮을수록 좋음" />
       </div>
 
-      {/* 결과 기록 UI — Win/Loss 입력 → Bayesian/Elo 자동 갱신 */}
+      {/* 결과 기록 */}
       <OutcomeRecorder refreshKey={refreshKey} />
 
-
       {/* CSV 임포트 */}
-      <Card title="IMPORT HISTORICAL DATA (CSV)">
+      <Card title="Import Historical Data (CSV)">
         <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '12px' }}>
-          헤더 예시: <span style={{ fontFamily: 'IBM Plex Mono', color: 'var(--text-mid)' }}>
+          헤더 예시:{' '}
+          <span style={{ fontFamily: 'var(--font-num)', color: 'var(--text-mid)', fontSize: '11px' }}>
             client_name, deal_size, industry, closed_at, actual_result, competitors, V, P, D, E
           </span>
           <br />
-          (V/P/D/E는 1-10 점수, 미입력 시 5. competitors는 콤마/세미콜론 구분. actual_result는 1/0)
+          V/P/D/E는 1–10 점수, 미입력 시 5. competitors는 콤마/세미콜론 구분. actual_result는 1/0.
         </div>
         <textarea value={csvText} onChange={e => setCsvText(e.target.value)}
-          placeholder="client_name,deal_size,actual_result,competitors,V,P,D,E&#10;KT엔터,50억,1,&quot;LG CNS,SKT&quot;,8,7,9,6"
+          placeholder={'client_name,deal_size,actual_result,competitors,V,P,D,E\nKT엔터,50억,1,"LG CNS,SKT",8,7,9,6'}
           rows={6}
           style={{
             width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
-            borderRadius: '8px', padding: '12px', color: 'var(--text)',
-            fontFamily: 'IBM Plex Mono', fontSize: '12px', resize: 'vertical',
+            borderRadius: '2px', padding: '12px', color: 'var(--text)',
+            fontFamily: 'var(--font-num)', fontSize: '12px', resize: 'vertical',
+            outline: 'none',
           }} />
         <button onClick={doImport} disabled={importing || !csvText.trim()}
           style={{
-            marginTop: '12px', padding: '10px 16px', borderRadius: '6px', border: 'none',
-            background: importing ? 'var(--surface2)' : 'var(--cyan)', color: importing ? 'var(--text-dim)' : '#000',
-            fontFamily: 'IBM Plex Mono', fontSize: '12px', cursor: importing ? 'wait' : 'pointer',
+            marginTop: '10px', padding: '9px 20px', borderRadius: '2px', border: 'none',
+            background: importing ? 'var(--surface2)' : 'var(--brand)',
+            color: importing ? 'var(--text-dim)' : '#fff',
+            fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 600,
+            letterSpacing: '0.5px', cursor: importing ? 'wait' : 'pointer',
           }}>
-          {importing ? 'IMPORTING...' : '▶ IMPORT'}
+          {importing ? 'IMPORTING...' : 'IMPORT'}
         </button>
         {importMsg && (
           <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--green)' }}>{importMsg}</div>
@@ -133,7 +135,7 @@ export default function PortfolioTab({ refreshKey }: Props) {
       </Card>
 
       {/* Calibration Plot */}
-      <Card title="CALIBRATION PLOT (예측 vs 실제)">
+      <Card title="Calibration Plot (예측 vs 실제)">
         {data.calibration.length === 0 ? (
           <div style={{ color: 'var(--text-dim)', fontSize: '12px' }}>
             데이터 부족 — 예측+결과 기록이 누적되면 표시됩니다.
@@ -144,30 +146,36 @@ export default function PortfolioTab({ refreshKey }: Props) {
       </Card>
 
       {/* AI 재학습 */}
-      <Card title="AI RETRAIN (Claude Sonnet 4.6)">
-        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '12px' }}>
+      <Card title="AI Retrain (Claude Sonnet 4.6)">
+        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '14px' }}>
           최근 데이터로 Pillar 가중치 + Sub-factor 가중치 + Ensemble 가중치 모두 재학습합니다.
         </div>
         <button onClick={doRetrain} disabled={retraining}
           style={{
-            padding: '10px 16px', borderRadius: '6px', border: '1px solid var(--cyan)',
-            background: 'transparent', color: 'var(--cyan)',
-            fontFamily: 'IBM Plex Mono', fontSize: '12px', cursor: retraining ? 'wait' : 'pointer',
+            padding: '9px 20px', borderRadius: '2px', border: '1px solid var(--brand)',
+            background: 'transparent', color: 'var(--brand)',
+            fontFamily: 'var(--font-sans)', fontSize: '12px', fontWeight: 600,
+            letterSpacing: '0.5px', cursor: retraining ? 'wait' : 'pointer',
           }}>
-          {retraining ? 'RETRAINING...' : '◈ 재학습 실행'}
+          {retraining ? 'RETRAINING...' : '재학습 실행'}
         </button>
         {retrainMsg && (
-          <div style={{ marginTop: '12px', padding: '10px', background: 'var(--surface2)', borderRadius: '6px', fontSize: '12px', color: 'var(--text-mid)' }}>
+          <div style={{
+            marginTop: '12px', padding: '12px 16px',
+            background: 'var(--surface2)', border: '1px solid var(--border)',
+            fontSize: '12px', color: 'var(--text-mid)',
+            fontFamily: 'var(--font-sans)', lineHeight: 1.6,
+          }}>
             {retrainMsg}
           </div>
         )}
       </Card>
 
-      {/* Ensemble + Pillar weights */}
-      <Card title="CURRENT WEIGHTS">
+      {/* 가중치 */}
+      <Card title="Current Weights">
         {data.ensemble_weights && (
           <div style={{ marginBottom: '20px' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '8px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '1px', marginBottom: '10px', fontFamily: 'var(--font-sans)' }}>
               ENSEMBLE (v{data.ensemble_weights.version})
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
@@ -178,9 +186,8 @@ export default function PortfolioTab({ refreshKey }: Props) {
             </div>
           </div>
         )}
-
         <div>
-          <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', marginBottom: '8px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '1px', marginBottom: '10px', fontFamily: 'var(--font-sans)' }}>
             PILLAR WEIGHTS
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
@@ -194,24 +201,33 @@ export default function PortfolioTab({ refreshKey }: Props) {
   );
 }
 
-function Stat({ label, value, small }: { label: string; value: string; small?: string }) {
+function Stat({ label, value, color = 'var(--text)', note }: { label: string; value: string; color?: string; note?: string }) {
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px' }}>
-      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '2px' }}>
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderTop: `3px solid ${color}`,
+      padding: '16px 18px',
+    }}>
+      <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.8px', textTransform: 'uppercase' as const, marginBottom: '8px', fontFamily: 'var(--font-sans)' }}>
         {label}
       </div>
-      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '32px', color: 'var(--cyan)', marginTop: '6px' }}>
+      <div style={{ fontFamily: 'var(--font-num)', fontSize: '22px', fontWeight: 700, color }}>
         {value}
       </div>
-      {small && <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' }}>{small}</div>}
+      {note && <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' }}>{note}</div>}
     </div>
   );
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px' }}>
-      <div style={{ color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '11px', letterSpacing: '2px', marginBottom: '16px' }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '24px 28px' }}>
+      <div style={{
+        fontSize: '10px', fontWeight: 600, color: 'var(--brand)',
+        letterSpacing: '1.5px', textTransform: 'uppercase' as const,
+        borderBottom: '1.5px solid var(--brand)', paddingBottom: '8px', marginBottom: '20px',
+        fontFamily: 'var(--font-sans)',
+      }}>
         {title}
       </div>
       {children}
@@ -221,9 +237,12 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 function WeightCell({ label, value }: { label: string; value: number }) {
   return (
-    <div style={{ padding: '10px', background: 'var(--surface2)', borderRadius: '6px' }}>
-      <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{label}</div>
-      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '18px', color: 'var(--cyan)' }}>
+    <div style={{
+      padding: '10px 12px', background: 'var(--surface2)',
+      border: '1px solid var(--border)',
+    }}>
+      <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.5px', fontFamily: 'var(--font-sans)' }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-num)', fontSize: '18px', fontWeight: 700, color: 'var(--brand)', marginTop: '4px' }}>
         {(value * 100).toFixed(1)}%
       </div>
     </div>
@@ -234,18 +253,15 @@ function CalibrationChart({ points }: { points: CalibPoint[] }) {
   const size = 240;
   return (
     <div>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ background: 'var(--surface2)', borderRadius: '6px' }}>
-        {/* 이상 직선 */}
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
         <line x1={0} y1={size} x2={size} y2={0} stroke="var(--border)" strokeDasharray="4 4" />
-        {/* 축 */}
         <line x1={0} y1={size} x2={size} y2={size} stroke="var(--border)" />
         <line x1={0} y1={0} x2={0} y2={size} stroke="var(--border)" />
-        {/* 점 */}
         {points.map((p, i) => {
           const cx = p.predicted * size;
           const cy = size - p.actual * size;
           const r = Math.max(4, Math.min(12, Math.sqrt(p.count) * 2));
-          return <circle key={i} cx={cx} cy={cy} r={r} fill="var(--cyan)" opacity={0.7} />;
+          return <circle key={i} cx={cx} cy={cy} r={r} fill="var(--brand)" opacity={0.6} />;
         })}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-dim)', marginTop: '6px' }}>
