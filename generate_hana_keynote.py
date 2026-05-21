@@ -36,10 +36,15 @@ FONT_KO = "맑은 고딕"
 SLIDE_W = Cm(33.87)
 SLIDE_H = Cm(19.05)
 FOOTER_TEXT = "하나은행 비정형 데이터 자산화 플랫폼 제안  |  2026.05  |  KT B2B 수주전략팀"
+LOGO_PATH = "/root/.claude/uploads/51a60345-dab8-4c42-8d6b-04245f594bbb/85e35f1f-1000038771.jpg"
 
 
 def blank_slide(prs):
     return prs.slides.add_slide(prs.slide_layouts[6])
+
+
+def add_logo(slide, x, y, size):
+    slide.shapes.add_picture(LOGO_PATH, x, y, size, size)
 
 
 def fill_bg(slide, color):
@@ -124,6 +129,9 @@ def add_footer(slide, page_num, total=3):
                 SLIDE_W - Cm(3.5), SLIDE_H - Cm(0.9),
                 Cm(2), Cm(0.7),
                 font_size=8, color=DARK_TEXT, align=PP_ALIGN.RIGHT)
+    # KT 로고 (footer 우측, 페이지 번호 왼쪽)
+    logo_s = Cm(0.85)
+    add_logo(slide, SLIDE_W - Cm(5.8), SLIDE_H - Cm(1.08), logo_s)
 
 
 # ─── 슬라이드 1: 4계층 토대 구조 — KT 인프라 위에 쌓인 안정감 ───────────────────
@@ -366,12 +374,10 @@ def slide_01_war(prs):
     add_textbox(sl, "Foundation",
                 body_x, L4_y + Cm(1.7), label_w, Cm(0.4),
                 font_size=8, italic=True, color=LIGHT_GRAY, align=PP_ALIGN.CENTER)
-    # WHY KT 마크
-    add_rect(sl, body_x + Cm(0.4), L4_y + L4_h - Cm(0.75), label_w - Cm(0.8), Cm(0.5),
-             WHITE)
-    add_textbox(sl, "WHY KT",
-                body_x + Cm(0.4), L4_y + L4_h - Cm(0.75), label_w - Cm(0.8), Cm(0.5),
-                font_size=10, bold=True, color=KT_RED, align=PP_ALIGN.CENTER)
+    # WHY KT — 실제 로고 이미지 (LAYER 01 우측 끝)
+    logo_size = Cm(2.6)
+    add_logo(sl, layer_x + layer_w - logo_size - Cm(0.3), L4_y + (L4_h - logo_size) / 2,
+             logo_size)
 
     # 내부 핵심 카피
     add_textbox(sl, "INFRASTRUCTURE  ·  멈추지 않는 운영 DNA",
@@ -679,10 +685,13 @@ def slide_03_closing(prs):
                 SLIDE_W / 2 + Cm(0.7), tr_y + Cm(0.45), SLIDE_W / 2 - Cm(1.7), Cm(0.95),
                 font_size=24, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
 
-    # 슬라이드 하단 미니 서명
-    add_textbox(sl, "KT B2B 수주전략팀  ·  2026.05",
-                Cm(0), SLIDE_H - Cm(0.9), SLIDE_W, Cm(0.65),
-                font_size=9, color=RGBColor(0x20, 0x32, 0x4A), align=PP_ALIGN.CENTER)
+    # 슬라이드 하단 미니 서명 — 로고 + 텍스트
+    logo_s3 = Cm(1.1)
+    cx = SLIDE_W / 2
+    add_logo(sl, cx - Cm(5.0), SLIDE_H - Cm(1.25), logo_s3)
+    add_textbox(sl, "B2B 수주전략팀  ·  2026.05",
+                cx - Cm(3.7), SLIDE_H - Cm(1.05), Cm(7.4), Cm(0.65),
+                font_size=9, color=RGBColor(0x20, 0x32, 0x4A), align=PP_ALIGN.LEFT)
 
 
 # ─── 메인 ────────────────────────────────────────────────────────────────────────
