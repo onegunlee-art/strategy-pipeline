@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
     );
 
     // 10) 정성적 컨텍스트 (skip_qualitative=true면 건너뜀)
-    let qualitative_context: {
+    const qualitative_context: {
       similar_deals: Record<string, unknown> | null;
       customer_signals: Record<string, unknown> | null;
     } = { similar_deals: null, customer_signals: null };
