@@ -4,6 +4,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Pool } from 'pg';
 import type { SubFactorId } from './pillars';
 import { searchChunks, type SearchHit } from './rag/search';
+import { resolveCorpCode } from './dart/entityResolver';
+import { listFilings, type FilingRow } from './dart/filingCache';
 
 export type ResearchTopic =
   | { kind: 'weakness'; subFactorId: SubFactorId; clientName?: string; industry?: string }
@@ -17,7 +19,9 @@ export type ResearchTopic =
   | { kind: 'ai_mega_project'; industry?: string }
   | { kind: 'consortium_trend'; partnerName?: string }
   // v0.7 사내 문서 RAG 컨텍스트
-  | { kind: 'internal_similar_deals'; clientName: string; industry?: string; query?: string };
+  | { kind: 'internal_similar_deals'; clientName: string; industry?: string; query?: string }
+  // v0.8 DART 공시 컨텍스트
+  | { kind: 'customer_dart_signals'; clientName: string; days?: number; min_relevance?: number };
 
 export interface ResearchResult {
   text: string;
@@ -38,6 +42,7 @@ function serializeTopic(t: ResearchTopic): string {
     case 'ai_mega_project': return `ai_mega_project:${t.industry ?? 'general'}`;
     case 'consortium_trend': return `consortium_trend:${t.partnerName ?? 'general'}`;
     case 'internal_similar_deals': return `internal_similar_deals`;
+    case 'customer_dart_signals': return `customer_dart_signals`;
   }
 }
 
@@ -306,9 +311,171 @@ function buildPrompt(t: ResearchTopic): { prompt: string; useGrounding: boolean 
       };
 
     case 'internal_similar_deals':
-      // 별도 핸들러에서 처리 (RAG → Gemini 합성). buildPrompt에서는 호출되지 않음.
+    case 'customer_dart_signals':
+      // 별도 핸들러에서 처리. buildPrompt에서는 호출되지 않음.
       return { useGrounding: false, prompt: '' };
   }
+}
+
+async function handleCustomerDartSignals(
+  pool: Pool,
+  dealId: number,
+  topic: Extract<ResearchTopic, { kind: 'customer_dart_signals' }>
+): Promise<ResearchResult> {
+  const topicKey = serializeTopic(topic);
+  const days = topic.days ?? 90;
+  const minRelevance = topic.min_relevance ?? 50;
+
+  // 캐시 (TTL 24시간)
+  const { rows: cached } = await pool.query(
+    `SELECT result_text, result_json, source, created_at FROM external_research
+     WHERE deal_id=$1 AND topic=$2`,
+    [dealId, topicKey]
+  );
+  if (cached.length > 0) {
+    const age = Date.now() - new Date(cached[0].created_at).getTime();
+    if (age < 24 * 3600 * 1000) {
+      return {
+        text: cached[0].result_text ?? '',
+        json: cached[0].result_json,
+        cached: true,
+        source: cached[0].source,
+      };
+    }
+  }
+
+  // 1) 회사명 → corp_code 매핑
+  const corp = await resolveCorpCode(topic.clientName);
+  if (!corp) {
+    const result = {
+      summary: `"${topic.clientName}" — DART corp_map 미등록. /admin/dart 에서 매핑 후 재시도.`,
+      is_listed: false,
+      filings: [],
+    };
+    return { text: JSON.stringify(result), json: result, cached: false, source: 'dart-unmapped' };
+  }
+  if (!corp.is_listed) {
+    const result = {
+      summary: `${corp.corp_name} — 비상장 (DART 데이터 없음). 사내 RAG만 활용 가능.`,
+      is_listed: false,
+      filings: [],
+    };
+    return { text: JSON.stringify(result), json: result, cached: false, source: 'dart-not-listed' };
+  }
+
+  // 2) 캐시된 공시 조회
+  let filings: FilingRow[] = [];
+  try {
+    filings = await listFilings({
+      corp_code: corp.corp_code,
+      days,
+      min_relevance: minRelevance,
+      limit: 20,
+    });
+  } catch (e) {
+    console.error('[research] listFilings failed:', e);
+  }
+
+  if (filings.length === 0) {
+    const result = {
+      summary: `${corp.corp_name} — 최근 ${days}일 내 relevance ≥ ${minRelevance} 공시 없음. /admin/dart/sync 실행 권장.`,
+      is_listed: true,
+      filings: [],
+    };
+    return { text: JSON.stringify(result), json: result, cached: false, source: 'dart-empty' };
+  }
+
+  // 3) Gemini 합성
+  const geminiKey =
+    process.env.GEMINI_API_KEY ??
+    process.env.Gemini_API_Key ??
+    process.env.GOOGLE_API_KEY;
+
+  const contextBlocks = filings.slice(0, 10).map((f, i) => (
+    `[공시 ${i + 1}] ${f.rcept_dt} · ${f.report_nm} · relevance ${f.relevance_score} · tags ${(f.tags ?? []).join(',')}\n  ${f.summary ?? '(요약 없음)'}`
+  )).join('\n\n');
+
+  const prompt = `당신은 KT B2B 영업 인텔리전스 분석가입니다. 고객사 "${corp.corp_name}"의 최근 DART 공시를 분석하여 현재 진행 중인 영업에 미칠 영향을 정리하세요.
+
+[최근 공시]
+${contextBlocks}
+
+다음 JSON으로만 응답하세요:
+{
+  "summary": "고객사 최근 동향 1~2문장",
+  "key_signals": [
+    {"signal": "주요 신호 1문장", "filing_ref": "공시 N", "pillar_impact": "S|V|D|P|E|다중"}
+  ],
+  "deal_implications": [
+    {"implication": "이번 딜에 미칠 영향 1문장", "evidence": "공시 N의 ..."}
+  ],
+  "watch_points": ["주의 사항 1", "주의 사항 2"]
+}
+
+pillar_impact 약어: S=사전영업, V=Value, D=차별화, P=가격, E=Delivery`;
+
+  let text = '';
+  let source = 'dart+gemini';
+
+  if (geminiKey) {
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+      const resp = await model.generateContent(prompt);
+      text = resp.response.text();
+    } catch (e) {
+      console.error('[research] DART Gemini failed:', e);
+    }
+  }
+
+  let json: Record<string, unknown> | null = null;
+  if (text) {
+    const parsed = parseJsonFromText(text);
+    if (parsed && typeof parsed === 'object') json = parsed as Record<string, unknown>;
+  }
+  if (!json) {
+    json = {
+      summary: `${corp.corp_name} 최근 ${days}일 공시 ${filings.length}건 (Gemini 미설정 또는 합성 실패)`,
+      key_signals: filings.slice(0, 5).map((f, i) => ({
+        signal: f.summary || f.report_nm,
+        filing_ref: `공시 ${i + 1}`,
+        pillar_impact: '다중',
+      })),
+      deal_implications: [],
+      watch_points: [],
+    };
+    text = JSON.stringify(json);
+    source = 'dart-only';
+  }
+
+  // 출처 메타 첨부
+  const finalJson = {
+    ...json,
+    is_listed: true,
+    corp_code: corp.corp_code,
+    corp_name: corp.corp_name,
+    filings: filings.slice(0, 10).map((f) => ({
+      rcept_no: f.rcept_no,
+      rcept_dt: f.rcept_dt,
+      report_nm: f.report_nm,
+      relevance_score: f.relevance_score,
+      tags: f.tags,
+    })),
+  };
+
+  try {
+    await pool.query(
+      `INSERT INTO external_research (deal_id, topic, source, query, result_text, result_json)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (deal_id, topic) DO UPDATE
+       SET result_text = EXCLUDED.result_text, result_json = EXCLUDED.result_json, created_at = NOW()`,
+      [dealId, topicKey, source, `${corp.corp_name} days=${days}`, text, JSON.stringify(finalJson)]
+    );
+  } catch (e) {
+    console.error('[research] DART save failed:', e);
+  }
+
+  return { text, json: finalJson, cached: false, source };
 }
 
 function parseJsonFromText(text: string): unknown {
@@ -325,6 +492,9 @@ export async function fetchResearch(
   // 사내 RAG는 별도 핸들러 (Gemini 검색 grounding 사용 안 함)
   if (topic.kind === 'internal_similar_deals') {
     return handleInternalSimilarDeals(pool, dealId, topic);
+  }
+  if (topic.kind === 'customer_dart_signals') {
+    return handleCustomerDartSignals(pool, dealId, topic);
   }
 
   const topicKey = serializeTopic(topic);
