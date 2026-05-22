@@ -403,6 +403,15 @@ async function runInit() {
   } catch (e) {
     console.error('[seed_2025Q4] failed:', e);
   }
+
+  // v0.7: 사내 수주전략 문서 시드 (markdown → documents 테이블)
+  try {
+    const { seedStrategyDocs } = await import('./seedStrategyDocs');
+    const r = await seedStrategyDocs(pool);
+    if (r.inserted > 0) console.log('[seed_strategy_docs]', r);
+  } catch (e) {
+    console.error('[seed_strategy_docs] failed:', e);
+  }
 }
 
 export async function getDb(): Promise<Pool> {
