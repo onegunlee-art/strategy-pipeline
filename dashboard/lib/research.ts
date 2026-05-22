@@ -3,6 +3,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Pool } from 'pg';
 import type { SubFactorId } from './pillars';
+import { searchChunks, type SearchHit } from './rag/search';
 
 export type ResearchTopic =
   | { kind: 'weakness'; subFactorId: SubFactorId; clientName?: string; industry?: string }
@@ -14,7 +15,9 @@ export type ResearchTopic =
   | { kind: 'kt_news' }
   | { kind: 'competitor_trend'; competitorName: string }
   | { kind: 'ai_mega_project'; industry?: string }
-  | { kind: 'consortium_trend'; partnerName?: string };
+  | { kind: 'consortium_trend'; partnerName?: string }
+  // v0.7 사내 문서 RAG 컨텍스트
+  | { kind: 'internal_similar_deals'; clientName: string; industry?: string; query?: string };
 
 export interface ResearchResult {
   text: string;
@@ -34,7 +37,156 @@ function serializeTopic(t: ResearchTopic): string {
     case 'competitor_trend': return `competitor_trend:${t.competitorName}`;
     case 'ai_mega_project': return `ai_mega_project:${t.industry ?? 'general'}`;
     case 'consortium_trend': return `consortium_trend:${t.partnerName ?? 'general'}`;
+    case 'internal_similar_deals': return `internal_similar_deals`;
   }
+}
+
+function buildRagQuery(t: Extract<ResearchTopic, { kind: 'internal_similar_deals' }>): string {
+  if (t.query) return t.query;
+  const parts = [t.clientName];
+  if (t.industry) parts.push(t.industry);
+  parts.push('수주전략 차별화 경쟁력 약점 극복 lesson');
+  return parts.filter(Boolean).join(' ');
+}
+
+async function handleInternalSimilarDeals(
+  pool: Pool,
+  dealId: number,
+  topic: Extract<ResearchTopic, { kind: 'internal_similar_deals' }>
+): Promise<ResearchResult> {
+  const topicKey = serializeTopic(topic);
+
+  // 1) 캐시 (TTL 24시간)
+  const { rows: cached } = await pool.query(
+    `SELECT result_text, result_json, source, created_at FROM external_research
+     WHERE deal_id=$1 AND topic=$2`,
+    [dealId, topicKey]
+  );
+  if (cached.length > 0) {
+    const ageMs = Date.now() - new Date(cached[0].created_at).getTime();
+    if (ageMs < 24 * 3600 * 1000) {
+      return {
+        text: cached[0].result_text ?? '',
+        json: cached[0].result_json,
+        cached: true,
+        source: cached[0].source,
+      };
+    }
+  }
+
+  // 2) RAG 검색 — 실주/수주전략 보고서 우선
+  let hits: SearchHit[] = [];
+  try {
+    const query = buildRagQuery(topic);
+    hits = await searchChunks(query, {
+      doc_type: ['loss_report', 'win_strategy', 'rfp'],
+      industry: topic.industry,
+      match_count: 6,
+    });
+  } catch (e) {
+    console.error('[research] internal RAG search failed:', e);
+    return {
+      text: '',
+      json: { error: 'RAG 검색 실패 (OPENAI_API_KEY 또는 pgvector 미설정 가능)' },
+      cached: false,
+      source: 'rag-unavailable',
+    };
+  }
+
+  if (hits.length === 0) {
+    const result = {
+      summary: '유사 사내 문서가 발견되지 않았습니다.',
+      similar_deals: [],
+      lessons: [],
+      sources: [],
+    };
+    return { text: JSON.stringify(result), json: result, cached: false, source: 'internal-rag' };
+  }
+
+  // 3) Gemini 합성
+  const geminiKey =
+    process.env.GEMINI_API_KEY ??
+    process.env.Gemini_API_Key ??
+    process.env.GOOGLE_API_KEY;
+
+  const contextBlocks = hits.map((h, i) => (
+    `[자료 ${i + 1}] ${h.document_title} (${h.doc_type}, 유사도 ${(h.similarity * 100).toFixed(1)}%)\n${h.content.slice(0, 800)}`
+  )).join('\n\n---\n\n');
+
+  const prompt = `당신은 KT B2B 수주 전략가입니다. 아래 사내 문서 발췌(유사 과거 딜 기록)를 분석하여 현재 진행 중인 "${topic.clientName}" (산업: ${topic.industry ?? '미상'}) 딜에 적용 가능한 인사이트를 도출하세요.
+
+[참고 자료]
+${contextBlocks}
+
+다음 JSON 형식으로만 응답하세요. 자료에 없는 사실은 절대 만들지 마세요. 자료 번호로 출처를 표기하세요.
+{
+  "summary": "현재 딜에 가장 중요한 인사이트 1~2문장",
+  "similar_deals": [
+    {"title": "자료에서 인용한 딜/사업명", "outcome": "win|loss|unknown", "key_factor": "핵심 요인", "source_ref": "자료 1"}
+  ],
+  "lessons": [
+    {"lesson": "현재 딜에 적용 가능한 교훈 1문장", "evidence": "근거 발췌", "source_ref": "자료 N"}
+  ],
+  "warnings": ["주의 사항 (자료 기반)"]
+}`;
+
+  let text = '';
+  let source = 'internal-rag+gemini';
+
+  if (geminiKey) {
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+      const resp = await model.generateContent(prompt);
+      text = resp.response.text();
+    } catch (e) {
+      console.error('[research] Gemini synthesis failed:', e);
+    }
+  }
+
+  if (!text) {
+    const fallback = {
+      summary: 'Gemini 미설정 — RAG 검색 결과만 반환',
+      similar_deals: hits.map((h) => ({
+        title: h.document_title,
+        outcome: 'unknown',
+        key_factor: h.content.slice(0, 120),
+        source_ref: `자료 ${hits.indexOf(h) + 1}`,
+      })),
+      lessons: [],
+      warnings: [],
+    };
+    text = JSON.stringify(fallback);
+    source = 'internal-rag';
+    const json = fallback;
+    await pool.query(
+      `INSERT INTO external_research (deal_id, topic, source, query, result_text, result_json)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (deal_id, topic) DO UPDATE
+       SET result_text = EXCLUDED.result_text, result_json = EXCLUDED.result_json, created_at = NOW()`,
+      [dealId, topicKey, source, buildRagQuery(topic).slice(0, 500), text, JSON.stringify(json)]
+    );
+    return { text, json, cached: false, source };
+  }
+
+  const json = parseJsonFromText(text);
+  const finalJson = json && typeof json === 'object'
+    ? { ...(json as Record<string, unknown>), sources: hits.map((h, i) => ({ ref: `자료 ${i + 1}`, document_id: h.document_id, document_title: h.document_title, similarity: h.similarity })) }
+    : null;
+
+  try {
+    await pool.query(
+      `INSERT INTO external_research (deal_id, topic, source, query, result_text, result_json)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (deal_id, topic) DO UPDATE
+       SET result_text = EXCLUDED.result_text, result_json = EXCLUDED.result_json, created_at = NOW()`,
+      [dealId, topicKey, source, buildRagQuery(topic).slice(0, 500), text, finalJson ? JSON.stringify(finalJson) : null]
+    );
+  } catch (e) {
+    console.error('[research] save failed:', e);
+  }
+
+  return { text, json: finalJson ?? undefined, cached: false, source };
 }
 
 function buildPrompt(t: ResearchTopic): { prompt: string; useGrounding: boolean } {
@@ -152,6 +304,10 @@ function buildPrompt(t: ResearchTopic): { prompt: string; useGrounding: boolean 
   "partnership_tips": ["파트너십 팁 1", "파트너십 팁 2"]
 }`,
       };
+
+    case 'internal_similar_deals':
+      // 별도 핸들러에서 처리 (RAG → Gemini 합성). buildPrompt에서는 호출되지 않음.
+      return { useGrounding: false, prompt: '' };
   }
 }
 
@@ -166,6 +322,11 @@ export async function fetchResearch(
   dealId: number,
   topic: ResearchTopic
 ): Promise<ResearchResult> {
+  // 사내 RAG는 별도 핸들러 (Gemini 검색 grounding 사용 안 함)
+  if (topic.kind === 'internal_similar_deals') {
+    return handleInternalSimilarDeals(pool, dealId, topic);
+  }
+
   const topicKey = serializeTopic(topic);
 
   // 1) 캐시 확인
