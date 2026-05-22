@@ -14,7 +14,7 @@ interface FrontMatter {
 function parseFrontMatter(content: string): { meta: FrontMatter; body: string } {
   const meta: FrontMatter = {};
   const lines = content.split('\n');
-  let body = content;
+  const body = content;
   const titleMatch = lines.find((l) => l.startsWith('# '));
   if (titleMatch) meta.title = titleMatch.replace(/^#\s+/, '').trim();
   for (const l of lines.slice(0, 20)) {
