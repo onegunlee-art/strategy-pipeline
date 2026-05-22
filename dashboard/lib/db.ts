@@ -426,7 +426,6 @@ async function runInit() {
     CREATE INDEX IF NOT EXISTS idx_dart_filings_corp ON dart_filings (corp_code, rcept_dt DESC);
     CREATE INDEX IF NOT EXISTS idx_dart_filings_relevance ON dart_filings (relevance_score DESC);
   `);
-
   // v0.4: 2025 Q4 PDF 시드 (idempotent)
   try {
     const { seedFromBundledData } = await import('./seed');
