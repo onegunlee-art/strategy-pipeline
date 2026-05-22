@@ -316,6 +316,83 @@ async function runInit() {
     }
   }
 
+  // v0.7: RAG 인프라 — 사내 문서 임베딩 (pgvector)
+  await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`).catch((e) => {
+    console.warn('[pgvector] extension creation failed (may need superuser):', e.message);
+  });
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id SERIAL PRIMARY KEY,
+      doc_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      source_path TEXT,
+      deal_id INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      customer TEXT,
+      industry TEXT,
+      metadata JSONB,
+      raw_text TEXT,
+      word_count INTEGER DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_documents_doc_type ON documents(doc_type);
+    CREATE INDEX IF NOT EXISTS idx_documents_customer ON documents(customer);
+    CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+  `);
+
+  // chunks 테이블 — pgvector 사용 가능 여부에 따라 분기
+  const { rows: pgvCheck } = await pool.query(
+    `SELECT 1 FROM pg_extension WHERE extname = 'vector' LIMIT 1`
+  );
+  const hasPgvector = pgvCheck.length > 0;
+
+  if (hasPgvector) {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS document_chunks (
+        id SERIAL PRIMARY KEY,
+        document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        chunk_index INTEGER NOT NULL,
+        chunk_total INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        embedding vector(1536),
+        metadata JSONB,
+        word_count INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (document_id, chunk_index)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_document_chunks_doc_id ON document_chunks(document_id);
+      CREATE INDEX IF NOT EXISTS idx_document_chunks_meta_type ON document_chunks ((metadata->>'doc_type'));
+      CREATE INDEX IF NOT EXISTS idx_document_chunks_meta_customer ON document_chunks ((metadata->>'customer'));
+    `);
+
+    // ivfflat 인덱스 — 데이터가 들어온 후에만 의미가 있어 별도 시도
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding
+        ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)
+    `).catch(() => { /* 데이터 없으면 skip OK */ });
+  } else {
+    // pgvector 미설치 시 fallback — embedding을 JSONB로 저장 (개발용)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS document_chunks (
+        id SERIAL PRIMARY KEY,
+        document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        chunk_index INTEGER NOT NULL,
+        chunk_total INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        embedding JSONB,
+        metadata JSONB,
+        word_count INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (document_id, chunk_index)
+      );
+      CREATE INDEX IF NOT EXISTS idx_document_chunks_doc_id ON document_chunks(document_id);
+    `);
+  }
+
   // v0.4: 2025 Q4 PDF 시드 (idempotent)
   try {
     const { seedFromBundledData } = await import('./seed');
