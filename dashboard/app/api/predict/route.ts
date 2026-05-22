@@ -11,6 +11,7 @@ import { multiCompetitorWinProb } from '@/lib/elo';
 import { monteCarloRun } from '@/lib/montecarlo';
 import { ensemble, EnsembleWeights, MethodProbs } from '@/lib/ensemble';
 import { computeRewardFactors } from '@/lib/mcReward';
+import { fetchResearch } from '@/lib/research';
 
 interface PredictBody {
   client_name: string;
@@ -20,6 +21,7 @@ interface PredictBody {
   risk?: number;        // 딜 리스크 레벨 1~5 (MC sigma 조정에 사용)
   sub_scores: Partial<SubScores>;
   competitor_ids?: number[];
+  skip_qualitative?: boolean;  // 빠른 예측만 필요할 때 true
 }
 
 export async function POST(req: NextRequest) {
@@ -147,6 +149,36 @@ export async function POST(req: NextRequest) {
       ]
     );
 
+    // 10) 정성적 컨텍스트 (skip_qualitative=true면 건너뜀)
+    let qualitative_context: {
+      similar_deals: Record<string, unknown> | null;
+      customer_signals: Record<string, unknown> | null;
+    } = { similar_deals: null, customer_signals: null };
+
+    if (!body.skip_qualitative) {
+      const pool = db;
+      const [ragResult, dartResult] = await Promise.allSettled([
+        fetchResearch(pool, dealId, {
+          kind: 'internal_similar_deals',
+          clientName: body.client_name,
+          industry: body.industry,
+        }),
+        fetchResearch(pool, dealId, {
+          kind: 'customer_dart_signals',
+          clientName: body.client_name,
+          days: 90,
+          min_relevance: 50,
+        }),
+      ]);
+
+      if (ragResult.status === 'fulfilled' && ragResult.value.json) {
+        qualitative_context.similar_deals = ragResult.value.json as Record<string, unknown>;
+      }
+      if (dartResult.status === 'fulfilled' && dartResult.value.json) {
+        qualitative_context.customer_signals = dartResult.value.json as Record<string, unknown>;
+      }
+    }
+
     return NextResponse.json({
       deal_id: dealId,
       probability: Math.round(finalProb * 1000) / 10,  // 0.0 ~ 100.0
@@ -166,6 +198,7 @@ export async function POST(req: NextRequest) {
       prior_base_rate: Math.round(prior * 1000) / 10,
       data_points: records.length,
       mc_seed_hash: mc.seedPoolHash,
+      qualitative_context,
     });
   } catch (e: unknown) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

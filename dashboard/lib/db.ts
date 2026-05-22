@@ -393,6 +393,39 @@ async function runInit() {
     `);
   }
 
+  // v0.8: DART 공시 인프라
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS dart_corp_map (
+      id SERIAL PRIMARY KEY,
+      corp_code TEXT UNIQUE NOT NULL,
+      corp_name TEXT NOT NULL,
+      aliases JSONB DEFAULT '[]'::jsonb,
+      is_listed BOOLEAN DEFAULT TRUE,
+      industry TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dart_corp_map_name ON dart_corp_map (corp_name);
+
+    CREATE TABLE IF NOT EXISTS dart_filings (
+      id SERIAL PRIMARY KEY,
+      corp_code TEXT NOT NULL,
+      corp_name TEXT NOT NULL,
+      rcept_no TEXT UNIQUE NOT NULL,
+      report_nm TEXT,
+      flr_nm TEXT,
+      rcept_dt DATE,
+      summary TEXT,
+      raw_json JSONB,
+      relevance_score INTEGER DEFAULT 0,
+      tags JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dart_filings_corp ON dart_filings (corp_code, rcept_dt DESC);
+    CREATE INDEX IF NOT EXISTS idx_dart_filings_relevance ON dart_filings (relevance_score DESC);
+  `);
   // v0.4: 2025 Q4 PDF 시드 (idempotent)
   try {
     const { seedFromBundledData } = await import('./seed');
@@ -402,6 +435,15 @@ async function runInit() {
     }
   } catch (e) {
     console.error('[seed_2025Q4] failed:', e);
+  }
+
+  // v0.7: 사내 수주전략 문서 시드 (markdown → documents 테이블)
+  try {
+    const { seedStrategyDocs } = await import('./seedStrategyDocs');
+    const r = await seedStrategyDocs(pool);
+    if (r.inserted > 0) console.log('[seed_strategy_docs]', r);
+  } catch (e) {
+    console.error('[seed_strategy_docs] failed:', e);
   }
 }
 
