@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { isAdminAuthed } from '@/lib/auth';
 import { randomBytes } from 'crypto';
+import { sendSms } from '@/lib/sms';
 
 function generateToken(): string {
   return randomBytes(10).toString('hex'); // 20-char hex token
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
 // POST /api/admin/voting-links — create or regenerate link for a deal
 export async function POST(req: NextRequest) {
   if (!isAdminAuthed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const { deal_id, closes_at } = await req.json();
+  const { deal_id, closes_at, phones } = await req.json();
   if (!deal_id) return NextResponse.json({ error: 'deal_id 필수' }, { status: 400 });
 
   const db = await getDb();
@@ -39,7 +40,31 @@ export async function POST(req: NextRequest) {
      RETURNING *`,
     [deal_id, token, closes_at ?? null]
   );
-  return NextResponse.json(rows[0]);
+
+  // SMS 발송 (전화번호가 있을 때만)
+  let sms_sent = 0;
+  if (Array.isArray(phones) && phones.length > 0) {
+    const { rows: dealRows } = await db.query(
+      'SELECT client_name FROM deals WHERE id = $1',
+      [deal_id]
+    );
+    const dealName = dealRows[0]?.client_name ?? '수주전략';
+    const host = req.headers.get('origin') ?? req.headers.get('host') ?? '';
+    const url = `${host}/vote/${token}`;
+    const deadline = closes_at
+      ? new Date(closes_at).toLocaleDateString('ko-KR')
+      : '없음';
+    const text = `[KT B2B] ${dealName} 수주전략 투표에 참여해주세요.\n링크: ${url}\n마감: ${deadline}`;
+
+    try {
+      const result = await sendSms(phones, text);
+      sms_sent = result.sent;
+    } catch (e) {
+      console.error('[voting-links] SMS 발송 실패:', e);
+    }
+  }
+
+  return NextResponse.json({ ...rows[0], sms_sent });
 }
 
 // DELETE /api/admin/voting-links — remove link (closes voting)
