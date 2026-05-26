@@ -629,6 +629,13 @@ function WeightsTab() {
 
 // ─── Links Tab ────────────────────────────────────────────────────────────────
 
+function formatPhone(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+}
+
 function LinksTab() {
   const [links, setLinks] = useState<VotingLink[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -636,6 +643,7 @@ function LinksTab() {
   const [selectedDeal, setSelectedDeal] = useState('');
   const [closesAt, setClosesAt] = useState('');
   const [msg, setMsg] = useState('');
+  const [phones, setPhones] = useState<string[]>(['']);
 
   const load = useCallback(() => {
     Promise.all([
@@ -650,15 +658,28 @@ function LinksTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  const updatePhone = (idx: number, val: string) => {
+    setPhones(prev => prev.map((p, i) => i === idx ? formatPhone(val) : p));
+  };
+  const addPhone = () => setPhones(prev => prev.length < 10 ? [...prev, ''] : prev);
+  const removePhone = (idx: number) => setPhones(prev => prev.filter((_, i) => i !== idx));
+
   const createLink = async () => {
     if (!selectedDeal) return;
-    await apiFetch('/api/admin/voting-links', {
+    const filledPhones = phones.map(p => p.replace(/\D/g, '')).filter(p => p.length >= 10);
+    const { data } = await apiFetch('/api/admin/voting-links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deal_id: Number(selectedDeal), closes_at: closesAt || null }),
+      body: JSON.stringify({
+        deal_id: Number(selectedDeal),
+        closes_at: closesAt || null,
+        phones: filledPhones,
+      }),
     });
-    setMsg('링크 생성됨');
-    setTimeout(() => setMsg(''), 1500);
+    const smsPart = data?.sms_sent ? ` + 문자 ${data.sms_sent}건 발송` : '';
+    setMsg(`링크 생성됨${smsPart}`);
+    setTimeout(() => setMsg(''), 3000);
+    setPhones(['']);
     load();
   };
 
@@ -686,17 +707,41 @@ function LinksTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={S.card}>
         <div style={{ ...S.mono, marginBottom: '16px' }}>새 투표 링크 생성</div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <select value={selectedDeal} onChange={e => setSelectedDeal(e.target.value)} style={{ ...S.input, minWidth: '200px' }}>
-            <option value="">딜 선택...</option>
-            {dealsWithNoLink.map(d => <option key={d.id} value={d.id}>{d.client_name}</option>)}
-            {deals.filter(d => links.find(l => l.deal_id === d.id)).map(d => (
-              <option key={d.id} value={d.id}>{d.client_name} (재생성)</option>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <select value={selectedDeal} onChange={e => setSelectedDeal(e.target.value)} style={{ ...S.input, minWidth: '200px' }}>
+              <option value="">딜 선택...</option>
+              {dealsWithNoLink.map(d => <option key={d.id} value={d.id}>{d.client_name}</option>)}
+              {deals.filter(d => links.find(l => l.deal_id === d.id)).map(d => (
+                <option key={d.id} value={d.id}>{d.client_name} (재생성)</option>
+              ))}
+            </select>
+            <input type="date" value={closesAt} onChange={e => setClosesAt(e.target.value)} style={S.input} placeholder="마감일 (선택)" />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>문자 수신 번호 (선택, 최대 10개)</div>
+            {phones.map((p, i) => (
+              <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <input
+                  type="tel"
+                  value={p}
+                  onChange={e => updatePhone(i, e.target.value)}
+                  placeholder="010-0000-0000"
+                  style={{ ...S.input, width: '160px' }}
+                />
+                {phones.length > 1 && (
+                  <button onClick={() => removePhone(i)} style={{ ...S.btn('var(--red)'), padding: '4px 8px', fontSize: '11px' }}>✕</button>
+                )}
+              </div>
             ))}
-          </select>
-          <input type="date" value={closesAt} onChange={e => setClosesAt(e.target.value)} style={S.input} placeholder="마감일 (선택)" />
-          <button onClick={createLink} disabled={!selectedDeal} style={S.btn()}>▶  생성</button>
-          {msg && <span style={{ fontSize: '12px', color: 'var(--green)' }}>{msg}</span>}
+            {phones.length < 10 && (
+              <button onClick={addPhone} style={{ ...S.btn(), alignSelf: 'flex-start', fontSize: '11px', padding: '4px 10px' }}>+ 번호 추가</button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button onClick={createLink} disabled={!selectedDeal} style={S.btn()}>▶  생성</button>
+            {msg && <span style={{ fontSize: '12px', color: 'var(--green)' }}>{msg}</span>}
+          </div>
         </div>
       </div>
 
