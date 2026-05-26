@@ -30,6 +30,27 @@ function sseEvent(data: object): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
 
+function extractJsonArrayServer(text: string): unknown[] | null {
+  const start = text.indexOf('[');
+  if (start === -1) return null;
+  let depth = 0; let inString = false; let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '[') depth++;
+    if (ch === ']') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(text.slice(start, i + 1)) as unknown[]; } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest, ctx: { params: { deal_id: string } }) {
   try {
     const dealId = parseInt(ctx.params.deal_id, 10);
@@ -169,7 +190,7 @@ ${similarBlock || '(유사 사례 없음)'}
   }
 ]`;
 
-    // 5) Gemini 스트리밍 호출 + SSE 응답
+    // 5) Gemini 호출 — 서버에서 JSON 추출 후 SSE 전송
     const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
     const encoder = new TextEncoder();
@@ -177,7 +198,6 @@ ${similarBlock || '(유사 사례 없음)'}
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          // 메타 이벤트 먼저 전송 (약점 + 유사 사례 즉시 노출)
           controller.enqueue(encoder.encode(sseEvent({
             type: 'meta',
             deal_id: dealId,
@@ -185,15 +205,28 @@ ${similarBlock || '(유사 사례 없음)'}
             similar_cases: similarCases,
           })));
 
+          // 스트리밍으로 받되 전체 텍스트를 누적 후 서버에서 파싱
           const stream = await model.generateContentStream(prompt);
-
+          let accumulated = '';
           for await (const chunk of stream.stream) {
             const text = chunk.text();
             if (text) {
+              accumulated += text;
               controller.enqueue(encoder.encode(sseEvent({ type: 'delta', text })));
             }
           }
 
+          // thinking 태그, 코드블록 제거 후 JSON 추출
+          const clean = accumulated
+            .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+            .replace(/```json\s*/gi, '')
+            .replace(/```\s*/g, '')
+            .trim();
+
+          const cards = extractJsonArrayServer(clean);
+          if (cards) {
+            controller.enqueue(encoder.encode(sseEvent({ type: 'cards', cards })));
+          }
           controller.enqueue(encoder.encode(sseEvent({ type: 'done' })));
         } catch (err) {
           controller.enqueue(encoder.encode(sseEvent({
