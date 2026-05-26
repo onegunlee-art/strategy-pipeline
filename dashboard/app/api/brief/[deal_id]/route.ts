@@ -109,25 +109,36 @@ export async function POST(
         };
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'meta', ...quantMeta })}\n\n`));
 
-        // 2) 외부 리서치 병렬 fetch (느릴 수 있으나 meta는 이미 전송됨)
-        const researchPromises = [
-          fetchResearch(pool, dealId, { kind: 'customer_context', clientName: deal.client_name, industry: deal.industry }),
-          fetchResearch(pool, dealId, { kind: 'similar_reference', clientName: deal.client_name, industry: deal.industry }),
-          fetchResearch(pool, dealId, { kind: 'kt_news' }),
-          fetchResearch(pool, dealId, { kind: 'competitor_trend', competitorName: 'LG CNS' }),
-          fetchResearch(pool, dealId, { kind: 'competitor_trend', competitorName: 'Samsung SDS' }),
-          fetchResearch(pool, dealId, { kind: 'ai_mega_project', industry: deal.industry }),
-          fetchResearch(pool, dealId, { kind: 'consortium_trend' }),
-          ...weaknesses.map(w =>
-            fetchResearch(pool, dealId, {
-              kind: 'weakness',
-              subFactorId: w.id,
-              clientName: deal.client_name,
-              industry: deal.industry,
-            })
-          ),
+        // 2) 외부 리서치 — concurrency 2로 순차 처리 (Gemini 5 RPM 초과 방지)
+        const researchTopics: Parameters<typeof fetchResearch>[2][] = [
+          { kind: 'customer_context', clientName: deal.client_name, industry: deal.industry },
+          { kind: 'similar_reference', clientName: deal.client_name, industry: deal.industry },
+          { kind: 'kt_news' },
+          { kind: 'competitor_trend', competitorName: 'LG CNS' },
+          { kind: 'competitor_trend', competitorName: 'Samsung SDS' },
+          { kind: 'ai_mega_project', industry: deal.industry },
+          { kind: 'consortium_trend' },
+          ...weaknesses.map(w => ({
+            kind: 'weakness' as const,
+            subFactorId: w.id,
+            clientName: deal.client_name,
+            industry: deal.industry,
+          })),
         ];
-        const researchResults = await Promise.all(researchPromises);
+
+        // concurrency 2: 두 개씩 병렬, 그룹 간 400ms 간격
+        const researchResults: Awaited<ReturnType<typeof fetchResearch>>[] = [];
+        for (let i = 0; i < researchTopics.length; i += 2) {
+          const batch = researchTopics.slice(i, i + 2);
+          const batchResults = await Promise.all(
+            batch.map(t => fetchResearch(pool, dealId, t))
+          );
+          researchResults.push(...batchResults);
+          if (i + 2 < researchTopics.length) {
+            await new Promise(r => setTimeout(r, 400));
+          }
+        }
+
         const [customerCtx, , ktNews, lgCnsTrend, samsungTrend, aiMega, consortiumTrend, ...weaknessResearch] =
           researchResults;
 
