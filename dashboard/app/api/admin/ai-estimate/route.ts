@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminAuthed } from '@/lib/auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODEL } from '@/lib/geminiModel';
 
 function parseJson(text: string): unknown {
   const m = text.match(/\{[\s\S]*\}/);
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   const genAI = new GoogleGenerativeAI(apiKey);
   // @ts-expect-error — tools 키는 SDK 타입에 미반영
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro', tools: [{ google_search: {} }] });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, tools: [{ google_search: {} }] });
 
   if (type === 'elo') {
     const name = req.nextUrl.searchParams.get('name');

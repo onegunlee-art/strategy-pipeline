@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODEL } from '@/lib/geminiModel';
 import { SUB_FACTORS, SubFactorId, PillarId, PILLAR_META } from '@/lib/pillars';
 import { learnEnsembleWeights, TrainingCase, MethodProbs, brierScore } from '@/lib/ensemble';
 
@@ -123,7 +124,7 @@ JSON 형식만 출력:
       return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 503 });
     }
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent(prompt);
     const text = result.response.text();
     const match = text.match(/\{[\s\S]*\}/);

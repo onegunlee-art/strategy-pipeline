@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminAuthed } from '@/lib/auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODEL } from '@/lib/geminiModel';
 
 const OCR_PROMPT = `당신은 B2B 영업 데이터 추출 전문가입니다.
 아래 문서는 수주/실주 현황 표입니다. 모든 데이터 행을 JSON 배열로 추출하세요.
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     ) as 'application/pdf' | 'image/png' | 'image/webp' | 'image/jpeg';
 
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
     const result = await model.generateContent([
       { inlineData: { mimeType, data: base64 } },

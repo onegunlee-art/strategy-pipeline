@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { fetchResearch } from '@/lib/research';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODEL } from '@/lib/geminiModel';
 import {
   SubScores, findWeaknesses, migrateLegacySubScores,
   pillarScoreFromSubs, PILLAR_META, PILLAR_IDS,
@@ -86,7 +87,7 @@ export async function POST(
 
   const encoder = new TextEncoder();
   const genAI = new GoogleGenerativeAI(geminiKey);
-  const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+  const geminiModel = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
   const readable = new ReadableStream({
     async start(controller) {

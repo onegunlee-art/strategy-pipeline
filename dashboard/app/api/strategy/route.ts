@@ -1,6 +1,7 @@
 // 약점 sub-factor → Gemini API → 액션 카드 생성
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODEL } from '@/lib/geminiModel';
 import { SUB_FACTORS, SubFactorId } from '@/lib/pillars';
 
 interface StrategyBody {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
     const weaknessSummary = body.weaknesses.map((w, i) => {
       const meta = SUB_FACTORS.find(f => f.id === w.id);
