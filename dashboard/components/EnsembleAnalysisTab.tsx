@@ -95,15 +95,27 @@ export default function EnsembleAnalysisTab({ result, onOutcome }: Props) {
           try {
             const ev = JSON.parse(line.slice(6).trim());
             if (ev.type === 'delta') { accumulated += ev.text; setStreamingText(accumulated); }
-            else if (ev.type === 'done' || ev.type === 'error') {
-              const clean = accumulated.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
-              const jsonStr = extractJsonArray(clean);
-              if (jsonStr) {
-                try { setCards(JSON.parse(jsonStr)); }
-                catch { setStrategyError('JSON 파싱 실패 — 다시 시도해 주세요'); setCards(null); }
-              } else {
-                setStrategyError('응답이 잘렸습니다 — 다시 시도해 주세요'); setCards(null);
+            else if (ev.type === 'cards') {
+              // 서버가 파싱 완료한 카드 배열을 직접 수신
+              setCards(ev.cards as StrategyCard[]);
+            }
+            else if (ev.type === 'done') {
+              // cards 이벤트가 없었다면 클라이언트 fallback 파싱 시도
+              if (!cards) {
+                const clean = accumulated
+                  .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+                  .replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+                const jsonStr = extractJsonArray(clean);
+                if (jsonStr) {
+                  try { setCards(JSON.parse(jsonStr)); }
+                  catch { setStrategyError('JSON 파싱 실패 — 다시 시도해 주세요'); setCards(null); }
+                } else {
+                  setStrategyError('응답이 잘렸습니다 — 다시 시도해 주세요'); setCards(null);
+                }
               }
+            }
+            else if (ev.type === 'error') {
+              setStrategyError(ev.message ?? '오류 발생'); setCards(null);
             }
           } catch { /* skip */ }
         }
