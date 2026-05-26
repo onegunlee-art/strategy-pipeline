@@ -149,13 +149,13 @@ export async function POST(req: NextRequest) {
       ]
     );
 
-    // 10) 정성적 컨텍스트 (skip_qualitative=true면 건너뜀)
+    // 10) 정성적 컨텍스트 (skip_qualitative 미지정 시 기본 스킵 — Gemini RPM 절약)
     const qualitative_context: {
       similar_deals: Record<string, unknown> | null;
       customer_signals: Record<string, unknown> | null;
     } = { similar_deals: null, customer_signals: null };
 
-    if (!body.skip_qualitative) {
+    if (body.skip_qualitative === false) {
       const pool = db;
       const [ragResult, dartResult] = await Promise.allSettled([
         fetchResearch(pool, dealId, {
