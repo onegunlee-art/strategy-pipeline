@@ -1,6 +1,7 @@
 // 약점 분해 + 외부 리서치 + 유사 case_studies → SCQA 추론 구조 전략 카드 (SSE 스트리밍)
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODEL } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 import { SUB_FACTORS, SubFactorId } from '@/lib/pillars';
 import { fetchResearch } from '@/lib/research';
@@ -192,7 +193,7 @@ ${similarBlock || '(유사 사례 없음)'}
 
     // 5) Gemini 호출 — 서버에서 JSON 추출 후 SSE 전송
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const encoder = new TextEncoder();
 
     const readable = new ReadableStream({

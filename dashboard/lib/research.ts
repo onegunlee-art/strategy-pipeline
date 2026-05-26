@@ -1,6 +1,7 @@
 // 외부 리서치 라이브러리 — Google Gemini 2.5 Pro + Search Grounding
 // 캐시: external_research 테이블 (UNIQUE deal_id + topic)
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODEL } from './geminiModel';
 import type { Pool } from 'pg';
 import type { SubFactorId } from './pillars';
 import { searchChunks, type SearchHit } from './rag/search';
@@ -141,7 +142,7 @@ ${contextBlocks}
   if (geminiKey) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+      const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
       const resp = await model.generateContent(prompt);
       text = resp.response.text();
     } catch (e) {
@@ -420,7 +421,7 @@ pillar_impact 약어: S=사전영업, V=Value, D=차별화, P=가격, E=Delivery
   if (geminiKey) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+      const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
       const resp = await model.generateContent(prompt);
       text = resp.response.text();
     } catch (e) {
@@ -517,7 +518,7 @@ export async function fetchResearch(
   const { prompt, useGrounding } = buildPrompt(topic);
 
   let text = '';
-  let source = 'gemini-2.5-pro';
+  let source = GEMINI_MODEL;
 
   // 2a) Gemini 우선 호출 (API 키 있을 때)
   // Vercel 등록명이 Gemini_API_Key (mixed case)일 수 있어 3가지 이름 모두 체크
@@ -529,12 +530,12 @@ export async function fetchResearch(
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
       const modelConfig: Parameters<typeof genAI.getGenerativeModel>[0] = {
-        model: 'gemini-2.5-pro',
+        model: GEMINI_MODEL,
       };
       if (useGrounding) {
         // @ts-expect-error — tools 키는 SDK 타입에 미반영
         modelConfig.tools = [{ google_search: {} }];
-        source = 'gemini-2.5-pro-grounded';
+        source = `${GEMINI_MODEL}-grounded`;
       }
       const model = genAI.getGenerativeModel(modelConfig);
       const resp = await model.generateContent(prompt);
