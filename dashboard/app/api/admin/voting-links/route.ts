@@ -49,12 +49,11 @@ export async function POST(req: NextRequest) {
       [deal_id]
     );
     const dealName = dealRows[0]?.client_name ?? '수주전략';
-    const host = req.headers.get('origin') ?? req.headers.get('host') ?? '';
-    const url = `${host}/vote/${token}`;
+    const host = (req.headers.get('origin') ?? req.headers.get('host') ?? '').replace(/^https?:\/\//, '');
     const deadline = closes_at
       ? new Date(closes_at).toLocaleDateString('ko-KR')
       : '없음';
-    const text = `[KT B2B] ${dealName} 수주전략 투표에 참여해주세요.\n링크: ${url}\n마감: ${deadline}`;
+    const text = `[KT B2B] ${dealName} 수주전략 투표\n마감: ${deadline}\n접속: ${host}/vote/${token}`;
 
     try {
       const result = await sendSms(phones, text);
