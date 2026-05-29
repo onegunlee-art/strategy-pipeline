@@ -560,6 +560,121 @@ def make_phase_slide(prs, ph):
                      line_color=MID_GRAY)
 
 
+# ─── 단일 매트릭스 슬라이드 (1장 구조화) ────────────────────────────────────
+
+def make_single_matrix_slide(prs):
+    """모든 교육 내용을 7 Phase × 3 대상자 매트릭스 한 장에 구조화."""
+    sl = blank_slide(prs)
+
+    # ── 헤더 ──
+    add_rect(sl, 0, 0, 33.87, 1.0, TITLE_COLOR,
+             text="하나은행 비정형데이터 플랫폼 구축사업 — 교육 체계 통합 매트릭스",
+             font_size=15, bold=True, font_color=WHITE, valign=MSO_ANCHOR.MIDDLE)
+    add_rect(sl, 0, 1.0, 33.87, 0.45, RGBColor(0x2E, 0x4A, 0x80),
+             text="세로축: 교육 시간 흐름 (착수 → 안정화)   |   가로축: 교육 대상자별 분류   |   색상: ■ 비정형 데이터 처리  ■ Object Storage",
+             font_size=8.5, bold=False, font_color=RGBColor(0xCF, 0xDB, 0xEF),
+             valign=MSO_ANCHOR.MIDDLE)
+
+    # ── 레이아웃 좌표 ──
+    GRID_TOP   = 1.45
+    HDR_H      = 0.6                      # 컬럼 헤더 높이
+    PHASE_COL_W = 2.6                     # Phase 라벨 컬럼 폭
+    GRID_LEFT  = 0.15
+    grid_right = 33.87 - 0.15
+    cols_total_w = grid_right - GRID_LEFT - PHASE_COL_W
+    col_w = cols_total_w / 3
+
+    body_top = GRID_TOP + HDR_H
+    body_h   = 19.05 - body_top - 0.15
+
+    # ── 컬럼 헤더 ──
+    COL_SPECS = [
+        ("플랫폼 / 시스템 운영자", HDR_OPER, "oper"),
+        ("데이터 엔지니어",         HDR_ENG,  "eng"),
+        ("비즈니스 유저",           HDR_BIZ,  "biz"),
+    ]
+    # 좌상단 모서리
+    add_rect(sl, GRID_LEFT, GRID_TOP, PHASE_COL_W, HDR_H, TITLE_COLOR,
+             text="Phase / 시기", font_size=9, bold=True, font_color=WHITE,
+             align=PP_ALIGN.CENTER, valign=MSO_ANCHOR.MIDDLE, line_color=WHITE)
+    for ci, (label, bg, key) in enumerate(COL_SPECS):
+        cx = GRID_LEFT + PHASE_COL_W + ci * col_w
+        add_rect(sl, cx, GRID_TOP, col_w, HDR_H, bg,
+                 text=label, font_size=11, bold=True, font_color=WHITE,
+                 align=PP_ALIGN.CENTER, valign=MSO_ANCHOR.MIDDLE, line_color=WHITE)
+
+    # ── Phase 행 (높이를 내용량에 비례 배분) ──
+    def row_weight(ph):
+        # 셀에 들어가는 교육내용 줄 수 기반 가중치
+        n = 0
+        for key in ("oper", "eng", "biz"):
+            for e in ph[key]:
+                n += len(e["items"]) + 1   # 과정명 + 내용
+        return max(n, 3)
+
+    weights = [row_weight(p) for p in PHASES]
+    wsum = sum(weights)
+
+    cur_y = body_top
+    for r, ph in enumerate(PHASES):
+        rh = body_h * weights[r] / wsum
+        row_bg = LIGHT_GRAY if r % 2 == 0 else WHITE
+
+        # Phase 라벨 셀
+        add_rect(sl, GRID_LEFT, cur_y, PHASE_COL_W, rh, PHASE_AMBER if r % 2 == 0 else RGBColor(0xE0, 0x85, 0x07),
+                 text=f"PHASE {ph['num']}\n{ph['name']}", font_size=9, bold=True,
+                 font_color=WHITE, align=PP_ALIGN.CENTER, valign=MSO_ANCHOR.MIDDLE,
+                 line_color=WHITE)
+
+        # 각 대상자 셀
+        for ci, (label, bg, key) in enumerate(COL_SPECS):
+            cx = GRID_LEFT + PHASE_COL_W + ci * col_w
+            entries = ph[key]
+
+            if not entries:
+                add_rect(sl, cx, cur_y, col_w, rh, row_bg,
+                         text="—", font_size=9, font_color=DARK_GRAY,
+                         align=PP_ALIGN.CENTER, valign=MSO_ANCHOR.MIDDLE,
+                         line_color=MID_GRAY)
+                continue
+
+            # 한 셀에 여러 과정 → 한 텍스트박스에 구조적으로 출력
+            shape = sl.shapes.add_shape(1, Cm(cx), Cm(cur_y), Cm(col_w), Cm(rh))
+            shape.fill.solid()
+            shape.fill.fore_color.rgb = WHITE
+            shape.line.color.rgb = MID_GRAY
+            shape.line.width = Emu(9525)
+            tf = shape.text_frame
+            tf.word_wrap = True
+            tf.vertical_anchor = MSO_ANCHOR.TOP
+            tf.margin_left = Cm(0.12); tf.margin_right = Cm(0.12)
+            tf.margin_top = Cm(0.06); tf.margin_bottom = Cm(0.06)
+
+            first = True
+            for entry in entries:
+                cat_color = COL_BIFORM if entry["cat"] == "비정형" else COL_OS
+                cat_tag   = "[비정형]" if entry["cat"] == "비정형" else "[OS]"
+                # 과정명 줄
+                p = tf.paragraphs[0] if first else tf.add_paragraph()
+                first = False
+                run = p.add_run()
+                run.text = f"{cat_tag} {entry['course']}"
+                run.font.name = FONT_KO
+                run.font.size = Pt(8.5)
+                run.font.bold = True
+                run.font.color.rgb = cat_color
+                # 교육 내용 줄
+                for it in entry["items"]:
+                    pi = tf.add_paragraph()
+                    ri = pi.add_run()
+                    ri.text = f"  • {it}"
+                    ri.font.name = FONT_KO
+                    ri.font.size = Pt(7.5)
+                    ri.font.color.rgb = TEXT_COLOR
+
+        cur_y += rh
+
+
 # ─── 메인 ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -567,12 +682,9 @@ def main():
     prs.slide_width  = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    make_title_slide(prs)
-    make_overview_slide(prs)
-    for ph in PHASES:
-        make_phase_slide(prs, ph)
+    make_single_matrix_slide(prs)
 
-    out = "/tmp/하나은행_교육체계_타임라인.pptx"
+    out = "/tmp/하나은행_교육체계_매트릭스.pptx"
     prs.save(out)
     print(f"저장 완료: {out}  ({len(prs.slides)}장)")
 
