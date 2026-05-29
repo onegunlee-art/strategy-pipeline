@@ -2,9 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { SUB_FACTORS, PILLAR_META } from '@/lib/pillars';
+import { SUB_FACTORS, PILLAR_META, defaultSubScores, SubScores } from '@/lib/pillars';
+import PillarInputTab from '@/components/PillarInputTab';
+import EnsembleAnalysisTab from '@/components/EnsembleAnalysisTab';
+import PortfolioTab from '@/components/PortfolioTab';
+import ScenarioCompare from '@/components/ScenarioCompare';
 
-type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit';
+type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit' | 'analyze';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -103,6 +107,7 @@ export default function AdminPage() {
     { id: 'rfp', label: 'RFP 등록' },
     { id: 'vote_analysis', label: '투표 분석' },
     { id: 'manual_edit', label: '수동 편집' },
+    { id: 'analyze', label: '분석' },
   ];
 
   return (
@@ -138,6 +143,7 @@ export default function AdminPage() {
         {tab === 'rfp' && <RfpImportTab />}
         {tab === 'vote_analysis' && <VoteAnalysisTab />}
         {tab === 'manual_edit' && <ManualEditTab />}
+        {tab === 'analyze' && <AnalyzeTab />}
       </main>
     </div>
   );
@@ -1855,6 +1861,237 @@ function ManualEditTab() {
           </div>
         </div>
       )}
+
+      {/* Dashboard metadata (partners / risks / milestones / positioning) */}
+      {selectedDeal && !loading && (
+        <DashboardMetaSection dealId={selectedDeal} />
+      )}
+    </div>
+  );
+}
+
+// ─── Dashboard Metadata Edit Tab ─────────────────────────────────────────────
+
+interface PartnerRow { name: string; role: string; description: string }
+interface RiskRow { name: string; probability: string; impact: string; difficulty: string; level: string }
+interface MilestoneRow { date: string; label: string; type: string }
+interface CompPos { selfX: string; selfY: string; competitors: { name: string; x: string; y: string; size: string }[] }
+
+function DashboardMetaSection({ dealId }: { dealId: number }) {
+  const [partners, setPartners] = useState<PartnerRow[]>([]);
+  const [risks, setRisks] = useState<RiskRow[]>([]);
+  const [milestones, setMilestones] = useState<MilestoneRow[]>([]);
+  const [pos, setPos] = useState<CompPos>({ selfX: '', selfY: '', competitors: [] });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/dashboard/${dealId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.deal) return;
+        setPartners((d.deal.partners ?? []).map((p: { name: string; role: string; description?: string }) => ({ name: p.name || '', role: p.role || '', description: p.description || '' })));
+        setRisks((d.deal.risks ?? []).map((r: { name: string; probability: number; impact: number; difficulty: number; level: string }) => ({ name: r.name || '', probability: String(r.probability ?? ''), impact: String(r.impact ?? ''), difficulty: String(r.difficulty ?? ''), level: r.level || 'medium' })));
+        setMilestones((d.deal.milestones ?? []).map((m: { date: string; label: string; type: string }) => ({ date: m.date || '', label: m.label || '', type: m.type || 'event' })));
+        const cp = d.deal.competitive_positioning ?? {};
+        setPos({
+          selfX: String(cp.self?.x ?? ''),
+          selfY: String(cp.self?.y ?? ''),
+          competitors: (cp.competitors ?? []).map((c: { name: string; x: number; y: number; size?: string }) => ({ name: c.name || '', x: String(c.x ?? ''), y: String(c.y ?? ''), size: c.size || 'medium' })),
+        });
+        setLoaded(true);
+      }).catch(() => setLoaded(true));
+  }, [dealId]);
+
+  const save = async () => {
+    setSaving(true);
+    const payload = {
+      partners: partners.filter(p => p.name).map(p => ({ name: p.name, role: p.role, description: p.description })),
+      risks: risks.filter(r => r.name).map(r => ({
+        name: r.name, level: r.level,
+        probability: parseFloat(r.probability) || 0,
+        impact: parseFloat(r.impact) || 0,
+        difficulty: parseFloat(r.difficulty) || 0,
+      })),
+      milestones: milestones.filter(m => m.date && m.label).map(m => ({ date: m.date, label: m.label, type: m.type })),
+      competitive_positioning: {
+        ...(pos.selfX || pos.selfY ? { self: { x: parseFloat(pos.selfX) || 0, y: parseFloat(pos.selfY) || 0 } } : {}),
+        competitors: pos.competitors.filter(c => c.name).map(c => ({
+          name: c.name, size: c.size,
+          x: parseFloat(c.x) || 0, y: parseFloat(c.y) || 0,
+        })),
+      },
+    };
+    const res = await fetch(`/api/admin/deals/${dealId}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    setSaving(false);
+    setMsg(res.ok ? '✅ 저장됨' : '❌ 실패');
+    setTimeout(() => setMsg(''), 3000);
+  };
+
+  if (!loaded) return <div style={{ padding: '20px', fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)' }}>로딩...</div>;
+
+  const sectionLabel: React.CSSProperties = { fontSize: '10px', fontFamily: 'IBM Plex Mono', color: 'var(--cyan)', letterSpacing: '1px', marginTop: '20px', marginBottom: '8px' };
+  const addBtn: React.CSSProperties = { ...S.btn(), padding: '4px 10px', fontSize: '11px', marginTop: '6px' };
+  const delBtn: React.CSSProperties = { ...S.btn('var(--red)'), padding: '4px 8px', fontSize: '11px' };
+  const inp = (val: string, onChange: (v: string) => void, ph = '', width = '140px') => (
+    <input value={val} onChange={e => onChange(e.target.value)} placeholder={ph}
+      style={{ ...S.input, width, fontSize: '12px', padding: '4px 8px' }} />
+  );
+
+  return (
+    <div style={{ marginTop: '24px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--cyan)', letterSpacing: '1px', marginBottom: '4px' }}>DASHBOARD METADATA</div>
+      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '16px' }}>파트너 / 리스크 / 타임라인 / 포지셔닝 — 저장 후 대시보드에 반영됩니다.</div>
+
+      {/* Partners */}
+      <div style={sectionLabel}>파트너 구조</div>
+      {partners.map((p, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {inp(p.name, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, name: v } : x)), '파트너명', '120px')}
+          {inp(p.role, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, role: v } : x)), '역할', '100px')}
+          {inp(p.description, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, description: v } : x)), '설명', '180px')}
+          <button onClick={() => setPartners(ps => ps.filter((_, j) => j !== i))} style={delBtn}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setPartners(ps => [...ps, { name: '', role: '', description: '' }])} style={addBtn}>+ 파트너</button>
+
+      {/* Risks */}
+      <div style={sectionLabel}>리스크 항목</div>
+      {risks.map((r, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {inp(r.name, v => setRisks(rs => rs.map((x, j) => j === i ? { ...x, name: v } : x)), '리스크명', '140px')}
+          {inp(r.probability, v => setRisks(rs => rs.map((x, j) => j === i ? { ...x, probability: v } : x)), '발생가능성(0-1)', '100px')}
+          {inp(r.impact, v => setRisks(rs => rs.map((x, j) => j === i ? { ...x, impact: v } : x)), '사업영향도(0-1)', '100px')}
+          {inp(r.difficulty, v => setRisks(rs => rs.map((x, j) => j === i ? { ...x, difficulty: v } : x)), '대응난이도(0-1)', '100px')}
+          <select value={r.level} onChange={e => setRisks(rs => rs.map((x, j) => j === i ? { ...x, level: e.target.value } : x))}
+            style={{ ...S.input, padding: '4px 8px', fontSize: '12px' }}>
+            <option value="high">high</option>
+            <option value="medium">medium</option>
+            <option value="low">low</option>
+          </select>
+          <button onClick={() => setRisks(rs => rs.filter((_, j) => j !== i))} style={delBtn}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setRisks(rs => [...rs, { name: '', probability: '0.5', impact: '0.5', difficulty: '0.5', level: 'medium' }])} style={addBtn}>+ 리스크</button>
+
+      {/* Milestones */}
+      <div style={sectionLabel}>입찰 타임라인 마일스톤</div>
+      {milestones.map((m, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center' }}>
+          <input type="date" value={m.date} onChange={e => setMilestones(ms => ms.map((x, j) => j === i ? { ...x, date: e.target.value } : x))}
+            style={{ ...S.input, padding: '4px 8px', fontSize: '12px' }} />
+          {inp(m.label, v => setMilestones(ms => ms.map((x, j) => j === i ? { ...x, label: v } : x)), '마일스톤명', '140px')}
+          <select value={m.type} onChange={e => setMilestones(ms => ms.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}
+            style={{ ...S.input, padding: '4px 8px', fontSize: '12px' }}>
+            <option value="event">event</option>
+            <option value="deadline">deadline</option>
+            <option value="today">today</option>
+          </select>
+          <button onClick={() => setMilestones(ms => ms.filter((_, j) => j !== i))} style={delBtn}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setMilestones(ms => [...ms, { date: '', label: '', type: 'event' }])} style={addBtn}>+ 마일스톤</button>
+
+      {/* Positioning */}
+      <div style={sectionLabel}>경쟁 포지셔닝 (x=기술차별화 0-10, y=고객관계 0-10)</div>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-dim)', minWidth: '36px' }}>자사</span>
+        {inp(pos.selfX, v => setPos(p => ({ ...p, selfX: v })), 'X 기술', '80px')}
+        {inp(pos.selfY, v => setPos(p => ({ ...p, selfY: v })), 'Y 고객', '80px')}
+      </div>
+      {pos.competitors.map((c, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)', minWidth: '36px' }}>경쟁사</span>
+          {inp(c.name, v => setPos(p => ({ ...p, competitors: p.competitors.map((x, j) => j === i ? { ...x, name: v } : x) })), '경쟁사명', '120px')}
+          {inp(c.x, v => setPos(p => ({ ...p, competitors: p.competitors.map((x, j) => j === i ? { ...x, x: v } : x) })), 'X', '60px')}
+          {inp(c.y, v => setPos(p => ({ ...p, competitors: p.competitors.map((x, j) => j === i ? { ...x, y: v } : x) })), 'Y', '60px')}
+          <select value={c.size} onChange={e => setPos(p => ({ ...p, competitors: p.competitors.map((x, j) => j === i ? { ...x, size: e.target.value } : x) }))}
+            style={{ ...S.input, padding: '4px 8px', fontSize: '12px' }}>
+            <option value="large">large</option>
+            <option value="medium">medium</option>
+            <option value="small">small</option>
+          </select>
+          <button onClick={() => setPos(p => ({ ...p, competitors: p.competitors.filter((_, j) => j !== i) }))} style={delBtn}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setPos(p => ({ ...p, competitors: [...p.competitors, { name: '', x: '5', y: '5', size: 'medium' }] }))} style={addBtn}>+ 경쟁사</button>
+
+      {/* Save */}
+      <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button onClick={save} disabled={saving} style={{ ...S.btn('var(--cyan)'), padding: '8px 20px' }}>
+          {saving ? '저장 중...' : '대시보드 데이터 저장'}
+        </button>
+        {msg && <span style={{ fontSize: '12px', color: msg.startsWith('✅') ? 'var(--green)' : 'var(--red)' }}>{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Analyze Tab (current landing page 4-tab UI) ──────────────────────────────
+
+type AnalyzeSubTab = 'pillar' | 'analysis' | 'compare' | 'portfolio';
+
+interface AnalyzeResult {
+  deal_id: number; probability: number;
+  method_probs: { pillar: number; bayesian: number; elo: number; monteCarlo: number };
+  pillar_scores: Record<string, number>;
+  confidence_interval: { low: number; high: number };
+  mc_distribution: number[];
+  weaknesses: Array<{ id: string; label: string; pillar: string; score: number; contribution: number }>;
+  prior_base_rate: number; data_points: number;
+  client_name: string; deal_size: string; competitors: string[]; sub_scores: SubScores;
+}
+
+const ANALYZE_TABS: { id: AnalyzeSubTab; label: string }[] = [
+  { id: 'pillar', label: 'Pillar 진단' },
+  { id: 'analysis', label: '확률 & 전략' },
+  { id: 'compare', label: '시나리오 비교' },
+  { id: 'portfolio', label: '데이터' },
+];
+
+function AnalyzeTab() {
+  const [subTab, setSubTab] = useState<AnalyzeSubTab>('pillar');
+  const [result, setResult] = useState<AnalyzeResult | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleResult = (data: AnalyzeResult) => {
+    setResult(data);
+    setSubTab('analysis');
+  };
+
+  return (
+    <div>
+      {/* Sub-tab nav */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '24px', gap: 0 }}>
+        {ANALYZE_TABS.map(t => (
+          <button key={t.id} onClick={() => setSubTab(t.id)} style={{
+            padding: '10px 18px', border: 'none', background: 'transparent', cursor: 'pointer',
+            borderBottom: subTab === t.id ? '2px solid var(--cyan)' : '2px solid transparent',
+            color: subTab === t.id ? 'var(--text)' : 'var(--text-dim)',
+            fontFamily: 'IBM Plex Mono', fontSize: '12px', whiteSpace: 'nowrap',
+          }}>
+            {t.label.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
+      {subTab === 'pillar' && <PillarInputTab onResult={handleResult as Parameters<typeof PillarInputTab>[0]['onResult']} />}
+      {subTab === 'analysis' && (result ? (
+        <EnsembleAnalysisTab result={result as Parameters<typeof EnsembleAnalysisTab>[0]['result']} onOutcome={() => setRefreshKey(k => k + 1)} />
+      ) : (
+        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
+          Pillar 진단 탭에서 먼저 분석을 실행하세요
+        </div>
+      ))}
+      {subTab === 'compare' && (
+        <ScenarioCompare initialSubs={result?.sub_scores ?? defaultSubScores()} />
+      )}
+      {subTab === 'portfolio' && <PortfolioTab refreshKey={refreshKey} />}
     </div>
   );
 }

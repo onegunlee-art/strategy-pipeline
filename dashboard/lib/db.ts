@@ -185,6 +185,12 @@ async function runInit() {
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS vdc_a REAL;
     ALTER TABLE voters ADD COLUMN IF NOT EXISTS role_v1 TEXT;
 
+    -- v0.9: 대시보드 패널 데이터
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS partners JSONB DEFAULT '[]';
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS risks JSONB DEFAULT '[]';
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS milestones JSONB DEFAULT '[]';
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS competitive_positioning JSONB DEFAULT '{}';
+
     -- v0.5: applied_at — 어드민이 AI 추정값을 정량 모델에 수동 채택한 시점
     ALTER TABLE external_research ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
   `);
