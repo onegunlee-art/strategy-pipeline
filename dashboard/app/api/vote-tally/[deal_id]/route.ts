@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { isAdminAuthed } from '@/lib/auth';
 import { tallyVotes } from '@/lib/voteTally';
 import { pillarScoreFromSubs, pillarMultiplication } from '@/lib/pillars';
 import { sigmaFromVoterSpread, monteCarloRun } from '@/lib/montecarlo';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { deal_id: string } }
 ) {
+  if (!isAdminAuthed(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const dealId = parseInt(params.deal_id, 10);
   if (isNaN(dealId)) return NextResponse.json({ error: 'invalid deal_id' }, { status: 400 });
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { SUB_FACTORS, PILLAR_META, defaultSubScores, SubScores } from '@/lib/pillars';
+import { ROLE_LABEL } from '@/lib/voteWeights';
 import PillarInputTab from '@/components/PillarInputTab';
 import EnsembleAnalysisTab from '@/components/EnsembleAnalysisTab';
 import PortfolioTab from '@/components/PortfolioTab';
@@ -516,9 +517,8 @@ function VotersTab() {
               <td style={S.td}>
                 {editId === v.id
                   ? <select value={editRole} onChange={e => setEditRole(e.target.value)} style={S.input}>
-                      <option value="member">member</option>
-                      <option value="reviewer">reviewer</option>
-                      <option value="leader">leader</option>
+                      {Object.entries(ROLE_LABEL).map(([id, label]) =>
+                        <option key={id} value={id}>{label} ({id})</option>)}
                     </select>
                   : <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px' }}>{v.role}</span>}
               </td>
@@ -1182,37 +1182,19 @@ function CompetitorsTab() {
 
 // ─── RFP Import Tab ───────────────────────────────────────────────────────────
 
-const HANA_DEFAULTS = {
-  client_name: '하나은행',
-  deal_size: '30억',
-  industry: '금융',
-  duration_months: 8,
-  risk: 3,
-  competitors: ['Samsung SDS'],
-  rfp_summary: '하나은행 비정형데이터 자산화 플랫폼 구축 사업 (2025). 규모: 초기 1TB/100만건, 일 10GB/4,000건 증분. 14개 기능 영역, 8개월. 망분리·DRM·비식별화·전금법 준수 필수.',
-  strategy_memo: '3대 전략: Ready to AI(MCP Server 즉시 연결), 비용최적화(Hot/Warm/Cold 티어+KT Cloud), 데이터 무결성(2-Pass 클렌징). vs 삼성SDS: 락인 리스크 부각, ES 글로벌 금융 표준 포지셔닝, 컴플라이언스 자동화 킬러앱.',
-  sub_scores: {
-    s_key_man_contact: 6, s_evaluator_rfp: 8, s_poc_proposal: 4,
-    v_needs_painpoint: 8, v_value_proposition: 7, v_presentation: 6,
-    d_competitive_strategy: 6, d_tech_reference: 7, d_partner: 5,
-    p_budget_fit: 5, p_price_competition: 3, p_cost_value: 6,
-    e_track_record: 6, e_risk_management: 7, e_execution_team: 7,
-  },
-};
-
 function RfpImportTab() {
   const [form, setForm] = useState({
-    client_name: HANA_DEFAULTS.client_name,
-    deal_size: HANA_DEFAULTS.deal_size,
-    industry: HANA_DEFAULTS.industry,
-    duration_months: String(HANA_DEFAULTS.duration_months),
-    risk: String(HANA_DEFAULTS.risk),
-    competitors: HANA_DEFAULTS.competitors.join(', '),
-    rfp_summary: HANA_DEFAULTS.rfp_summary,
-    strategy_memo: HANA_DEFAULTS.strategy_memo,
+    client_name: '',
+    deal_size: '',
+    industry: '',
+    duration_months: '',
+    risk: '',
+    competitors: '',
+    rfp_summary: '',
+    strategy_memo: '',
     voting_days: '7',
   });
-  const [scores, setScores] = useState<Record<string, number>>(HANA_DEFAULTS.sub_scores);
+  const [scores, setScores] = useState<Record<string, number>>(defaultSubScores());
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<null | {
     ok: boolean; deal_id: number; probability: number;
