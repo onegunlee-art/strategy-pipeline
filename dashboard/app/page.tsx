@@ -430,53 +430,7 @@ export default function ExecutiveDashboard() {
               </Panel>
             </div>
 
-            {/* ── ZONE 5: Portfolio bar ─────────────────────────── */}
-            {pred && (
-              <Panel title="4-Method 앙상블 분해">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '12px' }}>
-                  {[
-                    { key: 'pillar', label: 'Pillar' },
-                    { key: 'bayesian', label: 'Bayesian' },
-                    { key: 'elo', label: 'Elo' },
-                    { key: 'monteCarlo', label: 'Monte Carlo' },
-                  ].map(({ key, label }) => {
-                    const v = Number(pred.method_probs[key] ?? 0);
-                    return (
-                      <div key={key} style={{ padding: '12px', background: 'var(--surface2)', borderRadius: '2px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginBottom: '4px' }}>{label.toUpperCase()}</div>
-                        <div style={{ fontSize: '20px', fontWeight: 700, fontFamily: 'IBM Plex Mono', color: probColor(v) }}>
-                          {v.toFixed(1)}%
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {pred.weaknesses.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', letterSpacing: '1px', marginBottom: '8px' }}>
-                      TOP WEAKNESSES
-                    </div>
-                    {pred.weaknesses.map((w, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', minWidth: '16px' }}>#{i + 1}</span>
-                        <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1 }}>{w.label}</span>
-                        <div style={{ width: '100px', height: '5px', background: 'var(--surface2)', borderRadius: '2px' }}>
-                          <div style={{
-                            width: `${(w.score / 10) * 100}%`, height: '100%',
-                            background: w.score < 4 ? 'var(--red)' : w.score < 7 ? 'var(--yellow)' : 'var(--green)',
-                            borderRadius: '2px',
-                          }} />
-                        </div>
-                        <span style={{ fontSize: '12px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', minWidth: '28px', textAlign: 'right' }}>
-                          {w.score.toFixed(1)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Panel>
-            )}
+            {/* ── ZONE 5: 앙상블 분해 패널 (hidden) ───────────────── */}
           </>
         )}
 
