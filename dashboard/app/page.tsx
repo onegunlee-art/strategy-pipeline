@@ -272,12 +272,6 @@ export default function ExecutiveDashboard() {
                   {deal.client_name}
                 </div>
                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                  {deal.deal_size && (
-                    <span style={badgeStyle}>{deal.deal_size}</span>
-                  )}
-                  {deal.industry && (
-                    <span style={badgeStyle}>{deal.industry}</span>
-                  )}
                   {deal.execution_unit && (
                     <span style={badgeStyle}>{deal.execution_unit}</span>
                   )}
@@ -292,9 +286,6 @@ export default function ExecutiveDashboard() {
                       D-{Math.max(0, Math.ceil((new Date(deal.due_date).getTime() - Date.now()) / 86400000))}
                       &nbsp;({new Date(deal.due_date).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }).replace('. ', '.').replace('.', '')})
                     </span>
-                  )}
-                  {dashData.portfolio_rank <= dashData.portfolio_size && (
-                    <span style={badgeStyle}>포트폴리오 #{dashData.portfolio_rank}/{dashData.portfolio_size}</span>
                   )}
                 </div>
               </div>
@@ -487,48 +478,6 @@ export default function ExecutiveDashboard() {
               </Panel>
             )}
           </>
-        )}
-
-        {/* ── ZONE 5: Portfolio chips ───────────────────────────── */}
-        {deals.length > 0 && (
-          <div style={{
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: '2px', padding: '12px 16px',
-            display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
-          }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', letterSpacing: '1px', marginRight: '4px' }}>
-              PORTFOLIO
-            </span>
-            {deals.map(d => (
-              <button
-                key={d.id}
-                onClick={() => setSelectedId(d.id)}
-                style={{
-                  padding: '5px 12px', borderRadius: '2px', border: '1px solid',
-                  borderColor: selectedId === d.id ? 'var(--brand)' : 'var(--border)',
-                  background: selectedId === d.id ? 'rgba(230,0,28,0.06)' : 'var(--surface2)',
-                  color: selectedId === d.id ? 'var(--brand)' : 'var(--text)',
-                  fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit',
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                }}
-              >
-                {d.client_name}
-                {d.win_probability > 0 && (
-                  <span style={{
-                    fontSize: '11px', fontFamily: 'IBM Plex Mono',
-                    color: probColor(d.win_probability),
-                  }}>
-                    {d.win_probability.toFixed(0)}%
-                  </span>
-                )}
-              </button>
-            ))}
-            <a href="/admin?tab=analyze" style={{
-              padding: '5px 10px', borderRadius: '2px',
-              border: '1px dashed var(--border)',
-              color: 'var(--text-dim)', fontSize: '12px', textDecoration: 'none',
-            }}>+ 새 분석</a>
-          </div>
         )}
 
         <div style={{ fontSize: '10px', color: 'var(--text-dim)', textAlign: 'center', padding: '4px 0 16px' }}>
