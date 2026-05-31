@@ -199,6 +199,7 @@ async function runInit() {
     ALTER TABLE deal_competitors ADD COLUMN IF NOT EXISTS notes TEXT;
     ALTER TABLE deal_competitors ADD COLUMN IF NOT EXISTS risk_level TEXT DEFAULT 'medium';
 
+
     -- v0.5: applied_at — 어드민이 AI 추정값을 정량 모델에 수동 채택한 시점
     ALTER TABLE external_research ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
   `);
