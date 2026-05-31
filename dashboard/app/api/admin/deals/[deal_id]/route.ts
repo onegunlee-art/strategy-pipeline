@@ -6,6 +6,7 @@ const ALLOWED = new Set([
   'partners', 'risks', 'milestones', 'competitive_positioning',
   'execution_unit', 'pm', 'duration_months', 'industry', 'deal_size',
   'client_name', 'due_date',
+  'importance_stars', 'bid_timeline', 'team_size', 'team_members',
 ]);
 
 export async function PATCH(
