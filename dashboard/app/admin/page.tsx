@@ -1194,6 +1194,10 @@ function RfpImportTab() {
     strategy_memo: '',
     voting_days: '7',
   });
+  const [rfpImportanceStars, setRfpImportanceStars] = useState(3);
+  const [rfpBidTimeline, setRfpBidTimeline] = useState({ rfp_published: '', bid_deadline: '', pt_date: '', announcement_date: '' });
+  const [rfpTeamSize, setRfpTeamSize] = useState('');
+  const [rfpPartners, setRfpPartners] = useState<{ name: string; role: string; task_scope: string }[]>([]);
   const [scores, setScores] = useState<Record<string, number>>(defaultSubScores());
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<null | {
@@ -1209,6 +1213,12 @@ function RfpImportTab() {
   const handleSubmit = async () => {
     setLoading(true); setError(''); setResult(null);
     try {
+      const bidTl = {
+        ...(rfpBidTimeline.rfp_published ? { rfp_published: rfpBidTimeline.rfp_published } : {}),
+        ...(rfpBidTimeline.bid_deadline ? { bid_deadline: rfpBidTimeline.bid_deadline } : {}),
+        ...(rfpBidTimeline.pt_date ? { pt_date: rfpBidTimeline.pt_date } : {}),
+        ...(rfpBidTimeline.announcement_date ? { announcement_date: rfpBidTimeline.announcement_date } : {}),
+      };
       const body = {
         client_name: form.client_name,
         deal_size: form.deal_size || undefined,
@@ -1220,6 +1230,10 @@ function RfpImportTab() {
         strategy_memo: form.strategy_memo || undefined,
         voting_days: Number(form.voting_days),
         sub_scores: scores,
+        importance_stars: rfpImportanceStars,
+        ...(Object.keys(bidTl).length > 0 ? { bid_timeline: bidTl } : {}),
+        ...(rfpTeamSize ? { team_size: Number(rfpTeamSize) } : {}),
+        ...(rfpPartners.filter(p => p.name).length > 0 ? { partners_list: rfpPartners.filter(p => p.name) } : {}),
       };
       const res = await fetch('/api/admin/rfp-import', {
         method: 'POST',
@@ -1278,8 +1292,65 @@ function RfpImportTab() {
           {input('산업', 'industry')}
           {input('사업 기간 (개월)', 'duration_months', 'number')}
           {input('리스크 레벨 (1-5)', 'risk', 'number')}
-          {input('경쟁사 (쉼표 구분)', 'competitors')}
+          {input('경쟁사 (쉼표 구분, Elo 조회용)', 'competitors')}
           {input('투표 기간 (일)', 'voting_days', 'number')}
+
+          {/* 중요도 */}
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '6px' }}>중요도</label>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {[1,2,3,4,5].map(n => (
+                <button key={n} onClick={() => setRfpImportanceStars(n)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: n <= rfpImportanceStars ? 'var(--yellow)' : 'var(--border)', padding: '0 2px' }}>★</button>
+              ))}
+            </div>
+          </div>
+
+          {/* 입찰 일정 */}
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '6px' }}>입찰 일정</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+              {[
+                { label: '공고일', key: 'rfp_published' },
+                { label: '마감일', key: 'bid_deadline' },
+                { label: 'PT일', key: 'pt_date' },
+                { label: '발표일', key: 'announcement_date' },
+              ].map(({ label, key }) => (
+                <div key={key}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '3px' }}>{label}</div>
+                  <input type="date" value={rfpBidTimeline[key as keyof typeof rfpBidTimeline]}
+                    onChange={e => setRfpBidTimeline(b => ({ ...b, [key]: e.target.value }))}
+                    style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)', padding: '6px 8px', borderRadius: '4px', fontSize: '12px', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 팀 규모 */}
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>팀 규모 (명)</label>
+            <input type="number" value={rfpTeamSize} onChange={e => setRfpTeamSize(e.target.value)} placeholder="예: 42"
+              style={{ width: '120px', background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)', padding: '8px 10px', borderRadius: '4px', fontSize: '13px', fontFamily: 'inherit' }} />
+          </div>
+
+          {/* 파트너 + 과업범위 */}
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '6px' }}>협력 파트너 구조</label>
+            {rfpPartners.map((p, i) => (
+              <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input value={p.name} onChange={e => setRfpPartners(ps => ps.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} placeholder="파트너명"
+                  style={{ ...S.input, width: '110px', padding: '5px 8px', fontSize: '12px' }} />
+                <input value={p.role} onChange={e => setRfpPartners(ps => ps.map((x, j) => j === i ? { ...x, role: e.target.value } : x))} placeholder="역할"
+                  style={{ ...S.input, width: '90px', padding: '5px 8px', fontSize: '12px' }} />
+                <input value={p.task_scope} onChange={e => setRfpPartners(ps => ps.map((x, j) => j === i ? { ...x, task_scope: e.target.value } : x))} placeholder="과업범위 (PM/QA/인프라...)"
+                  style={{ ...S.input, width: '200px', padding: '5px 8px', fontSize: '12px' }} />
+                <button onClick={() => setRfpPartners(ps => ps.filter((_, j) => j !== i))}
+                  style={{ ...S.btn('var(--red)'), padding: '4px 8px', fontSize: '11px' }}>✕</button>
+              </div>
+            ))}
+            <button onClick={() => setRfpPartners(ps => [...ps, { name: '', role: '', task_scope: '' }])}
+              style={{ ...S.btn(), padding: '4px 12px', fontSize: '11px', marginTop: '4px' }}>+ 파트너</button>
+          </div>
 
           <div style={{ marginBottom: '12px' }}>
             <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>
