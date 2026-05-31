@@ -14,7 +14,8 @@ export async function GET(
     const { rows: dealRows } = await db.query(
       `SELECT id, client_name, deal_size, industry, execution_unit, pm,
               duration_months, due_date, partners, risks, milestones,
-              competitive_positioning, created_at
+              competitive_positioning, importance_stars, bid_timeline,
+              team_size, team_members, created_at
        FROM deals WHERE id = $1`,
       [dealId]
     );
@@ -36,6 +37,10 @@ export async function GET(
       risks: raw.risks ?? [],
       milestones: raw.milestones ?? [],
       competitive_positioning: raw.competitive_positioning ?? {},
+      importance_stars: raw.importance_stars ?? 3,
+      bid_timeline: raw.bid_timeline ?? {},
+      team_size: raw.team_size ?? null,
+      team_members: raw.team_members ?? [],
     };
 
     // Latest prediction

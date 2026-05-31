@@ -1,9 +1,11 @@
 // 가중치 + Elo + Ensemble + Calibration 통합 정보 반환
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { isAdminAuthed } from '@/lib/auth';
 import { calibrationData } from '@/lib/ensemble';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!isAdminAuthed(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   try {
     const db = await getDb();
 

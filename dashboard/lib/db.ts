@@ -191,6 +191,15 @@ async function runInit() {
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS milestones JSONB DEFAULT '[]';
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS competitive_positioning JSONB DEFAULT '{}';
 
+    -- v1.0: SG 보고서 구조 필드
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS importance_stars INTEGER DEFAULT 3;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS bid_timeline JSONB DEFAULT '{}';
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS team_size INTEGER;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS team_members JSONB DEFAULT '[]';
+    ALTER TABLE deal_competitors ADD COLUMN IF NOT EXISTS notes TEXT;
+    ALTER TABLE deal_competitors ADD COLUMN IF NOT EXISTS risk_level TEXT DEFAULT 'medium';
+
+
     -- v0.5: applied_at — 어드민이 AI 추정값을 정량 모델에 수동 채택한 시점
     ALTER TABLE external_research ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
   `);

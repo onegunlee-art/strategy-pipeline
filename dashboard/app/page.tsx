@@ -17,10 +17,11 @@ interface PortfolioDeal {
   recommendation: string;
 }
 
-interface Partner { name: string; role: string; description?: string }
+interface Partner { name: string; role: string; description?: string; task_scope?: string }
 interface Risk { name: string; probability: number; impact: number; difficulty: number; level: string }
 interface Milestone { date: string; label: string; type: string }
-interface CompPos { self?: { x: number; y: number }; competitors?: { name: string; x: number; y: number; size?: string }[] }
+interface CompPos { self?: { x: number; y: number }; competitors?: { name: string; x: number; y: number; size?: string; notes?: string; risk_level?: string }[] }
+interface BidTimeline { rfp_published?: string; bid_deadline?: string; pt_date?: string; announcement_date?: string }
 
 interface DashboardData {
   deal: {
@@ -28,6 +29,8 @@ interface DashboardData {
     execution_unit: string | null; pm: string | null; duration_months: number | null;
     due_date: string | null; partners: Partner[]; risks: Risk[];
     milestones: Milestone[]; competitive_positioning: CompPos;
+    importance_stars: number; bid_timeline: BidTimeline;
+    team_size: number | null; team_members: { name: string; dept: string; role: string }[];
   };
   prediction: {
     probability: number;
@@ -268,10 +271,17 @@ export default function ExecutiveDashboard() {
               flexWrap: 'wrap', gap: '16px',
             }}>
               <div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', marginBottom: '6px' }}>
-                  {deal.client_name}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)' }}>
+                    {deal.client_name}
+                  </div>
+                  {deal.importance_stars > 0 && (
+                    <span style={{ fontSize: '14px', color: 'var(--yellow)', letterSpacing: '1px' }}>
+                      {'★'.repeat(deal.importance_stars)}{'☆'.repeat(5 - deal.importance_stars)}
+                    </span>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   {deal.execution_unit && (
                     <span style={badgeStyle}>{deal.execution_unit}</span>
                   )}
@@ -281,10 +291,31 @@ export default function ExecutiveDashboard() {
                   {deal.duration_months && (
                     <span style={badgeStyle}>{deal.duration_months}개월</span>
                   )}
+                  {deal.team_size && (
+                    <span style={{ ...badgeStyle, color: 'var(--text-mid)' }}>{deal.team_size}명</span>
+                  )}
+                  {/* 입찰 일정 4종 */}
+                  {deal.bid_timeline?.rfp_published && (
+                    <span style={badgeStyle}>공고 {new Date(deal.bid_timeline.rfp_published).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }).replace('. ', '/').replace('.', '')}</span>
+                  )}
+                  {deal.bid_timeline?.bid_deadline && (
+                    <span style={{ ...badgeStyle, color: 'var(--yellow)' }}>
+                      마감 D-{Math.max(0, Math.ceil((new Date(deal.bid_timeline.bid_deadline).getTime() - Date.now()) / 86400000))}
+                    </span>
+                  )}
+                  {deal.bid_timeline?.pt_date && (
+                    <span style={{ ...badgeStyle, color: 'var(--cyan)' }}>
+                      PT {new Date(deal.bid_timeline.pt_date).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }).replace('. ', '/').replace('.', '')}
+                    </span>
+                  )}
+                  {deal.bid_timeline?.announcement_date && (
+                    <span style={badgeStyle}>
+                      발표 {new Date(deal.bid_timeline.announcement_date).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }).replace('. ', '/').replace('.', '')}
+                    </span>
+                  )}
                   {deal.due_date && (
                     <span style={{ ...badgeStyle, color: 'var(--red)' }}>
                       D-{Math.max(0, Math.ceil((new Date(deal.due_date).getTime() - Date.now()) / 86400000))}
-                      &nbsp;({new Date(deal.due_date).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }).replace('. ', '.').replace('.', '')})
                     </span>
                   )}
                 </div>
@@ -350,12 +381,29 @@ export default function ExecutiveDashboard() {
 
               <Panel title="경쟁 포지셔닝 매트릭스">
                 {deal.competitive_positioning?.self || (deal.competitive_positioning?.competitors?.length ?? 0) > 0 ? (
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <PositionMatrix
-                      self={deal.competitive_positioning.self}
-                      competitors={deal.competitive_positioning.competitors ?? []}
-                    />
-                  </div>
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <PositionMatrix
+                        self={deal.competitive_positioning.self}
+                        competitors={deal.competitive_positioning.competitors ?? []}
+                      />
+                    </div>
+                    {(deal.competitive_positioning.competitors?.filter(c => c.notes).length ?? 0) > 0 && (
+                      <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {deal.competitive_positioning.competitors?.filter(c => c.notes).map((c, i) => (
+                          <div key={i} style={{ fontSize: '11px', background: 'var(--surface2)', borderRadius: '4px', padding: '7px 10px' }}>
+                            <span style={{
+                              display: 'inline-block', marginRight: '6px', fontSize: '9px', fontFamily: 'IBM Plex Mono',
+                              padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.5px',
+                              background: c.risk_level === 'high' ? 'rgba(255,68,102,0.15)' : c.risk_level === 'low' ? 'rgba(0,212,160,0.12)' : 'rgba(255,200,60,0.12)',
+                              color: c.risk_level === 'high' ? 'var(--red)' : c.risk_level === 'low' ? 'var(--green)' : 'var(--yellow)',
+                            }}>{c.name}</span>
+                            <span style={{ color: 'var(--text-dim)' }}>{c.notes}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <EmptyPanel label="포지셔닝 데이터 없음" />
                 )}
@@ -365,6 +413,28 @@ export default function ExecutiveDashboard() {
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <PartnerNetwork partners={deal.partners} />
                 </div>
+                {deal.partners.filter(p => p.task_scope).length > 0 && (
+                  <div style={{ marginTop: '10px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                      <thead>
+                        <tr>
+                          {['파트너', '역할', '과업 범위'].map(h => (
+                            <th key={h} style={{ textAlign: 'left', padding: '4px 6px', fontSize: '9px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', letterSpacing: '0.5px' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {deal.partners.filter(p => p.name).map((p, i) => (
+                          <tr key={i}>
+                            <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '10px' }}>{p.name}</td>
+                            <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--text-dim)' }}>{p.role}</td>
+                            <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--text)' }}>{p.task_scope ?? '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Panel>
             </div>
 
@@ -430,7 +500,53 @@ export default function ExecutiveDashboard() {
               </Panel>
             </div>
 
-            {/* ── ZONE 5: 앙상블 분해 패널 (hidden) ───────────────── */}
+            {/* ── ZONE 5: Portfolio bar ─────────────────────────── */}
+            {pred && (
+              <Panel title="4-Method 앙상블 분해">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '12px' }}>
+                  {[
+                    { key: 'pillar', label: 'Pillar' },
+                    { key: 'bayesian', label: 'Bayesian' },
+                    { key: 'elo', label: 'Elo' },
+                    { key: 'monteCarlo', label: 'Monte Carlo' },
+                  ].map(({ key, label }) => {
+                    const v = Number(pred.method_probs[key] ?? 0);
+                    return (
+                      <div key={key} style={{ padding: '12px', background: 'var(--surface2)', borderRadius: '2px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginBottom: '4px' }}>{label.toUpperCase()}</div>
+                        <div style={{ fontSize: '20px', fontWeight: 700, fontFamily: 'IBM Plex Mono', color: probColor(v) }}>
+                          {v.toFixed(1)}%
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {pred.weaknesses.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', letterSpacing: '1px', marginBottom: '8px' }}>
+                      TOP WEAKNESSES
+                    </div>
+                    {pred.weaknesses.map((w, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', minWidth: '16px' }}>#{i + 1}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1 }}>{w.label}</span>
+                        <div style={{ width: '100px', height: '5px', background: 'var(--surface2)', borderRadius: '2px' }}>
+                          <div style={{
+                            width: `${(w.score / 10) * 100}%`, height: '100%',
+                            background: w.score < 4 ? 'var(--red)' : w.score < 7 ? 'var(--yellow)' : 'var(--green)',
+                            borderRadius: '2px',
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '12px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', minWidth: '28px', textAlign: 'right' }}>
+                          {w.score.toFixed(1)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Panel>
+            )}
           </>
         )}
 

@@ -20,11 +20,15 @@ interface RfpImportBody {
   industry?: string;
   duration_months?: number;
   risk?: number;
-  competitors: string[];        // competitor names (will lookup/create)
+  competitors: string[];
   sub_scores: Partial<SubScores>;
-  rfp_summary?: string;         // stored in decision_traces
-  strategy_memo?: string;       // stored in decision_traces
-  voting_days?: number;         // voting link expiry (default 7)
+  rfp_summary?: string;
+  strategy_memo?: string;
+  voting_days?: number;
+  importance_stars?: number;
+  bid_timeline?: { rfp_published?: string; bid_deadline?: string; pt_date?: string; announcement_date?: string };
+  team_size?: number;
+  partners_list?: { name: string; role: string; task_scope?: string }[];
 }
 
 export async function POST(req: NextRequest) {
@@ -119,6 +123,19 @@ export async function POST(req: NextRequest) {
       [body.client_name, body.deal_size ?? null, body.industry ?? '금융', body.duration_months ?? null]
     );
     const dealId = dealRows[0].id;
+
+    // 8b) 신규 필드 업데이트 (importance_stars, bid_timeline, team_size, partners)
+    const newFieldSets: string[] = [];
+    const newFieldVals: unknown[] = [];
+    let fi = 1;
+    if (body.importance_stars != null) { newFieldSets.push(`importance_stars=$${fi++}`); newFieldVals.push(body.importance_stars); }
+    if (body.bid_timeline && Object.keys(body.bid_timeline).length > 0) { newFieldSets.push(`bid_timeline=$${fi++}`); newFieldVals.push(JSON.stringify(body.bid_timeline)); }
+    if (body.team_size != null) { newFieldSets.push(`team_size=$${fi++}`); newFieldVals.push(body.team_size); }
+    if (body.partners_list && body.partners_list.length > 0) { newFieldSets.push(`partners=$${fi++}`); newFieldVals.push(JSON.stringify(body.partners_list.map(p => ({ name: p.name, role: p.role, task_scope: p.task_scope })))); }
+    if (newFieldSets.length > 0) {
+      newFieldVals.push(dealId);
+      await db.query(`UPDATE deals SET ${newFieldSets.join(', ')} WHERE id=$${fi}`, newFieldVals);
+    }
 
     // 9) deal_competitors
     for (const cid of competitorIds) {

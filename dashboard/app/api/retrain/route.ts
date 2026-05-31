@@ -1,12 +1,14 @@
 // 재학습: Pillar weight + Ensemble weight + Sub-factor weight (Gemini)
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { isAdminAuthed } from '@/lib/auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL } from '@/lib/geminiModel';
 import { SUB_FACTORS, SubFactorId, PillarId, PILLAR_META } from '@/lib/pillars';
 import { learnEnsembleWeights, TrainingCase, MethodProbs, brierScore } from '@/lib/ensemble';
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!isAdminAuthed(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   try {
     const db = await getDb();
 
