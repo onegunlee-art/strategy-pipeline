@@ -363,6 +363,17 @@ export default function ExecutiveDashboard() {
                   >
                     Executive Brief
                   </button>
+                  <button
+                    onClick={() => window.open(`/report/${deal.id}`, '_blank')}
+                    style={{
+                      ...actionBtn,
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    보고서
+                  </button>
                 </div>
               </div>
             </div>
