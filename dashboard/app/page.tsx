@@ -37,6 +37,11 @@ interface DashboardData {
   } | null;
   portfolio_rank: number;
   portfolio_size: number;
+  model_trust?: {
+    level: 'structural' | 'low' | 'medium' | 'high';
+    label: string; detail: string;
+    labeled_count: number; brier: number | null; color: string;
+  };
 }
 
 interface StrategyCard {
@@ -325,6 +330,19 @@ export default function ExecutiveDashboard() {
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
                       CI {pred.confidence_interval.low.toFixed(0)}–{pred.confidence_interval.high.toFixed(0)}
                     </div>
+                    {dashData?.model_trust && (
+                      <div
+                        title={dashData.model_trust.detail}
+                        style={{
+                          marginTop: '4px', fontSize: '10px', fontWeight: 600,
+                          color: dashData.model_trust.color, cursor: 'help',
+                          display: 'inline-flex', alignItems: 'center', gap: '3px',
+                        }}
+                      >
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: dashData.model_trust.color, display: 'inline-block' }} />
+                        신뢰 {dashData.model_trust.label}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: '12px' }}>

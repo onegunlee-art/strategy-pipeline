@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { findWeaknesses, defaultSubScores, SubScores } from '@/lib/pillars';
+import { computeModelTrust } from '@/lib/trust';
 
 export async function GET(
   _req: NextRequest,
@@ -93,11 +94,25 @@ export async function GET(
     `);
     const rankIdx = rankRows.findIndex(r => r.id === dealId);
 
+    // 모델 신뢰수준 — 결과(outcome) 확정 표본 수 + 평균 Brier로 정직하게 산출
+    const { rows: labeledRows } = await db.query(`
+      SELECT p.predicted_probability, o.actual_result
+      FROM predictions p JOIN outcomes o ON o.deal_id = p.deal_id
+      WHERE p.predicted_probability >= 0
+    `);
+    const labeledCount = labeledRows.length;
+    const brier = labeledCount > 0
+      ? labeledRows.reduce((s: number, r: { predicted_probability: number; actual_result: number }) =>
+          s + (r.predicted_probability / 100 - r.actual_result) ** 2, 0) / labeledCount
+      : null;
+    const model_trust = computeModelTrust(labeledCount, brier);
+
     return NextResponse.json({
       deal,
       prediction,
       portfolio_rank: rankIdx >= 0 ? rankIdx + 1 : rankRows.length + 1,
       portfolio_size: rankRows.length,
+      model_trust,
     });
   } catch (e: unknown) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
