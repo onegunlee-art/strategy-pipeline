@@ -32,6 +32,12 @@ interface DashboardData {
     method_probs: Record<string, number>;
     pillar_scores: Record<string, number>;
     weaknesses: Array<{ id: string; label: string; pillar: string; score: number; contribution: number }>;
+    next_moves: Array<{
+      action_id: string; label: string; pillar: string;
+      effort: number; owner: string;
+      prob_before: number; prob_after: number;
+      delta_pp: number; roi: number;
+    }>;
     confidence_interval: { low: number; high: number };
     created_at: string;
   } | null;
@@ -524,9 +530,56 @@ export default function ExecutiveDashboard() {
               </Panel>
             </div>
 
-            {/* ── ZONE 5: Portfolio bar ─────────────────────────── */}
+            {/* ── ZONE 5: Next Best Move + 앙상블 분해 ───────────── */}
+            {pred && pred.next_moves?.length > 0 && (
+              <Panel title="다음 최선의 수 (Next Best Move)">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
+                  {pred.next_moves.map((m, i) => {
+                    const pillarColor: Record<string, string> = {
+                      S: 'var(--cyan)', V: 'var(--brand)', D: 'var(--yellow)', P: 'var(--green)', E: 'var(--red)',
+                    };
+                    const color = pillarColor[m.pillar] ?? 'var(--text-dim)';
+                    const effortDots = '●'.repeat(m.effort) + '○'.repeat(5 - m.effort);
+                    return (
+                      <div key={m.action_id} style={{
+                        background: 'var(--surface2)', borderRadius: '2px',
+                        padding: '12px 14px', borderLeft: `3px solid ${color}`,
+                        display: 'flex', flexDirection: 'column', gap: '6px',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '9px', fontFamily: 'IBM Plex Mono', color, fontWeight: 700 }}>
+                            #{i + 1} · {m.pillar} PILLAR
+                          </span>
+                          <span style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--green)', fontWeight: 700 }}>
+                            +{m.delta_pp.toFixed(1)}pp
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.4, fontWeight: 500 }}>
+                          {m.label}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+                          <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                            {m.prob_before.toFixed(1)}% → {m.prob_after.toFixed(1)}%
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '9px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', letterSpacing: '1px' }}>
+                              {effortDots}
+                            </span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{m.owner}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
+                  ● effort 1-5 · ROI = ΔP / effort · 1-step lookahead
+                </div>
+              </Panel>
+            )}
+
             {pred && (
-              <Panel title="4-Method 앙상블 분해">
+              <Panel title="앙상블 분해 (Pillar · Bayesian · Elo)">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '12px' }}>
                   {[
                     { key: 'pillar', label: 'Pillar' },

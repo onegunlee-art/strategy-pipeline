@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { findWeaknesses, defaultSubScores, SubScores } from '@/lib/pillars';
 import { computeModelTrust } from '@/lib/trust';
+import { rankNextMoves } from '@/lib/nextMove';
 
 export async function GET(
   _req: NextRequest,
@@ -60,6 +61,7 @@ export async function GET(
         ...(p.sub_scores ?? {}),
       } as SubScores;
       const weaknesses = findWeaknesses(subs, 3);
+      const nextMoves = rankNextMoves(subs, { topN: 5 });
 
       prediction = {
         probability: Number(p.predicted_probability),
@@ -71,6 +73,17 @@ export async function GET(
           pillar: w.pillar,
           score: w.score,
           contribution: w.contribution,
+        })),
+        next_moves: nextMoves.map(m => ({
+          action_id: m.action.id,
+          label: m.action.label,
+          pillar: m.action.pillar,
+          effort: m.action.effort,
+          owner: m.action.owner,
+          prob_before: Math.round(m.prob_before * 1000) / 10,
+          prob_after: Math.round(m.prob_after * 1000) / 10,
+          delta_pp: Math.round(m.delta_pp * 10) / 10,
+          roi: Math.round(m.roi * 100) / 100,
         })),
         confidence_interval: {
           low: Number(p.confidence_low ?? 0),
