@@ -9,6 +9,7 @@ import RiskBubble from '@/components/charts/RiskBubble';
 import type { Partner, Risk, Milestone, CompPos, BidTimeline } from '@/lib/types';
 import { pillarScoreFromSubs, pillarMultiplication } from '@/lib/pillars';
 import type { SubScores } from '@/lib/pillars';
+import { ACTION_CATALOG } from '@/lib/actionCatalog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,25 @@ interface StrategyCard {
   cause_hypothesis: string; external_evidence: string;
   actions: { step: string; owner: string; duration: string }[];
   expected_score_lift: number; expected_probability_lift_pp: number;
+}
+
+interface SavedScenario {
+  id: number;
+  name: string;
+  actions: Record<string, number>;
+  prob_path: number[];
+  revenue_path: number[];
+  created_at: string;
+}
+
+interface ActionLogEntry {
+  id: number;
+  action_id: string;
+  taken_at: string;
+  taken_by: string | null;
+  notes: string | null;
+  sub_scores_before: Record<string, number> | null;
+  sub_scores_after: Record<string, number> | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -120,6 +140,9 @@ export default function ExecutiveDashboard() {
   const [simSubs, setSimSubs] = useState<Record<string, number> | null>(null);
   const [simMode, setSimMode] = useState(false);
 
+  const [scenarios, setScenarios] = useState<SavedScenario[]>([]);
+  const [actionLog, setActionLog] = useState<ActionLogEntry[]>([]);
+
   const simProb = simSubs
     ? Math.round(pillarMultiplication(pillarScoreFromSubs(simSubs as SubScores)) * 1000) / 10
     : null;
@@ -162,6 +185,8 @@ export default function ExecutiveDashboard() {
     setScqaError('');
     setSimMode(false);
     setSimSubs(null);
+    setScenarios([]);
+    setActionLog([]);
     fetch(`/api/dashboard/${selectedId}`)
       .then(r => r.json())
       .then(d => {
@@ -172,6 +197,14 @@ export default function ExecutiveDashboard() {
       })
       .catch(() => {})
       .finally(() => setLoadingDash(false));
+    fetch(`/api/deals/${selectedId}/scenarios`)
+      .then(r => r.json())
+      .then(d => { if (d.scenarios) setScenarios(d.scenarios); })
+      .catch(() => {});
+    fetch(`/api/deals/${selectedId}/action-log`)
+      .then(r => r.json())
+      .then(d => { if (d.action_log) setActionLog(d.action_log); })
+      .catch(() => {});
   }, [selectedId]);
 
   const generateScqa = async () => {
@@ -622,7 +655,10 @@ export default function ExecutiveDashboard() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ name, actions: simSubs, prob_path: path, revenue_path: revPath }),
                           });
-                          alert('시나리오가 저장되었습니다.');
+                          fetch(`/api/deals/${selectedId}/scenarios`)
+                            .then(r => r.json())
+                            .then(d => { if (d.scenarios) setScenarios(d.scenarios); })
+                            .catch(() => {});
                         }}
                         style={{
                           fontSize: '11px', padding: '4px 10px', cursor: 'pointer',
@@ -705,6 +741,52 @@ export default function ExecutiveDashboard() {
               </Panel>
             )}
 
+            {/* ── 저장된 시나리오 목록 ────────────────────────────── */}
+            {scenarios.length > 0 && (
+              <Panel title="저장된 시나리오">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {scenarios.map(s => {
+                    const p0 = s.prob_path[0] ?? 0;
+                    const p1 = s.prob_path[1] ?? 0;
+                    const delta = Math.round((p1 - p0) * 10) / 10;
+                    return (
+                      <div key={s.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '12px',
+                        background: 'var(--surface2)', borderRadius: '2px', padding: '8px 12px',
+                        borderLeft: `3px solid ${delta >= 0 ? 'var(--green)' : 'var(--red)'}`,
+                      }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1, fontWeight: 500 }}>{s.name}</span>
+                        <span style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)' }}>
+                          {p0.toFixed(1)}% → {p1.toFixed(1)}%
+                        </span>
+                        <span style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', fontWeight: 700, color: delta >= 0 ? 'var(--green)' : 'var(--red)', minWidth: '48px', textAlign: 'right' }}>
+                          {delta >= 0 ? '+' : ''}{delta.toFixed(1)}pp
+                        </span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', minWidth: '60px' }}>
+                          {new Date(s.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+                        </span>
+                        <button
+                          onClick={() => { setSimSubs(s.actions); setSimMode(false); }}
+                          style={{ fontSize: '10px', padding: '3px 8px', cursor: 'pointer', background: 'var(--surface)', color: 'var(--cyan)', border: '1px solid var(--cyan)', borderRadius: '2px', fontFamily: 'IBM Plex Mono', whiteSpace: 'nowrap' }}
+                        >
+                          불러오기
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await fetch(`/api/deals/${selectedId}/scenarios?id=${s.id}`, { method: 'DELETE' });
+                            setScenarios(prev => prev.filter(x => x.id !== s.id));
+                          }}
+                          style={{ fontSize: '10px', padding: '3px 8px', cursor: 'pointer', background: 'var(--surface)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: '2px', fontFamily: 'IBM Plex Mono' }}
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Panel>
+            )}
+
             {/* ── ZONE 6: Next Best Move + 앙상블 분해 ───────────── */}
             {pred && pred.next_moves?.length > 0 && (
               <Panel title="다음 최선의 수 (Next Best Move)">
@@ -732,7 +814,7 @@ export default function ExecutiveDashboard() {
                         <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.4, fontWeight: 500 }}>
                           {m.label}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
                           <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
                             {m.prob_before.toFixed(1)}% → {m.prob_after.toFixed(1)}%
                           </span>
@@ -741,6 +823,27 @@ export default function ExecutiveDashboard() {
                               {effortDots}
                             </span>
                             <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{m.owner}</span>
+                            <button
+                              onClick={async () => {
+                                if (!selectedId) return;
+                                await fetch(`/api/deals/${selectedId}/action-log`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    action_id: m.action_id,
+                                    sub_scores_before: pred.sub_scores,
+                                    sub_scores_after: null,
+                                  }),
+                                });
+                                fetch(`/api/deals/${selectedId}/action-log`)
+                                  .then(r => r.json())
+                                  .then(d => { if (d.action_log) setActionLog(d.action_log); })
+                                  .catch(() => {});
+                              }}
+                              style={{ fontSize: '9px', padding: '2px 7px', cursor: 'pointer', background: 'var(--surface)', color: 'var(--green)', border: '1px solid var(--green)', borderRadius: '2px', fontFamily: 'IBM Plex Mono' }}
+                            >
+                              완료
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -749,6 +852,45 @@ export default function ExecutiveDashboard() {
                 </div>
                 <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
                   ● effort 1-5 · ROI = ΔP / effort · 1-step lookahead
+                </div>
+              </Panel>
+            )}
+
+            {/* ── 액션 실행 이력 ───────────────────────────────────── */}
+            {actionLog.length > 0 && (
+              <Panel title="액션 실행 이력">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  {actionLog.map(entry => {
+                    const action = ACTION_CATALOG.find(a => a.id === entry.action_id);
+                    const pillarColor: Record<string, string> = {
+                      S: 'var(--cyan)', V: 'var(--brand)', D: 'var(--yellow)', P: 'var(--green)', E: 'var(--red)',
+                    };
+                    const color = action ? (pillarColor[action.pillar] ?? 'var(--text-dim)') : 'var(--text-dim)';
+                    return (
+                      <div key={entry.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '12px',
+                        background: 'var(--surface2)', borderRadius: '2px', padding: '7px 12px',
+                        borderLeft: `3px solid ${color}`,
+                      }}>
+                        {action && (
+                          <span style={{ fontSize: '9px', fontFamily: 'IBM Plex Mono', color, fontWeight: 700, minWidth: '16px' }}>
+                            {action.pillar}
+                          </span>
+                        )}
+                        <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1 }}>
+                          {action?.label ?? entry.action_id}
+                        </span>
+                        {entry.taken_by && (
+                          <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{entry.taken_by}</span>
+                        )}
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', whiteSpace: 'nowrap' }}>
+                          {new Date(entry.taken_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+                          {' '}
+                          {new Date(entry.taken_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </Panel>
             )}
