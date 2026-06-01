@@ -17,7 +17,7 @@ export async function GET(
       `SELECT id, client_name, deal_size, industry, execution_unit, pm,
               duration_months, due_date, partners, risks, milestones,
               competitive_positioning, importance_stars, bid_timeline,
-              team_size, team_members, created_at
+              team_size, team_members, expected_revenue, margin_rate, created_at
        FROM deals WHERE id = $1`,
       [dealId]
     );
@@ -43,6 +43,8 @@ export async function GET(
       bid_timeline: raw.bid_timeline ?? {},
       team_size: raw.team_size ?? null,
       team_members: raw.team_members ?? [],
+      expected_revenue: raw.expected_revenue ?? null,
+      margin_rate: raw.margin_rate ?? null,
     };
 
     // Latest prediction
@@ -67,6 +69,7 @@ export async function GET(
         probability: Number(p.predicted_probability),
         method_probs: p.method_probs ?? {},
         pillar_scores: p.pillar_scores ?? {},
+        sub_scores: p.sub_scores ?? {},
         weaknesses: weaknesses.map(w => ({
           id: w.id,
           label: w.label,

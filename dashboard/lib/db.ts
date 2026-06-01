@@ -202,6 +202,34 @@ async function runInit() {
 
     -- v0.5: applied_at — 어드민이 AI 추정값을 정량 모델에 수동 채택한 시점
     ALTER TABLE external_research ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
+
+    -- v0.8: 재무 시뮬레이션 + 전략 경로 지원
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS margin_rate REAL;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS strategic_weight TEXT DEFAULT 'normal';
+
+    CREATE TABLE IF NOT EXISTS action_log (
+      id                 SERIAL PRIMARY KEY,
+      deal_id            INT NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      action_id          TEXT NOT NULL,
+      taken_at           TIMESTAMPTZ DEFAULT NOW(),
+      taken_by           TEXT,
+      notes              TEXT,
+      sub_scores_before  JSONB,
+      sub_scores_after   JSONB
+    );
+    CREATE INDEX IF NOT EXISTS idx_action_log_deal ON action_log (deal_id, taken_at DESC);
+
+    CREATE TABLE IF NOT EXISTS deal_scenarios (
+      id           SERIAL PRIMARY KEY,
+      deal_id      INT NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      actions      JSONB NOT NULL DEFAULT '[]',
+      prob_path    JSONB NOT NULL DEFAULT '[]',
+      revenue_path JSONB NOT NULL DEFAULT '[]',
+      created_by   TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_deal_scenarios_deal ON deal_scenarios (deal_id);
   `);
 
   // 시드 데이터
