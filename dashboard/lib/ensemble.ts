@@ -27,26 +27,30 @@ export interface EnsembleWeights {
   monteCarlo: number;
 }
 
+// 점추정 결합에 쓰는 가중치. monteCarlo는 0 — MC 평균은 Pillar에 대칭 노이즈만
+// 더한 값이라 새 정보가 없고(상관신호), 오직 CI(신뢰구간) 산출에만 쓴다.
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  pillar: 0.30,      // KT 4-Pillar 본질 (재보정: 과대산정 방지로 비중 축소)
-  bayesian: 0.40,    // 시장/산업 base rate — 경험치 보정 (비중 확대)
-  elo: 0.20,         // 경쟁구도 — 대칭 압력
-  monteCarlo: 0.10,  // 불확실성 레이어 — confidence modifier
+  pillar: 0.33,      // KT 5-Pillar 구조 신호
+  bayesian: 0.45,    // 시장/산업 base rate — 경험치 보정
+  elo: 0.22,         // 경쟁구도 — 유일하게 독립적인 외부 신호
+  monteCarlo: 0,     // CI 전용 (점추정 결합에서 제외)
 };
 
+// 정보가 독립적인 세 신호(Pillar·Bayesian·Elo)만 가중 결합한다.
+// MonteCarlo는 의도적으로 제외 — 점추정에 중복 신호를 더하는 착시를 제거.
 export function ensemble(probs: MethodProbs, weights: EnsembleWeights = DEFAULT_WEIGHTS): number {
-  const total = weights.pillar + weights.bayesian + weights.elo + weights.monteCarlo;
+  const total = weights.pillar + weights.bayesian + weights.elo;
   if (total === 0) return 0.5;
   return (
     probs.pillar * weights.pillar +
     probs.bayesian * weights.bayesian +
-    probs.elo * weights.elo +
-    probs.monteCarlo * weights.monteCarlo
+    probs.elo * weights.elo
   ) / total;
 }
 
-// Brier minimize via grid search (간단함 우선)
-// step 0.1 → 11×11×11×11 = 14641 조합, sum=1.0 제약 적용
+// Brier minimize via grid search — 정보 독립적인 3 신호(Pillar·Bayesian·Elo)만 탐색.
+// monteCarlo는 점추정에서 제외되므로 학습 대상이 아님 (항상 0).
+// step 0.1 → pillar+bayesian+elo = 1.0 제약 하에서 ~66 조합.
 export interface TrainingCase {
   probs: MethodProbs;
   actual: 0 | 1;
@@ -60,20 +64,18 @@ export function learnEnsembleWeights(cases: TrainingCase[], step: number = 0.1):
 
   for (let a = 0; a <= 1 + 1e-9; a += step) {
     for (let b = 0; b <= 1 - a + 1e-9; b += step) {
-      for (let c = 0; c <= 1 - a - b + 1e-9; c += step) {
-        const d = 1 - a - b - c;
-        if (d < -1e-9 || d > 1 + 1e-9) continue;
-        const w: EnsembleWeights = { pillar: a, bayesian: b, elo: c, monteCarlo: Math.max(0, d) };
-        let brier = 0;
-        for (const tc of cases) {
-          const p = ensemble(tc.probs, w);
-          brier += (p - tc.actual) ** 2;
-        }
-        brier /= cases.length;
-        if (brier < bestBrier) {
-          bestBrier = brier;
-          best = w;
-        }
+      const c = 1 - a - b;
+      if (c < -1e-9 || c > 1 + 1e-9) continue;
+      const w: EnsembleWeights = { pillar: a, bayesian: b, elo: Math.max(0, c), monteCarlo: 0 };
+      let brier = 0;
+      for (const tc of cases) {
+        const p = ensemble(tc.probs, w);
+        brier += (p - tc.actual) ** 2;
+      }
+      brier /= cases.length;
+      if (brier < bestBrier) {
+        bestBrier = brier;
+        best = w;
       }
     }
   }
@@ -192,7 +194,7 @@ export async function computeEnsembleProb(
   const ensWeights: EnsembleWeights = ensRow[0] ? {
     pillar: ensRow[0].pillar_mult, bayesian: ensRow[0].bayesian,
     elo: ensRow[0].elo, monteCarlo: ensRow[0].monte_carlo,
-  } : { pillar: 0.40, bayesian: 0.20, elo: 0.20, monteCarlo: 0.20 };
+  } : { ...DEFAULT_WEIGHTS };
 
   const methodProbs: MethodProbs = {
     pillar: probPillar, bayesian: probBayesian, elo: probElo, monteCarlo: mc.mean,
