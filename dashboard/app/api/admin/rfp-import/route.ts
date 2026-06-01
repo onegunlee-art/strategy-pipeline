@@ -2,17 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { isAdminAuthed } from '@/lib/auth';
 import { randomBytes } from 'crypto';
-import {
-  SubScores, SubFactorId, PillarId,
-  pillarScoreFromSubs, pillarMultiplication, findWeaknesses, defaultSubScores,
-} from '@/lib/pillars';
-import {
-  bayesianProbability, computeBaseRate, buildLikelihoodTable, HistoricalRecord,
-} from '@/lib/bayesian';
-import { multiCompetitorWinProb } from '@/lib/elo';
-import { monteCarloRun } from '@/lib/montecarlo';
-import { ensemble, EnsembleWeights, MethodProbs } from '@/lib/ensemble';
-import { computeRewardFactors } from '@/lib/mcReward';
+import { SubScores, defaultSubScores } from '@/lib/pillars';
+import { computeEnsembleProb } from '@/lib/ensemble';
 
 interface RfpImportBody {
   client_name: string;
@@ -43,36 +34,7 @@ export async function POST(req: NextRequest) {
     // 1) sub-scores 보강
     const subs: SubScores = { ...defaultSubScores(), ...body.sub_scores } as SubScores;
 
-    // 2) 가중치 로드
-    const { rows: weightRows } = await db.query(`
-      SELECT variable_id, weight_value FROM weights w
-      WHERE updated_at = (SELECT MAX(updated_at) FROM weights w2 WHERE w2.variable_id = w.variable_id)
-    `);
-    const subWeights: Partial<Record<SubFactorId, number>> = {};
-    const pillarWeights: Partial<Record<PillarId, number>> = {};
-    for (const r of weightRows) {
-      const id = r.variable_id as string;
-      if (id.startsWith('pillar_')) pillarWeights[id.slice(7) as PillarId] = r.weight_value;
-      else subWeights[id as SubFactorId] = r.weight_value;
-    }
-
-    // 3) Method A
-    const pillarScores = pillarScoreFromSubs(subs, subWeights);
-    const probPillar = pillarMultiplication(pillarScores, pillarWeights);
-
-    // 4) Method B
-    const { rows: histRows } = await db.query(`
-      SELECT p.sub_scores, o.actual_result FROM predictions p
-      JOIN outcomes o ON o.deal_id = p.deal_id WHERE p.sub_scores IS NOT NULL
-    `);
-    const records: HistoricalRecord[] = histRows.map((r: { sub_scores: Partial<SubScores>; actual_result: number }) => ({
-      subs: r.sub_scores, actual: r.actual_result as 0 | 1,
-    }));
-    const prior = computeBaseRate(records);
-    const lrTable = buildLikelihoodTable(records);
-    const probBayesian = bayesianProbability(subs, lrTable, prior);
-
-    // 5) Method C — competitor name → id lookup
+    // 2) competitor name → id lookup (rfp-import 고유: 이름으로 등록)
     const competitorIds: number[] = [];
     for (const name of (body.competitors ?? [])) {
       const { rows: found } = await db.query(
@@ -81,40 +43,15 @@ export async function POST(req: NextRequest) {
       if (found.length > 0) competitorIds.push(found[0].id);
     }
 
-    const { rows: ourEloRow } = await db.query('SELECT elo FROM our_elo WHERE id=1');
-    const ourElo = ourEloRow[0]?.elo ?? 1500;
-    let probElo = 0.5;
-    if (competitorIds.length > 0) {
-      const { rows: compRows } = await db.query(
-        'SELECT current_elo FROM competitors WHERE id = ANY($1::int[])', [competitorIds]
-      );
-      probElo = multiCompetitorWinProb(ourElo, compRows.map((r: { current_elo: number }) => r.current_elo));
-    }
-
-    // 6) Method D
-    const rewardFactors = computeRewardFactors(records, { risk: body.risk ?? 3 });
-    const mc = monteCarloRun(subs, {
-      iterations: 5000,
-      subFactorStd: 1.0,
-      pillarWeights,
-      subWeights,
-      rewardFactors,
+    // 3~7) 공유 추론 파이프라인 (가중치 로드 → 4-method → ensemble)
+    const {
+      subWeights, pillarWeights, pillarScores, methodProbs,
+      finalProb, mc, weaknesses, prior, records, ensWeights,
+    } = await computeEnsembleProb(db, subs, {
+      competitorIds,
+      risk: body.risk ?? 3,
     });
-
-    // 7) Ensemble
-    const { rows: ensRow } = await db.query(
-      'SELECT pillar_mult, bayesian, elo, monte_carlo FROM ensemble_weights ORDER BY version DESC LIMIT 1'
-    );
-    const ensWeights: EnsembleWeights = ensRow[0] ? {
-      pillar: ensRow[0].pillar_mult, bayesian: ensRow[0].bayesian,
-      elo: ensRow[0].elo, monteCarlo: ensRow[0].monte_carlo,
-    } : { pillar: 0.40, bayesian: 0.20, elo: 0.20, monteCarlo: 0.20 };
-
-    const methodProbs: MethodProbs = {
-      pillar: probPillar, bayesian: probBayesian, elo: probElo, monteCarlo: mc.mean,
-    };
-    const finalProb = ensemble(methodProbs, ensWeights);
-    const weaknesses = findWeaknesses(subs, 3, pillarWeights, subWeights);
+    const { pillar: probPillar, bayesian: probBayesian, elo: probElo } = methodProbs;
 
     // 8) DB 저장 — deals
     const { rows: dealRows } = await db.query(

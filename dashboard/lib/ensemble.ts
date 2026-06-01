@@ -1,5 +1,16 @@
 // Ensemble — 4 method 결합 + Brier minimize 학습
 
+import {
+  SubScores, SubFactorId, PillarId, PillarScores,
+  pillarScoreFromSubs, pillarMultiplication, findWeaknesses,
+} from './pillars';
+import {
+  bayesianProbability, computeBaseRate, buildLikelihoodTable, HistoricalRecord,
+} from './bayesian';
+import { multiCompetitorWinProb } from './elo';
+import { monteCarloRun, MonteCarloResult } from './montecarlo';
+import { computeRewardFactors } from './mcReward';
+
 export type Method = 'pillar' | 'bayesian' | 'elo' | 'monteCarlo';
 
 export interface MethodProbs {
@@ -99,4 +110,98 @@ export function calibrationData(
 
 export function brierScore(predicted: number, actual: number): number {
   return (predicted - actual) ** 2;
+}
+
+// ── 공유 추론 파이프라인 ──────────────────────────────────────────────
+// predict 와 admin/rfp-import 가 동일하게 쓰던 4-method 계산을 단일화.
+// 가중치 로드 → Pillar/Bayesian/Elo/MonteCarlo → 앙상블 결합까지 일괄 수행.
+
+export interface EnsembleComputation {
+  subWeights: Partial<Record<SubFactorId, number>>;
+  pillarWeights: Partial<Record<PillarId, number>>;
+  pillarScores: PillarScores;
+  methodProbs: MethodProbs;
+  finalProb: number;             // 0~1
+  mc: MonteCarloResult;
+  weaknesses: ReturnType<typeof findWeaknesses>;
+  prior: number;
+  records: HistoricalRecord[];
+  ensWeights: EnsembleWeights;
+}
+
+export async function computeEnsembleProb(
+  db: import('pg').Pool,
+  subs: SubScores,
+  opts: { competitorIds?: number[]; risk?: number; mcIterations?: number } = {}
+): Promise<EnsembleComputation> {
+  // 1) 가중치 로드 (sub-factor + pillar, 최신 버전)
+  const { rows: weightRows } = await db.query(`
+    SELECT variable_id, weight_value FROM weights w
+    WHERE updated_at = (SELECT MAX(updated_at) FROM weights w2 WHERE w2.variable_id = w.variable_id)
+  `);
+  const subWeights: Partial<Record<SubFactorId, number>> = {};
+  const pillarWeights: Partial<Record<PillarId, number>> = {};
+  for (const r of weightRows) {
+    const id = r.variable_id as string;
+    if (id.startsWith('pillar_')) pillarWeights[id.slice(7) as PillarId] = r.weight_value;
+    else subWeights[id as SubFactorId] = r.weight_value;
+  }
+
+  // 2) Method A — Pillar Multiplication
+  const pillarScores = pillarScoreFromSubs(subs, subWeights);
+  const probPillar = pillarMultiplication(pillarScores, pillarWeights);
+
+  // 3) Method B — Bayesian (과거 데이터 prior + LR)
+  const { rows: histRows } = await db.query(`
+    SELECT p.sub_scores, o.actual_result FROM predictions p
+    JOIN outcomes o ON o.deal_id = p.deal_id WHERE p.sub_scores IS NOT NULL
+  `);
+  const records: HistoricalRecord[] = histRows.map((r: { sub_scores: Partial<SubScores>; actual_result: number }) => ({
+    subs: r.sub_scores, actual: r.actual_result as 0 | 1,
+  }));
+  const prior = computeBaseRate(records);
+  const lrTable = buildLikelihoodTable(records);
+  const probBayesian = bayesianProbability(subs, lrTable, prior);
+
+  // 4) Method C — Competitor Elo Matchup
+  const { rows: ourEloRow } = await db.query('SELECT elo FROM our_elo WHERE id=1');
+  const ourElo = ourEloRow[0]?.elo ?? 1500;
+  let probElo = 0.5;
+  const competitorIds = opts.competitorIds ?? [];
+  if (competitorIds.length > 0) {
+    const { rows: compRows } = await db.query(
+      'SELECT current_elo FROM competitors WHERE id = ANY($1::int[])', [competitorIds]
+    );
+    probElo = multiCompetitorWinProb(ourElo, compRows.map((r: { current_elo: number }) => r.current_elo));
+  }
+
+  // 5) Method D — Monte Carlo (sigma 차등, mean은 점추정)
+  const rewardFactors = computeRewardFactors(records, { risk: opts.risk });
+  const mc = monteCarloRun(subs, {
+    iterations: opts.mcIterations ?? 5000,
+    subFactorStd: 1.0,
+    pillarWeights,
+    subWeights,
+    rewardFactors,
+  });
+
+  // 6) Ensemble 결합 (DB 최신 가중치 또는 fallback)
+  const { rows: ensRow } = await db.query(
+    'SELECT pillar_mult, bayesian, elo, monte_carlo FROM ensemble_weights ORDER BY version DESC LIMIT 1'
+  );
+  const ensWeights: EnsembleWeights = ensRow[0] ? {
+    pillar: ensRow[0].pillar_mult, bayesian: ensRow[0].bayesian,
+    elo: ensRow[0].elo, monteCarlo: ensRow[0].monte_carlo,
+  } : { pillar: 0.40, bayesian: 0.20, elo: 0.20, monteCarlo: 0.20 };
+
+  const methodProbs: MethodProbs = {
+    pillar: probPillar, bayesian: probBayesian, elo: probElo, monteCarlo: mc.mean,
+  };
+  const finalProb = ensemble(methodProbs, ensWeights);
+  const weaknesses = findWeaknesses(subs, 3, pillarWeights, subWeights);
+
+  return {
+    subWeights, pillarWeights, pillarScores, methodProbs,
+    finalProb, mc, weaknesses, prior, records, ensWeights,
+  };
 }

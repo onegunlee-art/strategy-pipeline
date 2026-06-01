@@ -6,6 +6,7 @@ import PositionMatrix from '@/components/charts/PositionMatrix';
 import PartnerNetwork from '@/components/charts/PartnerNetwork';
 import TimelineChart from '@/components/charts/TimelineChart';
 import RiskBubble from '@/components/charts/RiskBubble';
+import type { Partner, Risk, Milestone, CompPos, BidTimeline } from '@/lib/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,12 +17,6 @@ interface PortfolioDeal {
   deal_size_eok: number;
   recommendation: string;
 }
-
-interface Partner { name: string; role: string; description?: string; task_scope?: string }
-interface Risk { name: string; probability: number; impact: number; difficulty: number; level: string }
-interface Milestone { date: string; label: string; type: string }
-interface CompPos { self?: { x: number; y: number }; competitors?: { name: string; x: number; y: number; size?: string; notes?: string; risk_level?: string }[] }
-interface BidTimeline { rfp_published?: string; bid_deadline?: string; pt_date?: string; announcement_date?: string }
 
 interface DashboardData {
   deal: {
