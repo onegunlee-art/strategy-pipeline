@@ -610,6 +610,29 @@ export default function ExecutiveDashboard() {
                     >
                       {simMode ? '슬라이더 닫기' : '슬라이더 열기'}
                     </button>
+                    {simDelta !== null && simDelta !== 0 && (
+                      <button
+                        onClick={async () => {
+                          const name = prompt('시나리오 이름을 입력하세요');
+                          if (!name || !selectedId || !simSubs) return;
+                          const path = [baseProb ?? 0, simProb ?? 0];
+                          const revPath = rev ? [Math.round(rev * (baseProb ?? 0)) / 100, Math.round(rev * (simProb ?? 0)) / 100] : [];
+                          await fetch(`/api/deals/${selectedId}/scenarios`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name, actions: simSubs, prob_path: path, revenue_path: revPath }),
+                          });
+                          alert('시나리오가 저장되었습니다.');
+                        }}
+                        style={{
+                          fontSize: '11px', padding: '4px 10px', cursor: 'pointer',
+                          background: 'var(--surface2)', color: 'var(--cyan)',
+                          border: '1px solid var(--cyan)', borderRadius: '2px', fontFamily: 'IBM Plex Mono',
+                        }}
+                      >
+                        저장
+                      </button>
+                    )}
                     <button
                       onClick={resetSim}
                       style={{

@@ -18,7 +18,13 @@ interface ReportData {
     pillar_scores: Record<string, number>; method_probs: Record<string, number>;
     weaknesses: { label: string; score: number; pillar: string }[]; voter_count: number;
   };
-  proposal_strategy: { pillar: string; how_to: string[]; value_proposition: string }[];
+  strategy_path?: {
+    baseline_prob: number; target_prob: number; total_delta_pp: number;
+    baseline_ev: number; target_ev: number; ev_delta: number;
+    go_nogo: string; go_nogo_rationale: string;
+    steps: { order: number; label: string; pillar: string; effort: number; owner: string; prob_before: number; prob_after: number; delta_pp: number; revenue_delta: number }[];
+  };
+  proposal_strategy: { pillar: string; action_label?: string; how_to: string[]; value_proposition: string; expected_delta_pp?: number }[];
   execution_risks: { name: string; level: string; mitigation: string }[];
   team: { size: number | null; members: { name: string; dept?: string; role?: string }[]; execution_unit: string | null; pm: string | null };
   recommendation: string;
@@ -118,9 +124,56 @@ export default function ReportPage({ params }: Props) {
         )}
       </div>
 
-      {/* 4. 경쟁 구도 */}
+      {/* 4. 전략 실행 경로 (Reason Chain) */}
+      {data.strategy_path && data.strategy_path.steps.length > 0 && (
+        <div style={S}>
+          <div style={H}>4. 전략 실행 경로 — Reason Chain</div>
+          {/* 확률 + 재무 임팩트 요약 */}
+          <div style={{ display: 'flex', gap: 24, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 11, color: '#666' }}>현재 확률</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: probColor(data.strategy_path.baseline_prob) }}>{data.strategy_path.baseline_prob.toFixed(1)}%</div>
+            </div>
+            <div style={{ fontSize: 20, color: '#999' }}>→</div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 11, color: '#666' }}>전략 실행 후</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: probColor(data.strategy_path.target_prob) }}>{data.strategy_path.target_prob.toFixed(1)}%</div>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>+{data.strategy_path.total_delta_pp.toFixed(1)}%p</div>
+            {data.strategy_path.ev_delta !== 0 && (
+              <div style={{ padding: '4px 12px', background: '#f0fdf4', borderRadius: 6, fontSize: 13, color: '#16a34a', fontWeight: 700 }}>
+                기대매출 +{data.strategy_path.ev_delta.toFixed(1)}억
+              </div>
+            )}
+          </div>
+          {/* 단계별 액션 */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f3f4f6' }}>
+                {['순서', 'Pillar', '액션', '확률 변화', '담당', 'Effort'].map(h => (
+                  <th key={h} style={{ padding: '6px 8px', textAlign: 'left', color: '#666', fontWeight: 600, fontSize: 11 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.strategy_path.steps.map(s => (
+                <tr key={s.order} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '8px', color: '#0369a1', fontWeight: 700 }}>#{s.order}</td>
+                  <td style={{ padding: '8px', fontWeight: 700 }}>{s.pillar}</td>
+                  <td style={{ padding: '8px' }}>{s.label}</td>
+                  <td style={{ padding: '8px', color: '#16a34a', fontWeight: 700 }}>{s.prob_before.toFixed(1)}% → {s.prob_after.toFixed(1)}% <span style={{ fontSize: 11 }}>(+{s.delta_pp.toFixed(1)}pp)</span></td>
+                  <td style={{ padding: '8px', color: '#666' }}>{s.owner}</td>
+                  <td style={{ padding: '8px' }}>{'●'.repeat(s.effort)}{'○'.repeat(5 - s.effort)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 5. 경쟁 구도 */}
       <div style={S}>
-        <div style={H}>4. 경쟁 구도</div>
+        <div style={H}>5. 경쟁 구도</div>
         {data.competition.competitors?.length > 0 ? data.competition.competitors.map((c, i) => (
           <div key={i} style={{ marginBottom: 8, fontSize: 13 }}>
             <b>{c.name}</b> — 강점: {c.strength} / 위협: {c.threat}
