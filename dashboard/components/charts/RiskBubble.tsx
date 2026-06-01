@@ -2,13 +2,8 @@
 
 // SVG risk bubble matrix: x=발생가능성, y=사업영향도, size=대응난이도
 
-interface Risk {
-  name: string;
-  probability: number;  // 0–1
-  impact: number;       // 0–1
-  difficulty: number;   // 0–1, controls bubble size
-  level: 'high' | 'medium' | 'low' | string;
-}
+import type { Risk } from '@/lib/types';
+
 interface RiskBubbleProps { risks: Risk[] }
 
 const W = 300, H = 270;

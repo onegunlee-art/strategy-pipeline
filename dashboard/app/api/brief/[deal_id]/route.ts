@@ -7,6 +7,7 @@ import {
   SubScores, findWeaknesses, migrateLegacySubScores,
   pillarScoreFromSubs, PILLAR_META, PILLAR_IDS,
 } from '@/lib/pillars';
+import { buildStrategyPath, findVoteDisagreements } from '@/lib/strategyPath';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
@@ -60,10 +61,23 @@ export async function POST(
   );
   const voterCount = voterRows[0]?.voter_count ?? 0;
 
+  // 투표 불일치 신호 — 역할별 점수 편차
+  const { rows: voteDetailRows } = await pool.query(
+    `SELECT vt.role, v.sub_factor_id, v.score
+     FROM votes v
+     JOIN voters vt ON vt.id = v.voter_id
+     WHERE vt.deal_id = $1`,
+    [dealId]
+  );
+
   // 구버전/신버전 sub_scores 모두 신버전 15개 ID로 정규화 후 SHAP 기반 약점 분석
   const rawSubScores: Record<string, number> = deal.sub_scores ?? {};
   const subScores: SubScores = migrateLegacySubScores(rawSubScores);
   const weaknesses = findWeaknesses(subScores, 3);
+
+  // Reason Chain 계산 (엔진 권위값)
+  const strategyPath = buildStrategyPath(subScores, deal.expected_revenue ?? null);
+  const voteDisagreements = findVoteDisagreements(voteDetailRows);
 
   const { rows: caseStudies } = await pool.query(
     `SELECT cs.outcome, cs.win_loss_cause, cs.lessons_learned, cs.competitors_named, d.client_name, d.industry
@@ -105,6 +119,8 @@ export async function POST(
             pillar_scores: pillarScores,
             voter_count: voterCount,
             weaknesses,
+            strategy_path: strategyPath,
+            vote_disagreements: voteDisagreements,
           },
         };
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'meta', ...quantMeta })}\n\n`));
@@ -143,11 +159,23 @@ export async function POST(
           researchResults;
 
         // 3) 프롬프트 구성
+        const strategyStepsLine = strategyPath.steps.map((s, i) =>
+          `  ${i + 1}. [${s.pillar}] ${s.label} → +${s.delta_pp}%p (담당: ${s.owner}, effort ${s.effort})`
+        ).join('\n');
+        const evLine = deal.expected_revenue
+          ? `기대매출: ${strategyPath.baseline_ev}억 → ${strategyPath.target_ev}억 (+${strategyPath.ev_delta}억)`
+          : '기대매출 미입력';
+        const disagreementLine = voteDisagreements.length > 0
+          ? voteDisagreements.map(d =>
+              `  ⚠️ [${d.flag}] ${d.label}: ${d.roles.map(r => `${r.role} ${r.score}점`).join(' / ')} (편차 ${d.spread}점)`
+            ).join('\n')
+          : '  없음';
+
         const briefPrompt = `당신은 KT 수주전략팀의 임원 보고서 작성 전문가입니다.
 아래 딜 분석 데이터를 바탕으로 임원용 Executive Brief를 작성하세요.
 
 **중요 원칙:**
-- 🟢 정량 수치(확률, Pillar 점수)는 "자체 데이터 기반"임을 명시
+- 🟢 정량 수치(확률, Pillar 점수, 전략 경로)는 "자체 데이터 기반"임을 명시
 - 🟡 AI 컨텍스트(경쟁사 동향, 시장 트렌드)는 "참고 분석"임을 명시
 - 5페이지 이내, 임원이 5분 안에 읽을 수 있는 분량
 
@@ -162,6 +190,16 @@ export async function POST(
 - Voting 참여자: ${voterCount}명
 - 주요 약점: ${weaknesses.map(w => `${w.label}(${w.score.toFixed(1)}/10)`).join(', ')}
 - 경쟁사: ${competitors.map(c => `${c.name}(Elo ${c.current_elo.toFixed(0)})`).join(', ') || '미확인'}
+
+## 전략 실행 경로 (🟢 Reason Chain — 이 숫자를 보고서에 직접 인용)
+- 현재 확률 → 실행 후: ${strategyPath.baseline_prob}% → ${strategyPath.target_prob}% (+${strategyPath.total_delta_pp}%p)
+- ${evLine}
+- 기계적 판단: ${strategyPath.go_nogo} — ${strategyPath.go_nogo_rationale}
+- 우선 실행 액션:
+${strategyStepsLine || '  (예측 데이터 없음)'}
+
+## 내부 의견 불일치 신호 (🟢 투표 데이터 — 정렬 필요 항목)
+${disagreementLine}
 
 ## AI 컨텍스트 (🟡 참고용)
 ### 고객사 현황
@@ -180,7 +218,7 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
 
 다음 JSON 형식으로만 응답하세요 (한국어):
 {
-  "executive_summary": "3~4문장 임원 요약. 수주 확률과 핵심 판단 근거 포함",
+  "executive_summary": "3~4문장 임원 요약. 수주 확률·전략 경로(확률 변화)·핵심 판단 근거 포함",
   "win_probability_assessment": {
     "probability": ${winProb.toFixed(1)},
     "ci_low": ${ciLow.toFixed(1)},
@@ -191,24 +229,28 @@ ${caseStudies.map(c => `- [${c.outcome}] ${c.client_name}(${c.industry}): ${c.wi
   "strategy_actions": [
     {
       "weakness_area": "약점 영역명",
+      "action_label": "위 전략 실행 경로 액션명 (그대로 인용)",
       "current_score": 0.0,
+      "expected_delta_pp": 0.0,
       "hypothesis": "핵심 원인 가설 1문장",
       "actions": [
         {"timeline": "Day 1-3", "action": "즉시 실행 액션", "owner": "담당"},
         {"timeline": "Day 4-10", "action": "단기 액션", "owner": "담당"},
         {"timeline": "Day 11-21", "action": "중기 액션", "owner": "담당"}
       ],
-      "expected_uplift": "+N%",
       "external_evidence": "외부 근거 1문장 (AI 추정)"
     }
+  ],
+  "internal_alignment_risks": [
+    { "sub_factor": "불일치 항목명", "flag": "HIGH|MEDIUM", "note": "정렬 필요 1문장" }
   ],
   "competitive_landscape": {
     "main_threats": ["위협 1", "위협 2"],
     "our_advantages": ["우위 1", "우위 2"],
     "ai_context_note": "AI 기반 경쟁사 동향 요약 (참고)"
   },
-  "recommendation": "GO|NO_GO|CONDITIONAL_GO",
-  "recommendation_rationale": "권고 이유 2~3문장",
+  "recommendation": "${strategyPath.go_nogo}",
+  "recommendation_rationale": "권고 이유 2~3문장 (기계적 판단 근거 포함)",
   "sources": ["출처 URL 또는 근거 1", "출처 2"]
 }`;
 

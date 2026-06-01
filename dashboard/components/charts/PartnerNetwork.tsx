@@ -2,7 +2,8 @@
 
 // SVG node-link partner network diagram
 
-interface Partner { name: string; role: string; description?: string }
+import type { Partner } from '@/lib/types';
+
 interface PartnerNetworkProps {
   partners: Partner[];
   centerLabel?: string;

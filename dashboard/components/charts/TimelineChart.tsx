@@ -2,7 +2,8 @@
 
 // Horizontal SVG milestone timeline
 
-interface Milestone { date: string; label: string; type: 'deadline' | 'event' | 'today' | string }
+import type { Milestone } from '@/lib/types';
+
 interface TimelineChartProps {
   milestones: Milestone[];
   dueDate?: string | null;

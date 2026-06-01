@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import RadarChart from '@/components/charts/RadarChart';
 import PositionMatrix from '@/components/charts/PositionMatrix';
 import PartnerNetwork from '@/components/charts/PartnerNetwork';
 import TimelineChart from '@/components/charts/TimelineChart';
 import RiskBubble from '@/components/charts/RiskBubble';
+import type { Partner, Risk, Milestone, CompPos, BidTimeline } from '@/lib/types';
+import { pillarScoreFromSubs, pillarMultiplication } from '@/lib/pillars';
+import type { SubScores } from '@/lib/pillars';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,12 +20,6 @@ interface PortfolioDeal {
   recommendation: string;
 }
 
-interface Partner { name: string; role: string; description?: string; task_scope?: string }
-interface Risk { name: string; probability: number; impact: number; difficulty: number; level: string }
-interface Milestone { date: string; label: string; type: string }
-interface CompPos { self?: { x: number; y: number }; competitors?: { name: string; x: number; y: number; size?: string; notes?: string; risk_level?: string }[] }
-interface BidTimeline { rfp_published?: string; bid_deadline?: string; pt_date?: string; announcement_date?: string }
-
 interface DashboardData {
   deal: {
     id: number; client_name: string; deal_size: string | null; industry: string | null;
@@ -31,17 +28,31 @@ interface DashboardData {
     milestones: Milestone[]; competitive_positioning: CompPos;
     importance_stars: number; bid_timeline: BidTimeline;
     team_size: number | null; team_members: { name: string; dept: string; role: string }[];
+    expected_revenue?: number | null;
+    margin_rate?: number | null;
   };
   prediction: {
     probability: number;
     method_probs: Record<string, number>;
     pillar_scores: Record<string, number>;
+    sub_scores: Record<string, number>;
     weaknesses: Array<{ id: string; label: string; pillar: string; score: number; contribution: number }>;
+    next_moves: Array<{
+      action_id: string; label: string; pillar: string;
+      effort: number; owner: string;
+      prob_before: number; prob_after: number;
+      delta_pp: number; roi: number;
+    }>;
     confidence_interval: { low: number; high: number };
     created_at: string;
   } | null;
   portfolio_rank: number;
   portfolio_size: number;
+  model_trust?: {
+    level: 'structural' | 'low' | 'medium' | 'high';
+    label: string; detail: string;
+    labeled_count: number; brier: number | null; color: string;
+  };
 }
 
 interface StrategyCard {
@@ -105,6 +116,28 @@ export default function ExecutiveDashboard() {
   const [scqaError, setScqaError] = useState('');
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
 
+  // What-if 시뮬레이터 상태 (클라이언트 사이드 즉시 계산)
+  const [simSubs, setSimSubs] = useState<Record<string, number> | null>(null);
+  const [simMode, setSimMode] = useState(false);
+
+  const simProb = simSubs
+    ? Math.round(pillarMultiplication(pillarScoreFromSubs(simSubs as SubScores)) * 1000) / 10
+    : null;
+  const baseProb = dashData?.prediction?.probability ?? null;
+  const simDelta = simProb !== null && baseProb !== null ? Math.round((simProb - baseProb) * 10) / 10 : null;
+  const rev = dashData?.deal?.expected_revenue ?? null;
+  const simEvDelta = simDelta !== null && rev !== null ? Math.round(rev * simDelta) / 100 : null;
+
+  const handleSimSlider = useCallback((factorId: string, value: number) => {
+    setSimSubs(prev => prev ? { ...prev, [factorId]: value } : null);
+  }, []);
+
+  const resetSim = useCallback(() => {
+    if (dashData?.prediction?.sub_scores) {
+      setSimSubs({ ...dashData.prediction.sub_scores });
+    }
+  }, [dashData]);
+
   // Load portfolio
   useEffect(() => {
     setLoadingDeals(true);
@@ -127,9 +160,16 @@ export default function ExecutiveDashboard() {
     setCards([]);
     setStreamText('');
     setScqaError('');
+    setSimMode(false);
+    setSimSubs(null);
     fetch(`/api/dashboard/${selectedId}`)
       .then(r => r.json())
-      .then(setDashData)
+      .then(d => {
+        setDashData(d);
+        if (d?.prediction?.sub_scores) {
+          setSimSubs({ ...d.prediction.sub_scores });
+        }
+      })
       .catch(() => {})
       .finally(() => setLoadingDash(false));
   }, [selectedId]);
@@ -330,6 +370,19 @@ export default function ExecutiveDashboard() {
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
                       CI {pred.confidence_interval.low.toFixed(0)}–{pred.confidence_interval.high.toFixed(0)}
                     </div>
+                    {dashData?.model_trust && (
+                      <div
+                        title={dashData.model_trust.detail}
+                        style={{
+                          marginTop: '4px', fontSize: '10px', fontWeight: 600,
+                          color: dashData.model_trust.color, cursor: 'help',
+                          display: 'inline-flex', alignItems: 'center', gap: '3px',
+                        }}
+                      >
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: dashData.model_trust.color, display: 'inline-block' }} />
+                        신뢰 {dashData.model_trust.label}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: '12px' }}>
@@ -511,9 +564,197 @@ export default function ExecutiveDashboard() {
               </Panel>
             </div>
 
-            {/* ── ZONE 5: Portfolio bar ─────────────────────────── */}
+            {/* ── ZONE 5: What-if 시뮬레이터 ─────────────────────── */}
+            {pred && simSubs && (
+              <Panel title="What-if 시뮬레이터 — 슬라이더로 즉시 확률 변화 확인">
+                {/* 헤더: 현재 확률 → 시뮬레이션 확률 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>기준</span>
+                    <span style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'IBM Plex Mono', color: probColor(baseProb ?? 0) }}>
+                      {(baseProb ?? 0).toFixed(1)}%
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '18px', color: 'var(--text-dim)' }}>→</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>시뮬레이션</span>
+                    <span style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'IBM Plex Mono', color: probColor(simProb ?? 0) }}>
+                      {(simProb ?? 0).toFixed(1)}%
+                    </span>
+                  </div>
+                  {simDelta !== null && simDelta !== 0 && (
+                    <span style={{
+                      fontSize: '14px', fontWeight: 700, fontFamily: 'IBM Plex Mono',
+                      color: simDelta > 0 ? 'var(--green)' : 'var(--red)',
+                    }}>
+                      {simDelta > 0 ? '+' : ''}{simDelta.toFixed(1)}%p
+                    </span>
+                  )}
+                  {simEvDelta !== null && simEvDelta !== 0 && (
+                    <span style={{
+                      fontSize: '13px', fontFamily: 'IBM Plex Mono',
+                      color: simEvDelta > 0 ? 'var(--green)' : 'var(--red)',
+                    }}>
+                      기대매출 {simEvDelta > 0 ? '+' : ''}{simEvDelta.toFixed(1)}억
+                    </span>
+                  )}
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => setSimMode(m => !m)}
+                      style={{
+                        fontSize: '11px', padding: '4px 10px', cursor: 'pointer',
+                        background: simMode ? 'var(--brand)' : 'var(--surface2)',
+                        color: simMode ? '#000' : 'var(--text)',
+                        border: '1px solid var(--border)', borderRadius: '2px', fontFamily: 'IBM Plex Mono',
+                      }}
+                    >
+                      {simMode ? '슬라이더 닫기' : '슬라이더 열기'}
+                    </button>
+                    {simDelta !== null && simDelta !== 0 && (
+                      <button
+                        onClick={async () => {
+                          const name = prompt('시나리오 이름을 입력하세요');
+                          if (!name || !selectedId || !simSubs) return;
+                          const path = [baseProb ?? 0, simProb ?? 0];
+                          const revPath = rev ? [Math.round(rev * (baseProb ?? 0)) / 100, Math.round(rev * (simProb ?? 0)) / 100] : [];
+                          await fetch(`/api/deals/${selectedId}/scenarios`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name, actions: simSubs, prob_path: path, revenue_path: revPath }),
+                          });
+                          alert('시나리오가 저장되었습니다.');
+                        }}
+                        style={{
+                          fontSize: '11px', padding: '4px 10px', cursor: 'pointer',
+                          background: 'var(--surface2)', color: 'var(--cyan)',
+                          border: '1px solid var(--cyan)', borderRadius: '2px', fontFamily: 'IBM Plex Mono',
+                        }}
+                      >
+                        저장
+                      </button>
+                    )}
+                    <button
+                      onClick={resetSim}
+                      style={{
+                        fontSize: '11px', padding: '4px 10px', cursor: 'pointer',
+                        background: 'var(--surface2)', color: 'var(--text-dim)',
+                        border: '1px solid var(--border)', borderRadius: '2px', fontFamily: 'IBM Plex Mono',
+                      }}
+                    >
+                      리셋
+                    </button>
+                  </div>
+                </div>
+
+                {/* 슬라이더 그리드 */}
+                {simMode && (() => {
+                  const SUB_LABELS: Record<string, { label: string; pillar: string }> = {
+                    s_key_man_contact: { label: 'Key Man 접촉', pillar: 'S' },
+                    s_evaluator_rfp: { label: '평가위원/RFP 파악', pillar: 'S' },
+                    s_poc_proposal: { label: 'PoC/파일럿 제안', pillar: 'S' },
+                    v_needs_painpoint: { label: '니즈/Pain Point', pillar: 'V' },
+                    v_value_proposition: { label: '가치제안', pillar: 'V' },
+                    v_presentation: { label: '임팩트 PT', pillar: 'V' },
+                    d_competitive_strategy: { label: '경쟁 전략', pillar: 'D' },
+                    d_tech_reference: { label: '기술/레퍼런스', pillar: 'D' },
+                    d_partner: { label: '파트너/컨소시엄', pillar: 'D' },
+                    p_budget_fit: { label: '예산 적합성', pillar: 'P' },
+                    p_price_competition: { label: '가격 경쟁력', pillar: 'P' },
+                    p_cost_value: { label: 'ROI/TCO 가성비', pillar: 'P' },
+                    e_track_record: { label: '수행 실적', pillar: 'E' },
+                    e_risk_management: { label: '리스크 관리', pillar: 'E' },
+                    e_execution_team: { label: '수행팀 역량', pillar: 'E' },
+                  };
+                  const pillarColor: Record<string, string> = {
+                    S: 'var(--cyan)', V: 'var(--brand)', D: 'var(--yellow)', P: 'var(--green)', E: 'var(--red)',
+                  };
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                      {Object.entries(SUB_LABELS).map(([id, { label, pillar }]) => {
+                        const val = simSubs[id] ?? 5;
+                        const base = pred.sub_scores?.[id] ?? val;
+                        const changed = Math.abs(val - base) > 0.01;
+                        return (
+                          <div key={id} style={{
+                            background: 'var(--surface2)', borderRadius: '2px', padding: '10px 12px',
+                            borderLeft: `3px solid ${changed ? pillarColor[pillar] : 'var(--border)'}`,
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <span style={{ fontSize: '11px', color: changed ? 'var(--text)' : 'var(--text-dim)' }}>{label}</span>
+                              <span style={{ fontSize: '12px', fontFamily: 'IBM Plex Mono', fontWeight: 700, color: pillarColor[pillar] }}>
+                                {val.toFixed(1)}
+                                {changed && (
+                                  <span style={{ fontSize: '10px', color: val > base ? 'var(--green)' : 'var(--red)', marginLeft: '4px' }}>
+                                    {val > base ? '+' : ''}{(val - base).toFixed(1)}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                            <input
+                              type="range" min={1} max={10} step={0.5}
+                              value={val}
+                              onChange={e => handleSimSlider(id, Number(e.target.value))}
+                              style={{ width: '100%', accentColor: pillarColor[pillar] }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </Panel>
+            )}
+
+            {/* ── ZONE 6: Next Best Move + 앙상블 분해 ───────────── */}
+            {pred && pred.next_moves?.length > 0 && (
+              <Panel title="다음 최선의 수 (Next Best Move)">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
+                  {pred.next_moves.map((m, i) => {
+                    const pillarColor: Record<string, string> = {
+                      S: 'var(--cyan)', V: 'var(--brand)', D: 'var(--yellow)', P: 'var(--green)', E: 'var(--red)',
+                    };
+                    const color = pillarColor[m.pillar] ?? 'var(--text-dim)';
+                    const effortDots = '●'.repeat(m.effort) + '○'.repeat(5 - m.effort);
+                    return (
+                      <div key={m.action_id} style={{
+                        background: 'var(--surface2)', borderRadius: '2px',
+                        padding: '12px 14px', borderLeft: `3px solid ${color}`,
+                        display: 'flex', flexDirection: 'column', gap: '6px',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '9px', fontFamily: 'IBM Plex Mono', color, fontWeight: 700 }}>
+                            #{i + 1} · {m.pillar} PILLAR
+                          </span>
+                          <span style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--green)', fontWeight: 700 }}>
+                            +{m.delta_pp.toFixed(1)}pp
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.4, fontWeight: 500 }}>
+                          {m.label}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+                          <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                            {m.prob_before.toFixed(1)}% → {m.prob_after.toFixed(1)}%
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '9px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', letterSpacing: '1px' }}>
+                              {effortDots}
+                            </span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{m.owner}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
+                  ● effort 1-5 · ROI = ΔP / effort · 1-step lookahead
+                </div>
+              </Panel>
+            )}
+
             {pred && (
-              <Panel title="4-Method 앙상블 분해">
+              <Panel title="앙상블 분해 (Pillar · Bayesian · Elo)">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '12px' }}>
                   {[
                     { key: 'pillar', label: 'Pillar' },
