@@ -28,9 +28,17 @@ interface DashboardData {
     due_date: string | null; partners: Partner[]; risks: Risk[];
     milestones: Milestone[]; competitive_positioning: CompPos;
     importance_stars: number; bid_timeline: BidTimeline;
-    team_size: number | null; team_members: { name: string; dept: string; role: string }[];
+    team_size: number | null; team_members: { name?: string; division?: string; hq?: string; dept?: string; team?: string; role?: string; count?: number }[];
     expected_revenue?: number | null;
     margin_rate?: number | null;
+    contribution_margin?: number | null;
+    subcontract_rate?: number | null;
+    risk_grade?: string | null;
+    pt_format?: string | null;
+    customer_eval_criteria?: string | null;
+    vdc_b_result?: { decision: string; detail: string }[];
+    qna_items?: { question: string; answer: string }[];
+    winning_points?: { customer_cfs?: string; winning_point: string }[];
   };
   prediction: {
     probability: number;
@@ -515,7 +523,7 @@ export default function ExecutiveDashboard() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                       <thead>
                         <tr>
-                          {['파트너', '역할', '과업 범위'].map(h => (
+                          {['파트너', '구분', '과업 범위', '비율'].map(h => (
                             <th key={h} style={{ textAlign: 'left', padding: '4px 6px', fontSize: '9px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', letterSpacing: '0.5px' }}>{h}</th>
                           ))}
                         </tr>
@@ -524,8 +532,9 @@ export default function ExecutiveDashboard() {
                         {deal.partners.filter(p => p.name).map((p, i) => (
                           <tr key={i}>
                             <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '10px' }}>{p.name}</td>
-                            <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--text-dim)' }}>{p.role}</td>
+                            <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--text-dim)' }}>{p.category ?? p.role ?? '-'}</td>
                             <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--text)' }}>{p.task_scope ?? '-'}</td>
+                            <td style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', fontSize: '10px' }}>{p.ratio_pct != null ? `${p.ratio_pct}%` : '-'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -596,6 +605,110 @@ export default function ExecutiveDashboard() {
                 )}
               </Panel>
             </div>
+
+            {/* ── ZONE 4.5: SG 보고서 양식 데이터 ────────────────── */}
+            {(() => {
+              const winning = deal.winning_points ?? [];
+              const org = (deal.team_members ?? []).filter(m => m.dept || m.team || m.role || m.name);
+              const vdcB = deal.vdc_b_result ?? [];
+              const qna = deal.qna_items ?? [];
+              const hasRevenue = deal.contribution_margin != null || deal.subcontract_rate != null || deal.risk_grade != null;
+              const hasAny = hasRevenue || winning.length > 0 || org.length > 0 || vdcB.length > 0 || qna.length > 0 || deal.pt_format || deal.customer_eval_criteria;
+              if (!hasAny) return null;
+
+              const th: React.CSSProperties = { textAlign: 'left', padding: '4px 6px', fontSize: '9px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', letterSpacing: '0.5px' };
+              const td: React.CSSProperties = { padding: '4px 6px', borderBottom: '1px solid var(--border)', color: 'var(--text)', fontSize: '11px' };
+              const metric = (label: string, value: string) => (
+                <div style={{ background: 'var(--surface2)', borderRadius: '4px', padding: '8px 10px', minWidth: '78px' }}>
+                  <div style={{ fontSize: '9px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', letterSpacing: '0.5px' }}>{label}</div>
+                  <div style={{ fontSize: '15px', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', marginTop: '2px' }}>{value}</div>
+                </div>
+              );
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {(hasRevenue || deal.expected_revenue != null) && (
+                    <Panel title="KT 매출 지표">
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {deal.expected_revenue != null && metric('매출액', `${deal.expected_revenue}억`)}
+                        {deal.margin_rate != null && metric('영업이익률', `${deal.margin_rate}%`)}
+                        {deal.contribution_margin != null && metric('공헌이익률', `${deal.contribution_margin}%`)}
+                        {deal.subcontract_rate != null && metric('하도율', `${deal.subcontract_rate}%`)}
+                        {deal.risk_grade && metric('리스크등급', deal.risk_grade)}
+                      </div>
+                    </Panel>
+                  )}
+
+                  {winning.length > 0 && (
+                    <Panel title="Winning 포인트 (고객 핵심성공요소 ↔ Winning)">
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr>{['고객 핵심 성공요소', 'Winning 포인트'].map(h => <th key={h} style={{ ...th, width: '50%' }}>{h}</th>)}</tr></thead>
+                        <tbody>{winning.map((w, i) => (
+                          <tr key={i}>
+                            <td style={{ ...td, color: 'var(--text-dim)' }}>{w.customer_cfs || '-'}</td>
+                            <td style={{ ...td, color: 'var(--text)' }}>{w.winning_point}</td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </Panel>
+                  )}
+
+                  {org.length > 0 && (
+                    <Panel title="제안/이행 담당 조직">
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr>{['부문', '본부', '담당', '팀', '역할', '명수'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>{org.map((m, i) => (
+                          <tr key={i}>
+                            <td style={td}>{m.division ?? '-'}</td>
+                            <td style={td}>{m.hq ?? '-'}</td>
+                            <td style={td}>{m.dept ?? m.name ?? '-'}</td>
+                            <td style={td}>{m.team ?? '-'}</td>
+                            <td style={td}>{m.role ?? '-'}</td>
+                            <td style={{ ...td, fontFamily: 'IBM Plex Mono', color: 'var(--cyan)' }}>{m.count != null ? `${m.count}명` : '-'}</td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </Panel>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: vdcB.length > 0 && qna.length > 0 ? '1fr 1fr' : '1fr', gap: '16px' }}>
+                    {vdcB.length > 0 && (
+                      <Panel title="VDC-B 결과">
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead><tr>{['의결', '의결내용'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                          <tbody>{vdcB.map((v, i) => (
+                            <tr key={i}>
+                              <td style={{ ...td, color: 'var(--cyan)', whiteSpace: 'nowrap' }}>{v.decision}</td>
+                              <td style={{ ...td, color: 'var(--text-dim)' }}>{v.detail}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </Panel>
+                    )}
+                    {qna.length > 0 && (
+                      <Panel title="주요질의 (별첨)">
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead><tr>{['질의', '답변'].map(h => <th key={h} style={{ ...th, width: '50%' }}>{h}</th>)}</tr></thead>
+                          <tbody>{qna.map((q, i) => (
+                            <tr key={i}>
+                              <td style={{ ...td, color: 'var(--text-dim)' }}>{q.question}</td>
+                              <td style={td}>{q.answer}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </Panel>
+                    )}
+                  </div>
+
+                  {(deal.pt_format || deal.customer_eval_criteria) && (
+                    <Panel title="제안발표회 · 고객 평가기준">
+                      {deal.pt_format && <div style={{ fontSize: '12px', color: 'var(--text)', marginBottom: '6px' }}><span style={{ color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', fontSize: '10px' }}>제안발표회 </span>{deal.pt_format}</div>}
+                      {deal.customer_eval_criteria && <div style={{ fontSize: '12px', color: 'var(--text)', whiteSpace: 'pre-wrap' }}><span style={{ color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', fontSize: '10px' }}>평가기준 </span>{deal.customer_eval_criteria}</div>}
+                    </Panel>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* ── ZONE 5: What-if 시뮬레이터 ─────────────────────── */}
             {pred && simSubs && (
