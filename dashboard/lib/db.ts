@@ -230,6 +230,16 @@ async function runInit() {
       created_at   TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_deal_scenarios_deal ON deal_scenarios (deal_id);
+
+    -- v1.1: SG 실물 양식 완성 (KT매출·발표형식·평가기준·VDC-B·조직표·Q&A·Winning)
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS contribution_margin REAL;       -- 공헌이익률(%)
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS subcontract_rate REAL;          -- 하도율(%)
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS risk_grade TEXT;                -- 리스크등급 A/B/C/D
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS pt_format TEXT;                 -- 제안발표회 형식
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS customer_eval_criteria TEXT;    -- 고객 평가기준
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS vdc_b_result JSONB DEFAULT '[]';   -- [{decision, detail}]
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS qna_items JSONB DEFAULT '[]';      -- [{question, answer}]
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS winning_points JSONB DEFAULT '[]'; -- [{customer_cfs, winning_point}]
   `);
 
   // 시드 데이터

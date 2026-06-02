@@ -7,6 +7,10 @@ const ALLOWED = new Set([
   'execution_unit', 'pm', 'duration_months', 'industry', 'deal_size',
   'client_name', 'due_date',
   'importance_stars', 'bid_timeline', 'team_size', 'team_members',
+  // v1.1: SG 양식 완성 필드
+  'contribution_margin', 'subcontract_rate', 'risk_grade', 'pt_format',
+  'customer_eval_criteria', 'vdc_b_result', 'qna_items', 'winning_points',
+  'expected_revenue', 'margin_rate',
 ]);
 
 export async function PATCH(
