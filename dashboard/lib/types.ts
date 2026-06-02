@@ -6,6 +6,8 @@ export interface Partner {
   role: string;
   description?: string;
   task_scope?: string;
+  category?: string;
+  ratio_pct?: number;
 }
 
 export interface Risk {

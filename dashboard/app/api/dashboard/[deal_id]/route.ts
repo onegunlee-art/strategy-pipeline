@@ -17,7 +17,9 @@ export async function GET(
       `SELECT id, client_name, deal_size, industry, execution_unit, pm,
               duration_months, due_date, partners, risks, milestones,
               competitive_positioning, importance_stars, bid_timeline,
-              team_size, team_members, expected_revenue, margin_rate, created_at
+              team_size, team_members, expected_revenue, margin_rate, created_at,
+              contribution_margin, subcontract_rate, risk_grade, pt_format,
+              customer_eval_criteria, vdc_b_result, qna_items, winning_points
        FROM deals WHERE id = $1`,
       [dealId]
     );
@@ -45,6 +47,14 @@ export async function GET(
       team_members: raw.team_members ?? [],
       expected_revenue: raw.expected_revenue ?? null,
       margin_rate: raw.margin_rate ?? null,
+      contribution_margin: raw.contribution_margin ?? null,
+      subcontract_rate: raw.subcontract_rate ?? null,
+      risk_grade: raw.risk_grade ?? null,
+      pt_format: raw.pt_format ?? null,
+      customer_eval_criteria: raw.customer_eval_criteria ?? null,
+      vdc_b_result: raw.vdc_b_result ?? [],
+      qna_items: raw.qna_items ?? [],
+      winning_points: raw.winning_points ?? [],
     };
 
     // Latest prediction

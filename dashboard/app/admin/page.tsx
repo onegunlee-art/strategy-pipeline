@@ -1925,11 +1925,15 @@ function ManualEditTab() {
 
 // ─── Dashboard Metadata Edit Tab ─────────────────────────────────────────────
 
-interface PartnerRow { name: string; role: string; description: string; task_scope: string }
+interface PartnerRow { name: string; role: string; description: string; task_scope: string; category: string; ratio_pct: string }
 interface RiskRow { name: string; probability: string; impact: string; difficulty: string; level: string }
 interface MilestoneRow { date: string; label: string; type: string }
 interface CompPos { selfX: string; selfY: string; competitors: { name: string; x: string; y: string; size: string; notes: string; risk_level: string }[] }
 interface BidTimelineRow { rfp_published: string; bid_deadline: string; pt_date: string; announcement_date: string }
+interface WinningRow { customer_cfs: string; winning_point: string }
+interface OrgRow { division: string; hq: string; dept: string; team: string; role: string; count: string }
+interface VdcBRow { decision: string; detail: string }
+interface QnaRow { question: string; answer: string }
 
 function DashboardMetaSection({ dealId }: { dealId: number }) {
   const [partners, setPartners] = useState<PartnerRow[]>([]);
@@ -1939,6 +1943,18 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
   const [importanceStars, setImportanceStars] = useState(3);
   const [bidTimeline, setBidTimeline] = useState<BidTimelineRow>({ rfp_published: '', bid_deadline: '', pt_date: '', announcement_date: '' });
   const [teamSize, setTeamSize] = useState('');
+  // v1.1: SG 양식 완성 필드
+  const [expectedRevenue, setExpectedRevenue] = useState('');
+  const [marginRate, setMarginRate] = useState('');
+  const [contributionMargin, setContributionMargin] = useState('');
+  const [subcontractRate, setSubcontractRate] = useState('');
+  const [riskGrade, setRiskGrade] = useState('');
+  const [ptFormat, setPtFormat] = useState('');
+  const [evalCriteria, setEvalCriteria] = useState('');
+  const [winningPoints, setWinningPoints] = useState<WinningRow[]>([]);
+  const [orgRows, setOrgRows] = useState<OrgRow[]>([]);
+  const [vdcB, setVdcB] = useState<VdcBRow[]>([]);
+  const [qna, setQna] = useState<QnaRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [loaded, setLoaded] = useState(false);
@@ -1948,7 +1964,7 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
       .then(r => r.json())
       .then(d => {
         if (!d.deal) return;
-        setPartners((d.deal.partners ?? []).map((p: { name: string; role: string; description?: string; task_scope?: string }) => ({ name: p.name || '', role: p.role || '', description: p.description || '', task_scope: p.task_scope || '' })));
+        setPartners((d.deal.partners ?? []).map((p: { name: string; role: string; description?: string; task_scope?: string; category?: string; ratio_pct?: number }) => ({ name: p.name || '', role: p.role || '', description: p.description || '', task_scope: p.task_scope || '', category: p.category || '', ratio_pct: p.ratio_pct != null ? String(p.ratio_pct) : '' })));
         setRisks((d.deal.risks ?? []).map((r: { name: string; probability: number; impact: number; difficulty: number; level: string }) => ({ name: r.name || '', probability: String(r.probability ?? ''), impact: String(r.impact ?? ''), difficulty: String(r.difficulty ?? ''), level: r.level || 'medium' })));
         setMilestones((d.deal.milestones ?? []).map((m: { date: string; label: string; type: string }) => ({ date: m.date || '', label: m.label || '', type: m.type || 'event' })));
         const cp = d.deal.competitive_positioning ?? {};
@@ -1966,6 +1982,18 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
           announcement_date: bt.announcement_date ? bt.announcement_date.slice(0, 10) : '',
         });
         setTeamSize(d.deal.team_size ? String(d.deal.team_size) : '');
+        // v1.1 필드 로드
+        setExpectedRevenue(d.deal.expected_revenue != null ? String(d.deal.expected_revenue) : '');
+        setMarginRate(d.deal.margin_rate != null ? String(d.deal.margin_rate) : '');
+        setContributionMargin(d.deal.contribution_margin != null ? String(d.deal.contribution_margin) : '');
+        setSubcontractRate(d.deal.subcontract_rate != null ? String(d.deal.subcontract_rate) : '');
+        setRiskGrade(d.deal.risk_grade || '');
+        setPtFormat(d.deal.pt_format || '');
+        setEvalCriteria(d.deal.customer_eval_criteria || '');
+        setWinningPoints((d.deal.winning_points ?? []).map((w: { customer_cfs?: string; winning_point?: string }) => ({ customer_cfs: w.customer_cfs || '', winning_point: w.winning_point || '' })));
+        setOrgRows((d.deal.team_members ?? []).map((m: { division?: string; hq?: string; dept?: string; team?: string; role?: string; count?: number; name?: string }) => ({ division: m.division || '', hq: m.hq || '', dept: m.dept || m.name || '', team: m.team || '', role: m.role || '', count: m.count != null ? String(m.count) : '' })));
+        setVdcB((d.deal.vdc_b_result ?? []).map((v: { decision?: string; detail?: string }) => ({ decision: v.decision || '', detail: v.detail || '' })));
+        setQna((d.deal.qna_items ?? []).map((q: { question?: string; answer?: string }) => ({ question: q.question || '', answer: q.answer || '' })));
         setLoaded(true);
       }).catch(() => setLoaded(true));
   }, [dealId]);
@@ -1973,7 +2001,7 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
   const save = async () => {
     setSaving(true);
     const payload = {
-      partners: partners.filter(p => p.name).map(p => ({ name: p.name, role: p.role, description: p.description, task_scope: p.task_scope || undefined })),
+      partners: partners.filter(p => p.name).map(p => ({ name: p.name, role: p.role, description: p.description, task_scope: p.task_scope || undefined, ...(p.category ? { category: p.category } : {}), ...(p.ratio_pct ? { ratio_pct: parseFloat(p.ratio_pct) || 0 } : {}) })),
       risks: risks.filter(r => r.name).map(r => ({
         name: r.name, level: r.level,
         probability: parseFloat(r.probability) || 0,
@@ -1998,6 +2026,18 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
         ...(bidTimeline.announcement_date ? { announcement_date: bidTimeline.announcement_date } : {}),
       },
       ...(teamSize ? { team_size: parseInt(teamSize) || null } : {}),
+      // v1.1: SG 양식 완성 필드
+      ...(expectedRevenue ? { expected_revenue: parseFloat(expectedRevenue) || null } : {}),
+      ...(marginRate ? { margin_rate: parseFloat(marginRate) || null } : {}),
+      ...(contributionMargin ? { contribution_margin: parseFloat(contributionMargin) || null } : {}),
+      ...(subcontractRate ? { subcontract_rate: parseFloat(subcontractRate) || null } : {}),
+      risk_grade: riskGrade || null,
+      pt_format: ptFormat || null,
+      customer_eval_criteria: evalCriteria || null,
+      winning_points: winningPoints.filter(w => w.winning_point).map(w => ({ customer_cfs: w.customer_cfs, winning_point: w.winning_point })),
+      team_members: orgRows.filter(m => m.dept || m.team || m.role).map(m => ({ division: m.division, hq: m.hq, dept: m.dept, team: m.team, role: m.role, ...(m.count ? { count: parseInt(m.count) || 0 } : {}) })),
+      vdc_b_result: vdcB.filter(v => v.decision || v.detail).map(v => ({ decision: v.decision, detail: v.detail })),
+      qna_items: qna.filter(q => q.question || q.answer).map(q => ({ question: q.question, answer: q.answer })),
     };
     const res = await fetch(`/api/admin/deals/${dealId}`, {
       method: 'PATCH', credentials: 'include',
@@ -2067,11 +2107,13 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
           {inp(p.name, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, name: v } : x)), '파트너명', '110px')}
           {inp(p.role, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, role: v } : x)), '역할', '90px')}
           {inp(p.description, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, description: v } : x)), '설명', '140px')}
-          {inp(p.task_scope, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, task_scope: v } : x)), '과업 범위 (예: PM/QA/인프라)', '200px')}
+          {inp(p.task_scope, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, task_scope: v } : x)), '과업 범위 (예: PM/QA/인프라)', '180px')}
+          {inp(p.category, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, category: v } : x)), '구분 (예: 주관/협력)', '110px')}
+          {inp(p.ratio_pct, v => setPartners(ps => ps.map((x, j) => j === i ? { ...x, ratio_pct: v } : x)), '비율%', '60px')}
           <button onClick={() => setPartners(ps => ps.filter((_, j) => j !== i))} style={delBtn}>✕</button>
         </div>
       ))}
-      <button onClick={() => setPartners(ps => [...ps, { name: '', role: '', description: '', task_scope: '' }])} style={addBtn}>+ 파트너</button>
+      <button onClick={() => setPartners(ps => [...ps, { name: '', role: '', description: '', task_scope: '', category: '', ratio_pct: '' }])} style={addBtn}>+ 파트너</button>
 
       {/* Risks */}
       <div style={sectionLabel}>리스크 항목</div>
@@ -2140,6 +2182,83 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
         </div>
       ))}
       <button onClick={() => setPos(p => ({ ...p, competitors: [...p.competitors, { name: '', x: '5', y: '5', size: 'medium', notes: '', risk_level: 'medium' }] }))} style={addBtn}>+ 경쟁사</button>
+
+      {/* KT 매출 지표 */}
+      <div style={sectionLabel}>KT 매출 지표</div>
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '8px' }}>
+        <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>매출액(억)</div>{inp(expectedRevenue, setExpectedRevenue, '예: 120', '90px')}</div>
+        <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>영업이익률(%)</div>{inp(marginRate, setMarginRate, '예: 8', '90px')}</div>
+        <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>공헌이익률(%)</div>{inp(contributionMargin, setContributionMargin, '예: 15', '90px')}</div>
+        <div><div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>하도율(%)</div>{inp(subcontractRate, setSubcontractRate, '예: 40', '90px')}</div>
+        <div>
+          <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>리스크등급</div>
+          <select value={riskGrade} onChange={e => setRiskGrade(e.target.value)} style={{ ...S.input, padding: '4px 8px', fontSize: '12px' }}>
+            <option value="">-</option>
+            {['A', 'B', 'C', 'D'].map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* 제안발표회 · 고객 평가기준 */}
+      <div style={sectionLabel}>제안발표회 · 고객 평가기준</div>
+      <div style={{ marginBottom: '8px' }}>
+        <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>제안발표회 형식</div>
+        {inp(ptFormat, setPtFormat, '예: 20분 PT + 20분 Q&A', '320px')}
+      </div>
+      <div style={{ marginBottom: '8px' }}>
+        <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '4px' }}>고객 평가기준</div>
+        <textarea value={evalCriteria} onChange={e => setEvalCriteria(e.target.value)} placeholder="평가위원 구성, RFP 배점 기준 등"
+          style={{ ...S.input, width: '100%', minHeight: '60px', fontSize: '12px', padding: '6px 8px', resize: 'vertical' }} />
+      </div>
+
+      {/* Winning 포인트 (CFS ↔ 포인트) */}
+      <div style={sectionLabel}>Winning 포인트 (고객 핵심성공요소 ↔ Winning 포인트)</div>
+      {winningPoints.map((w, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {inp(w.customer_cfs, v => setWinningPoints(ws => ws.map((x, j) => j === i ? { ...x, customer_cfs: v } : x)), '고객 핵심성공요소', '240px')}
+          <span style={{ color: 'var(--text-dim)' }}>→</span>
+          {inp(w.winning_point, v => setWinningPoints(ws => ws.map((x, j) => j === i ? { ...x, winning_point: v } : x)), 'Winning 포인트', '280px')}
+          <button onClick={() => setWinningPoints(ws => ws.filter((_, j) => j !== i))} style={delBtn}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setWinningPoints(ws => [...ws, { customer_cfs: '', winning_point: '' }])} style={addBtn}>+ Winning 포인트</button>
+
+      {/* 조직 구성 (제안/이행 담당) */}
+      <div style={sectionLabel}>제안/이행 담당 조직 (부문/본부/담당/팀/역할/명수)</div>
+      {orgRows.map((m, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {inp(m.division, v => setOrgRows(rs => rs.map((x, j) => j === i ? { ...x, division: v } : x)), '부문', '90px')}
+          {inp(m.hq, v => setOrgRows(rs => rs.map((x, j) => j === i ? { ...x, hq: v } : x)), '본부', '90px')}
+          {inp(m.dept, v => setOrgRows(rs => rs.map((x, j) => j === i ? { ...x, dept: v } : x)), '담당', '90px')}
+          {inp(m.team, v => setOrgRows(rs => rs.map((x, j) => j === i ? { ...x, team: v } : x)), '팀', '90px')}
+          {inp(m.role, v => setOrgRows(rs => rs.map((x, j) => j === i ? { ...x, role: v } : x)), '역할', '110px')}
+          {inp(m.count, v => setOrgRows(rs => rs.map((x, j) => j === i ? { ...x, count: v } : x)), '명수', '60px')}
+          <button onClick={() => setOrgRows(rs => rs.filter((_, j) => j !== i))} style={delBtn}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setOrgRows(rs => [...rs, { division: '', hq: '', dept: '', team: '', role: '', count: '' }])} style={addBtn}>+ 조직</button>
+
+      {/* VDC-B 의결 */}
+      <div style={sectionLabel}>VDC-B 의결 결과</div>
+      {vdcB.map((v, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {inp(v.decision, val => setVdcB(rs => rs.map((x, j) => j === i ? { ...x, decision: val } : x)), '의결 (예: 조건부 승인)', '160px')}
+          {inp(v.detail, val => setVdcB(rs => rs.map((x, j) => j === i ? { ...x, detail: val } : x)), '의결 내용', '320px')}
+          <button onClick={() => setVdcB(rs => rs.filter((_, j) => j !== i))} style={delBtn}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setVdcB(rs => [...rs, { decision: '', detail: '' }])} style={addBtn}>+ 의결</button>
+
+      {/* 주요질의 Q&A */}
+      <div style={sectionLabel}>주요질의 (별첨)</div>
+      {qna.map((q, i) => (
+        <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {inp(q.question, val => setQna(rs => rs.map((x, j) => j === i ? { ...x, question: val } : x)), '질의사항', '280px')}
+          {inp(q.answer, val => setQna(rs => rs.map((x, j) => j === i ? { ...x, answer: val } : x)), '답변', '280px')}
+          <button onClick={() => setQna(rs => rs.filter((_, j) => j !== i))} style={delBtn}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setQna(rs => [...rs, { question: '', answer: '' }])} style={addBtn}>+ 질의</button>
 
       {/* Save */}
       <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>

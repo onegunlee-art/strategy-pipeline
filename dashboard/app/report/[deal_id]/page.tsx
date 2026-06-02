@@ -9,10 +9,13 @@ interface Props {
 
 interface ReportData {
   business_objective: { client_name: string; deal_size: string | null; industry: string | null; importance_stars: number; summary: string };
-  bid_timeline: { rfp_published?: string; bid_deadline?: string; pt_date?: string; announcement_date?: string; d_day?: number | null };
-  competition: { competitors: { name: string; strength?: string; threat?: string }[]; positioning?: string };
-  collaboration: { partners: { name: string; role?: string; task_scope?: string }[] };
-  winning_points: string[];
+  bid_timeline: { rfp_published?: string; bid_deadline?: string; pt_date?: string; announcement_date?: string; d_day?: number | null; pt_format?: string | null };
+  revenue_metrics?: { expected_revenue?: number | null; margin_rate?: number | null; contribution_margin?: number | null; subcontract_rate?: number | null; risk_grade?: string | null; vdc_a?: number | null };
+  competition: { competitors: { name: string; strength?: string; threat?: string }[]; positioning?: string; eval_criteria?: string | null };
+  collaboration: { partners: { name: string; role?: string; task_scope?: string; category?: string; ratio_pct?: number }[] };
+  winning_points: { customer_cfs?: string; winning_point: string }[];
+  vdc_b_result?: { decision: string; detail: string }[];
+  qna_items?: { question: string; answer: string }[];
   win_assessment: {
     probability: number; ci_low: number; ci_high: number;
     pillar_scores: Record<string, number>; method_probs: Record<string, number>;
@@ -26,7 +29,7 @@ interface ReportData {
   };
   proposal_strategy: { pillar: string; action_label?: string; how_to: string[]; value_proposition: string; expected_delta_pp?: number }[];
   execution_risks: { name: string; level: string; mitigation: string }[];
-  team: { size: number | null; members: { name: string; dept?: string; role?: string }[]; execution_unit: string | null; pm: string | null };
+  team: { size: number | null; members: { name?: string; division?: string; hq?: string; dept?: string; team?: string; role?: string; count?: number }[]; execution_unit: string | null; pm: string | null };
   recommendation: string;
   recommendation_rationale: string;
 }
@@ -89,22 +92,103 @@ export default function ReportPage({ params }: Props) {
         <p style={{ margin: 0, lineHeight: 1.7, fontSize: 14 }}>{data.business_objective.summary}</p>
       </div>
 
-      {/* 2. 입찰 일정 */}
+      {/* 2. KT 매출 */}
+      {(() => {
+        const rm = data.revenue_metrics;
+        const has = rm && (rm.expected_revenue != null || rm.margin_rate != null || rm.contribution_margin != null || rm.subcontract_rate != null || rm.risk_grade);
+        if (!has) return null;
+        const cell: React.CSSProperties = { padding: '6px 8px', borderBottom: '1px solid #f3f4f6', fontSize: 13 };
+        const hd: React.CSSProperties = { padding: '6px 8px', textAlign: 'left', color: '#666', fontWeight: 600, fontSize: 11, background: '#f3f4f6' };
+        return (
+          <div style={S}>
+            <div style={H}>2. KT 매출</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr>{['프로젝트', '매출액', '영업이익률', '공헌이익률', '하도율', '리스크등급'].map(h => <th key={h} style={hd}>{h}</th>)}</tr></thead>
+              <tbody>
+                <tr>
+                  <td style={cell}>{data.business_objective.client_name}</td>
+                  <td style={cell}>{rm!.expected_revenue != null ? `${rm!.expected_revenue}억` : '-'}</td>
+                  <td style={cell}>{rm!.margin_rate != null ? `${rm!.margin_rate}%` : '-'}</td>
+                  <td style={cell}>{rm!.contribution_margin != null ? `${rm!.contribution_margin}%` : '-'}</td>
+                  <td style={cell}>{rm!.subcontract_rate != null ? `${rm!.subcontract_rate}%` : '-'}</td>
+                  <td style={cell}>{rm!.risk_grade ?? '-'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
+      {/* 3. 일정 */}
       {(data.bid_timeline.bid_deadline || data.bid_timeline.rfp_published) && (
         <div style={S}>
-          <div style={H}>2. 입찰 일정</div>
+          <div style={H}>3. 일정</div>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13 }}>
             {data.bid_timeline.rfp_published && <span>공고: {data.bid_timeline.rfp_published.slice(0, 10)}</span>}
             {data.bid_timeline.bid_deadline && <span style={{ fontWeight: 700 }}>마감: {data.bid_timeline.bid_deadline.slice(0, 10)} {data.bid_timeline.d_day != null && `(D-${Math.max(0, data.bid_timeline.d_day)})`}</span>}
             {data.bid_timeline.pt_date && <span>PT: {data.bid_timeline.pt_date.slice(0, 10)}</span>}
             {data.bid_timeline.announcement_date && <span>발표: {data.bid_timeline.announcement_date.slice(0, 10)}</span>}
           </div>
+          {data.bid_timeline.pt_format && (
+            <div style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>제안발표회: {data.bid_timeline.pt_format}</div>
+          )}
         </div>
       )}
 
-      {/* 7. 수주 가능성 진단 (정량 코어 — 먼저 배치) */}
+      {/* 4. 경쟁 구도 */}
       <div style={S}>
-        <div style={H}>3. 수주 가능성 진단 (정량)</div>
+        <div style={H}>4. 경쟁 구도</div>
+        {data.competition.competitors?.length > 0 ? data.competition.competitors.map((c, i) => (
+          <div key={i} style={{ marginBottom: 8, fontSize: 13 }}>
+            <b>{c.name}</b> — 강점: {c.strength} / 위협: {c.threat}
+          </div>
+        )) : <div style={{ color: '#999', fontSize: 13 }}>경쟁사 미입력</div>}
+        {data.competition.positioning && <p style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>{data.competition.positioning}</p>}
+        {data.competition.eval_criteria && (
+          <div style={{ marginTop: 12, padding: 10, background: '#f9fafb', borderRadius: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#666', marginBottom: 4 }}>고객 평가기준</div>
+            <p style={{ margin: 0, fontSize: 13, color: '#374151', whiteSpace: 'pre-wrap' }}>{data.competition.eval_criteria}</p>
+          </div>
+        )}
+      </div>
+
+      {/* 5. 협력 구도 */}
+      <div style={S}>
+        <div style={H}>5. 협력 구도</div>
+        {data.collaboration.partners?.length > 0 ? (
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead><tr>{['구분', '담당사', '과업 범위', '비율'].map(h => <th key={h} style={{ textAlign: 'left', padding: 6, borderBottom: '1px solid #e5e7eb', color: '#666' }}>{h}</th>)}</tr></thead>
+            <tbody>{data.collaboration.partners.map((p, i) => (
+              <tr key={i}>
+                <td style={{ padding: 6 }}>{p.category ?? p.role ?? '-'}</td>
+                <td style={{ padding: 6 }}>{p.name}</td>
+                <td style={{ padding: 6 }}>{p.task_scope}</td>
+                <td style={{ padding: 6 }}>{p.ratio_pct != null ? `${p.ratio_pct}%` : '-'}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        ) : <div style={{ color: '#999', fontSize: 13 }}>파트너 미입력</div>}
+      </div>
+
+      {/* 6. Winning 포인트 */}
+      <div style={S}>
+        <div style={H}>6. Winning 포인트</div>
+        {data.winning_points.length > 0 ? (
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead><tr>{['고객 핵심 성공요소', 'Winning 포인트'].map(h => <th key={h} style={{ textAlign: 'left', padding: 6, borderBottom: '1px solid #e5e7eb', color: '#666', width: '50%' }}>{h}</th>)}</tr></thead>
+            <tbody>{data.winning_points.map((w, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <td style={{ padding: 6, color: '#374151' }}>{w.customer_cfs || '-'}</td>
+                <td style={{ padding: 6, fontWeight: 600 }}>{w.winning_point}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        ) : <div style={{ color: '#999', fontSize: 13 }}>미입력</div>}
+      </div>
+
+      {/* 7. 수주 가능성 진단 (정량 코어) */}
+      <div style={S}>
+        <div style={H}>7. 수주 가능성 진단 (정량)</div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 16 }}>
           <span style={{ fontSize: 40, fontWeight: 800, color: probColor(wa.probability) }}>{wa.probability.toFixed(1)}%</span>
           <span style={{ fontSize: 13, color: '#666' }}>95% CI {wa.ci_low.toFixed(0)}–{wa.ci_high.toFixed(0)}% · Voting {wa.voter_count}명</span>
@@ -127,7 +211,7 @@ export default function ReportPage({ params }: Props) {
       {/* 4. 전략 실행 경로 (Reason Chain) */}
       {data.strategy_path && data.strategy_path.steps.length > 0 && (
         <div style={S}>
-          <div style={H}>4. 전략 실행 경로 — Reason Chain</div>
+          <div style={H}>8. 전략 실행 경로 — Reason Chain</div>
           {/* 확률 + 재무 임팩트 요약 */}
           <div style={{ display: 'flex', gap: 24, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ textAlign: 'center' }}>
@@ -171,41 +255,9 @@ export default function ReportPage({ params }: Props) {
         </div>
       )}
 
-      {/* 5. 경쟁 구도 */}
+      {/* 9. 제안 전략 */}
       <div style={S}>
-        <div style={H}>5. 경쟁 구도</div>
-        {data.competition.competitors?.length > 0 ? data.competition.competitors.map((c, i) => (
-          <div key={i} style={{ marginBottom: 8, fontSize: 13 }}>
-            <b>{c.name}</b> — 강점: {c.strength} / 위협: {c.threat}
-          </div>
-        )) : <div style={{ color: '#999', fontSize: 13 }}>경쟁사 미입력</div>}
-        {data.competition.positioning && <p style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>{data.competition.positioning}</p>}
-      </div>
-
-      {/* 5. 협력 구도 */}
-      <div style={S}>
-        <div style={H}>5. 협력 구도</div>
-        {data.collaboration.partners?.length > 0 ? (
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-            <thead><tr>{['파트너', '역할', '과업 범위'].map(h => <th key={h} style={{ textAlign: 'left', padding: 6, borderBottom: '1px solid #e5e7eb', color: '#666' }}>{h}</th>)}</tr></thead>
-            <tbody>{data.collaboration.partners.map((p, i) => (
-              <tr key={i}><td style={{ padding: 6 }}>{p.name}</td><td style={{ padding: 6 }}>{p.role}</td><td style={{ padding: 6 }}>{p.task_scope}</td></tr>
-            ))}</tbody>
-          </table>
-        ) : <div style={{ color: '#999', fontSize: 13 }}>파트너 미입력</div>}
-      </div>
-
-      {/* 6. Winning 포인트 */}
-      <div style={S}>
-        <div style={H}>6. Winning 포인트</div>
-        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, lineHeight: 1.8 }}>
-          {data.winning_points.map((w, i) => <li key={i}>{w}</li>)}
-        </ol>
-      </div>
-
-      {/* 8. 제안 전략 */}
-      <div style={S}>
-        <div style={H}>7. 제안 전략</div>
+        <div style={H}>9. 제안 전략</div>
         {data.proposal_strategy.map((s, i) => (
           <div key={i} style={{ marginBottom: 14 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: '#0369a1' }}>[{s.pillar}] {PILLAR_LABEL[s.pillar] ?? ''}</div>
@@ -215,9 +267,9 @@ export default function ReportPage({ params }: Props) {
         ))}
       </div>
 
-      {/* 9. 수행 리스크 */}
+      {/* 10. 수행 리스크 */}
       <div style={S}>
-        <div style={H}>8. 수행 리스크</div>
+        <div style={H}>10. 수행 리스크</div>
         {data.execution_risks.map((r, i) => (
           <div key={i} style={{ fontSize: 13, marginBottom: 6 }}>
             <b>{r.name}</b> <span style={{ color: r.level === 'high' ? '#dc2626' : r.level === 'low' ? '#16a34a' : '#d97706' }}>[{r.level}]</span> — {r.mitigation}
@@ -225,15 +277,63 @@ export default function ReportPage({ params }: Props) {
         ))}
       </div>
 
-      {/* 10. 담당 조직 */}
-      {(data.team.size || data.team.execution_unit) && (
+      {/* 11. VDC-B 결과 */}
+      {data.vdc_b_result && data.vdc_b_result.length > 0 && (
         <div style={S}>
-          <div style={H}>9. 담당 조직</div>
-          <div style={{ fontSize: 13 }}>
-            {data.team.execution_unit && <span>실행조직: {data.team.execution_unit} · </span>}
-            {data.team.pm && <span>PM: {data.team.pm} · </span>}
-            {data.team.size && <span>팀 규모: {data.team.size}명</span>}
-          </div>
+          <div style={H}>11. VDC-B 결과</div>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead><tr>{['의결', '의결내용'].map(h => <th key={h} style={{ textAlign: 'left', padding: 6, borderBottom: '1px solid #e5e7eb', color: '#666' }}>{h}</th>)}</tr></thead>
+            <tbody>{data.vdc_b_result.map((v, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <td style={{ padding: 6, fontWeight: 700, whiteSpace: 'nowrap' }}>{v.decision}</td>
+                <td style={{ padding: 6, color: '#374151' }}>{v.detail}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 12. 제안/이행 담당 */}
+      {(data.team.members?.length > 0 || data.team.size || data.team.execution_unit) && (
+        <div style={S}>
+          <div style={H}>12. 제안/이행 담당</div>
+          {data.team.members?.length > 0 ? (
+            <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+              <thead><tr>{['부문', '본부', '담당', '팀', '역할', '명수'].map(h => <th key={h} style={{ textAlign: 'left', padding: 6, borderBottom: '1px solid #e5e7eb', color: '#666' }}>{h}</th>)}</tr></thead>
+              <tbody>{data.team.members.map((m, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: 6 }}>{m.division ?? '-'}</td>
+                  <td style={{ padding: 6 }}>{m.hq ?? '-'}</td>
+                  <td style={{ padding: 6 }}>{m.dept ?? m.name ?? '-'}</td>
+                  <td style={{ padding: 6 }}>{m.team ?? '-'}</td>
+                  <td style={{ padding: 6 }}>{m.role ?? '-'}</td>
+                  <td style={{ padding: 6 }}>{m.count != null ? `${m.count}명` : '-'}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          ) : (
+            <div style={{ fontSize: 13 }}>
+              {data.team.execution_unit && <span>실행조직: {data.team.execution_unit} · </span>}
+              {data.team.pm && <span>PM: {data.team.pm} · </span>}
+              {data.team.size && <span>팀 규모: {data.team.size}명</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 별첨. 주요질의 */}
+      {data.qna_items && data.qna_items.length > 0 && (
+        <div style={S}>
+          <div style={H}>별첨. 주요질의</div>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead><tr>{['질의사항', '답변'].map(h => <th key={h} style={{ textAlign: 'left', padding: 6, borderBottom: '1px solid #e5e7eb', color: '#666', width: '50%' }}>{h}</th>)}</tr></thead>
+            <tbody>{data.qna_items.map((q, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <td style={{ padding: 6, color: '#374151' }}>{q.question}</td>
+                <td style={{ padding: 6 }}>{q.answer}</td>
+              </tr>
+            ))}</tbody>
+          </table>
         </div>
       )}
 
