@@ -240,6 +240,9 @@ async function runInit() {
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS vdc_b_result JSONB DEFAULT '[]';   -- [{decision, detail}]
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS qna_items JSONB DEFAULT '[]';      -- [{question, answer}]
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS winning_points JSONB DEFAULT '[]'; -- [{customer_cfs, winning_point}]
+
+    -- v1.2: Pillar 사유·대응 수동 편집
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS pillar_rationale JSONB DEFAULT '{}';
   `);
 
   // 시드 데이터

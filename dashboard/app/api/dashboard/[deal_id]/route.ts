@@ -19,7 +19,8 @@ export async function GET(
               competitive_positioning, importance_stars, bid_timeline,
               team_size, team_members, expected_revenue, margin_rate, created_at,
               contribution_margin, subcontract_rate, risk_grade, pt_format,
-              customer_eval_criteria, vdc_b_result, qna_items, winning_points
+              customer_eval_criteria, vdc_b_result, qna_items, winning_points,
+              pillar_rationale
        FROM deals WHERE id = $1`,
       [dealId]
     );
@@ -55,6 +56,7 @@ export async function GET(
       vdc_b_result: raw.vdc_b_result ?? [],
       qna_items: raw.qna_items ?? [],
       winning_points: raw.winning_points ?? [],
+      pillar_rationale: raw.pillar_rationale ?? {},
     };
 
     // Latest prediction

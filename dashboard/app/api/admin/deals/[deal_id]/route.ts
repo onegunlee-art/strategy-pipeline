@@ -11,6 +11,8 @@ const ALLOWED = new Set([
   'contribution_margin', 'subcontract_rate', 'risk_grade', 'pt_format',
   'customer_eval_criteria', 'vdc_b_result', 'qna_items', 'winning_points',
   'expected_revenue', 'margin_rate',
+  // v1.2: Pillar 사유·대응 수동 편집
+  'pillar_rationale',
 ]);
 
 export async function PATCH(
