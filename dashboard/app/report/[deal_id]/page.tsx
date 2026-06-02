@@ -27,11 +27,13 @@ interface ReportData {
     go_nogo: string; go_nogo_rationale: string;
     steps: { order: number; label: string; pillar: string; effort: number; owner: string; prob_before: number; prob_after: number; delta_pp: number; revenue_delta: number }[];
   };
-  proposal_strategy: { pillar: string; action_label?: string; how_to: string[]; value_proposition: string; expected_delta_pp?: number }[];
+  proposal_strategy: { pillar?: string; category?: string; action_label?: string; how_to: string[]; value_proposition: string; expected_delta_pp?: number }[];
+  pillar_rationale?: Record<string, { reason: string; action: string }>;
   execution_risks: { name: string; level: string; mitigation: string }[];
   team: { size: number | null; members: { name?: string; division?: string; hq?: string; dept?: string; team?: string; role?: string; count?: number }[]; execution_unit: string | null; pm: string | null };
   recommendation: string;
   recommendation_rationale: string;
+  rfp_context_used?: boolean;
 }
 
 const PILLAR_LABEL: Record<string, string> = { S: '사전영업', V: 'Value', D: '차별화', P: '가격', E: 'Delivery' };
@@ -202,9 +204,34 @@ export default function ReportPage({ params }: Props) {
           ))}
         </div>
         {wa.weaknesses.length > 0 && (
-          <div style={{ fontSize: 12, color: '#666' }}>
+          <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
             주요 약점: {wa.weaknesses.map(w => `${w.label}(${w.score.toFixed(1)})`).join(', ')}
           </div>
+        )}
+        {/* pillar 사유·대응 (LLM 생성) */}
+        {data.pillar_rationale && Object.keys(data.pillar_rationale).length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 8 }}>
+            <thead>
+              <tr style={{ background: '#f3f4f6' }}>
+                <th style={{ padding: '6px 8px', textAlign: 'left', width: 80, borderBottom: '1px solid #e5e7eb' }}>Pillar</th>
+                <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>현황 사유</th>
+                <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>개선 액션</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(['S','V','D','P','E'] as const).map(k => {
+                const pr = data.pillar_rationale?.[k];
+                if (!pr) return null;
+                return (
+                  <tr key={k} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '6px 8px', fontWeight: 600, color: '#0369a1' }}>{k} {PILLAR_LABEL[k]}</td>
+                    <td style={{ padding: '6px 8px', color: '#374151' }}>{pr.reason}</td>
+                    <td style={{ padding: '6px 8px', color: '#047857' }}>{pr.action}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 
@@ -259,10 +286,19 @@ export default function ReportPage({ params }: Props) {
       <div style={S}>
         <div style={H}>9. 제안 전략</div>
         {data.proposal_strategy.map((s, i) => (
-          <div key={i} style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#0369a1' }}>[{s.pillar}] {PILLAR_LABEL[s.pillar] ?? ''}</div>
-            <ul style={{ margin: '4px 0', paddingLeft: 20, fontSize: 13 }}>{s.how_to?.map((h, j) => <li key={j}>{h}</li>)}</ul>
-            <div style={{ fontSize: 13, color: '#374151' }}>→ {s.value_proposition}</div>
+          <div key={i} style={{ marginBottom: 16, borderLeft: '3px solid #0369a1', paddingLeft: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#0369a1', marginBottom: 4 }}>
+              {s.category ?? (s.pillar ? `[${s.pillar}] ${PILLAR_LABEL[s.pillar] ?? ''}` : `전략 ${i + 1}`)}
+            </div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+              <strong>[How to]</strong>
+            </div>
+            <ul style={{ margin: '0 0 6px', paddingLeft: 20, fontSize: 13 }}>
+              {s.how_to?.map((h, j) => <li key={j}>{h}</li>)}
+            </ul>
+            <div style={{ fontSize: 13, color: '#047857', fontWeight: 600 }}>
+              [Value Proposition] {s.value_proposition}
+            </div>
           </div>
         ))}
       </div>
