@@ -45,6 +45,7 @@ export default function ReportPage({ params }: Props) {
   const [data, setData] = useState<ReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('보고서 불러오는 중...');
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,7 +65,17 @@ export default function ReportPage({ params }: Props) {
     return () => { cancelled = true; };
   }, [deal_id]);
 
-  if (error) return <div style={{ padding: 40, color: '#dc2626', fontFamily: 'system-ui' }}>오류: {error}</div>;
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/report/${deal_id}?refresh=1`, { method: 'POST' });
+      const json = await res.json();
+      if (res.ok && !json.error) setData(json);
+    } catch { /* ignore */ }
+    setRegenerating(false);
+  };
+
+  if (error) return <div style={{ padding: 40, color: '#dc2626', fontFamily: 'system-ui' }}>{`오류: ${error}`}</div>;
   if (!data) return <div style={{ padding: 40, color: '#666', fontFamily: 'system-ui' }}>{status}</div>;
 
   const wa = data.win_assessment;
@@ -78,10 +89,19 @@ export default function ReportPage({ params }: Props) {
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#111', margin: 0 }}>
           {data.business_objective.client_name} 수주전략 보고서
         </h1>
-        <button className="no-print" onClick={() => window.print()}
-          style={{ padding: '6px 14px', background: '#0369a1', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
-          인쇄 / PDF
-        </button>
+        <div className="no-print" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {(data as ReportData & { cached?: boolean }).cached && (
+            <span style={{ fontSize: 11, color: '#9ca3af', padding: '2px 8px', background: '#f3f4f6', borderRadius: 4 }}>({`캐시`})</span>
+          )}
+          <button onClick={handleRegenerate} disabled={regenerating}
+            style={{ padding: '6px 12px', background: regenerating ? '#9ca3af' : '#374151', color: '#fff', border: 'none', borderRadius: 6, cursor: regenerating ? 'default' : 'pointer', fontSize: 12 }}>
+            {regenerating ? '재생성 중...' : '🔄 재생성'}
+          </button>
+          <button onClick={() => window.print()}
+            style={{ padding: '6px 14px', background: '#0369a1', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+            인쇄 / PDF
+          </button>
+        </div>
       </div>
       <div style={{ fontSize: 12, color: '#666', marginBottom: 20 }}>
         {'★'.repeat(data.business_objective.importance_stars)}{'☆'.repeat(5 - data.business_objective.importance_stars)}
@@ -373,7 +393,7 @@ export default function ReportPage({ params }: Props) {
 
       {/* 권고 */}
       <div style={{ ...S, background: '#0369a1', color: '#fff' }}>
-        <div style={{ ...H, color: '#bae6fd' }}>최종 권고</div>
+        <div style={{ ...H, color: '#bae6fd' }}>수주 권고</div>
         <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>{data.recommendation}</div>
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.7 }}>{data.recommendation_rationale}</p>
       </div>
