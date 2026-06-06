@@ -122,9 +122,6 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
       <div style={{ maxWidth: 440, width: '100%' }}>
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, color: '#f4f4f5', marginBottom: 10 }}>
-            안녕 이하진^^
-          </div>
           <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: '1px', fontFamily: 'IBM Plex Mono, monospace', marginBottom: 6 }}>
             지정학 시그널 분석
           </div>
