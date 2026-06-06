@@ -151,6 +151,9 @@ export default function ExecutiveDashboard() {
   const [scenarios, setScenarios] = useState<SavedScenario[]>([]);
   const [actionLog, setActionLog] = useState<ActionLogEntry[]>([]);
 
+  const [mode, setMode] = useState<'bid' | 'geo'>('bid');
+  const [geoStep, setGeoStep] = useState(1);
+
   const simProb = simSubs
     ? Math.round(pillarMultiplication(pillarScoreFromSubs(simSubs as SubScores)) * 1000) / 10
     : null;
@@ -278,6 +281,19 @@ export default function ExecutiveDashboard() {
             <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>수주 전략 플랫폼</span>
           </div>
 
+          {/* Mode toggle */}
+          <div style={{ display:'flex', gap:'4px', fontFamily:'IBM Plex Mono', fontSize:'11px', flexShrink:0 }}>
+            {(['bid','geo'] as const).map(m => (
+              <button key={m} onClick={() => setMode(m)} style={{
+                padding:'5px 12px', borderRadius:'2px', border:'none', cursor:'pointer',
+                background: mode===m ? 'var(--brand)' : 'var(--surface2)',
+                color: mode===m ? '#fff' : 'var(--text-mid)', letterSpacing:'0.3px',
+              }}>
+                {m === 'bid' ? '수주전략' : '지정학 분석'}
+              </button>
+            ))}
+          </div>
+
           {/* Deal selector */}
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
             {loadingDeals ? (
@@ -321,7 +337,13 @@ export default function ExecutiveDashboard() {
       </header>
 
       {/* ── Content ──────────────────────────────────────────────── */}
-      <main style={{ maxWidth: '1440px', margin: '0 auto', padding: '20px 32px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ maxWidth:'1440px', margin:'0 auto', display:'flex', alignItems:'flex-start' }}>
+        {mode === 'geo' && <GeoProcessSidebar step={geoStep} onStepClick={setGeoStep} />}
+        <main style={{ flex:1, padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px', minWidth:0 }}>
+          {mode === 'geo' ? (
+            <GeoContent step={geoStep} setStep={setGeoStep} />
+          ) : (
+            <>
 
         {loadingDash && (
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', fontSize: '12px' }}>
@@ -1060,7 +1082,10 @@ export default function ExecutiveDashboard() {
         <div style={{ fontSize: '10px', color: 'var(--text-dim)', textAlign: 'center', padding: '4px 0 16px' }}>
           본 시스템은 의사결정 보조 지표이며 실제 수주를 보장하지 않습니다.
         </div>
-      </main>
+            </>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
@@ -1143,3 +1168,385 @@ const actionBtn: React.CSSProperties = {
   fontFamily: 'IBM Plex Mono', fontWeight: 600, letterSpacing: '0.5px',
   cursor: 'pointer',
 };
+
+// ─── Geo: Process Sidebar ─────────────────────────────────────────────────────
+
+function GeoProcessSidebar({ step, onStepClick }: { step: number; onStepClick: (s: number) => void }) {
+  const steps = [
+    { n: 1, label: '주제 입력' },
+    { n: 2, label: '자동 분석' },
+    { n: 3, label: '확률 진단' },
+    { n: 4, label: '리포트 발행' },
+  ];
+  const recentItems = [
+    { topic: '이란 전쟼 종전 가능성', prob: 24, date: '06.06' },
+    { topic: '중동 호르무즈 리스크', prob: 41, date: '06.04' },
+  ];
+  return (
+    <div style={{
+      width: '200px', flexShrink: 0, borderRight: '1px solid var(--border)',
+      padding: '24px 16px', display: 'flex', flexDirection: 'column',
+      background: 'var(--surface)', minHeight: 'calc(100vh - 56px)',
+    }}>
+      <div style={{ fontSize: '9px', letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginBottom: '20px' }}>
+        ANALYSIS PROCESS
+      </div>
+      {steps.map((s, i) => {
+        const done = step > s.n;
+        const active = step === s.n;
+        return (
+          <div key={s.n}>
+            <div
+              onClick={() => onStepClick(s.n)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '7px 0 7px 10px', cursor: 'pointer',
+                borderLeft: active ? '3px solid var(--brand)' : done ? '3px solid var(--green)' : '3px solid transparent',
+              }}
+            >
+              <div style={{
+                width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+                background: done ? 'var(--green)' : active ? 'var(--brand)' : 'var(--surface2)',
+                border: done || active ? 'none' : '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '10px', color: done || active ? '#fff' : 'var(--text-dim)',
+                fontFamily: 'IBM Plex Mono', fontWeight: 700,
+              }}>
+                {done ? '✓' : s.n}
+              </div>
+              <span style={{
+                fontSize: '12px',
+                color: active ? 'var(--text)' : done ? 'var(--green)' : 'var(--text-dim)',
+                fontWeight: active ? 600 : 400,
+              }}>
+                {s.label}
+              </span>
+            </div>
+            {i < steps.length - 1 && (
+              <div style={{ marginLeft: '22px', width: '1px', height: '14px', borderLeft: '1px dashed var(--border)' }} />
+            )}
+          </div>
+        );
+      })}
+
+      <div style={{ marginTop: '28px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ fontSize: '9px', letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginBottom: '10px' }}>
+          최근 분석
+        </div>
+        {recentItems.map((item, i) => (
+          <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text)', lineHeight: 1.4, marginBottom: '4px' }}>{item.topic}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ ...badgeStyle, fontSize: '10px' }}>지정학</span>
+              <span style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: probColor(item.prob), fontWeight: 700 }}>{item.prob}%</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>{item.date}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Geo: Step Content ────────────────────────────────────────────────────────
+
+function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => void }) {
+  const [query, setQuery] = useState('');
+  const [typedLen, setTypedLen] = useState(0);
+  const [drivers, setDrivers] = useState<Record<string, number>>({
+    외교채널: 2, 군사강도: 8, 경제압박: 8, 이란내부: 3, 호르무즈: 7,
+  });
+  const [votes, setVotes] = useState(0);
+
+  const geoProb = Math.min(95, Math.max(5, Math.round(
+    (drivers['외교채널'] + (10 - drivers['군사강도']) + (10 - drivers['경제압박']) + drivers['이란내부'] + (10 - drivers['호르무즈'])) / 5 * 10
+  )));
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TODO(월요일): the gist RAG API 연동 지점
+  // 현재는 데모용 하드코딩 텍스트. 월요일에 아래 ANALYSIS_TEXT를
+  // read-only RAG 엔드포인트 fetch 결과로 교체.
+  //   예) const res = await fetch(`/api/geo/analyze?q=${encodeURIComponent(query)}`);
+  //       → { conclusion, agree_signals[], conflict_signals[], driver_scores } 형태로 받아
+  //         ANALYSIS_TEXT 조립 + setDrivers(driver_scores)
+  // GIST 성능 영향 없도록 검색 호출 → RAG가 결과만 push 하는 방식.
+  // ──────────────────────────────────────────────────────────────────────────
+  const ANALYSIS_TEXT = `분석 주제: ${query || '이란 전쟼 종전 가능성'}\n\n━━ 핵심 결론 ━━\n현재 이란-이스라엘 직접 충돌 구도와 호르무즈 해협 봉쇄 리스크가 교전 종료 가능성을 구조적으로 억제하고 있습니다. 외교 채널은 오만·카타르 중재 라인이 유지되고 있으나 실질적 협상 진전은 미미합니다.\n\n━━ 일치 신호 (종전 가능성 ↑) ━━\n• 오만 중재 채널 재가동 (2026.05)\n• 이란 내 경제 위기 심화 → 온건파 입지 강화\n• 미국-이란 간접 접촉 재개 (제네바 채널)\n\n━━ 충돌 신호 (종전 가능성 ↓) ━━\n• 이란 혁명수비대 미사일 발사 지속\n• 이스라엘 선제타격 옵션 공개 천명\n• 호르무즈 해협 훈련 강도 증가\n\n━━ 종합 판단 ━━\n단기(90일) 종전 가능성: 낮음. 중기(1년) 시나리오에서 경제 압박 심화 시 협상 가능성 열려 있으나, 군사적 긴장이 선행 완화되어야 합니다.`;
+
+  useEffect(() => {
+    if (step !== 2) { setTypedLen(0); return; }
+    setTypedLen(0);
+    const id = setInterval(() => {
+      setTypedLen(n => {
+        if (n >= ANALYSIS_TEXT.length) { clearInterval(id); return n; }
+        return n + 5;
+      });
+    }, 25);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  const startAnalysis = () => { if (query.trim() || true) setStep(2); };
+
+  const driverColors: Record<string, string> = {
+    외교채널: 'var(--green)', 군사강도: 'var(--red)', 경제압박: 'var(--yellow)',
+    이란내부: 'var(--cyan, #0ea5e9)', 호르무즈: 'var(--brand)',
+  };
+  const driverLabels: Record<string, string> = {
+    외교채널: '외교 채널', 군사강도: '군사 강도', 경제압박: '경제 압박',
+    이란내부: '이란 내부', 호르무즈: '호르무즈',
+  };
+
+  // ── Step 1: Search ──
+  if (step === 1) return (
+    <Panel title="지정학 주제 입력">
+      <div style={{ display:'flex', flexDirection:'column', gap:'16px', maxWidth:'640px' }}>
+        <input
+          type="text"
+          placeholder="예: 이란 전쟼 종전 가능성"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') startAnalysis(); }}
+          style={{
+            width:'100%', padding:'14px 16px', fontSize:'16px',
+            border:'1px solid var(--border)', borderRadius:'2px',
+            background:'var(--surface2)', color:'var(--text)',
+            fontFamily:'inherit', outline:'none', boxSizing:'border-box',
+          }}
+        />
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+          {['이란 전쟼 종전 가능성', '중동 호르무즈 리스크', '러우 전쟼 종료 가능성'].map(hint => (
+            <button key={hint} onClick={() => setQuery(hint)} style={{
+              ...badgeStyle, cursor:'pointer', background:'var(--surface)',
+              color:'var(--text-mid)', padding:'4px 10px',
+            }}>
+              {hint}
+            </button>
+          ))}
+        </div>
+        <div>
+          <button onClick={startAnalysis} style={actionBtn}>분석 시작</button>
+        </div>
+      </div>
+    </Panel>
+  );
+
+  // ── Step 2: Analysis streaming ──
+  if (step === 2) {
+    const displayed = ANALYSIS_TEXT.slice(0, typedLen);
+    const lines = displayed.split('\n');
+    return (
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:'16px' }}>
+        <Panel title="지정학 분석">
+          <div style={{ minHeight:'320px' }}>
+            {lines.map((line, i) => {
+              const isPositive = line.startsWith('•') && displayed.includes('일치 신호') && i > displayed.split('\n').findIndex(l => l.includes('일치 신호')) && i < displayed.split('\n').findIndex(l => l.includes('충돌 신호'));
+              const isNegative = line.startsWith('•') && displayed.includes('충돌 신호') && i > displayed.split('\n').findIndex(l => l.includes('충돌 신호'));
+              const isHeader = line.startsWith('━━');
+              return (
+                <div key={i} style={{
+                  fontSize: isHeader ? '11px' : '13px',
+                  fontFamily: isHeader ? 'IBM Plex Mono' : 'inherit',
+                  color: isHeader ? 'var(--text-dim)' : isPositive ? 'var(--green)' : isNegative ? 'var(--red)' : 'var(--text)',
+                  fontWeight: isHeader ? 600 : 400,
+                  lineHeight: 1.6,
+                  letterSpacing: isHeader ? '0.5px' : 0,
+                  marginTop: isHeader ? '12px' : 0,
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  {line}
+                </div>
+              );
+            })}
+            {typedLen < ANALYSIS_TEXT.length && (
+              <span style={{ display:'inline-block', width:'2px', height:'14px', background:'var(--brand)', animation:'none', verticalAlign:'middle' }}>▌</span>
+            )}
+          </div>
+          {typedLen >= ANALYSIS_TEXT.length && (
+            <div style={{ marginTop:'16px', display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={() => setStep(3)} style={actionBtn}>확인 →</button>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="드라이버 현황">
+          <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+            {Object.entries(drivers).map(([k, v]) => (
+              <div key={k}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                  <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{driverLabels[k]}</span>
+                  <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: driverColors[k] }}>{v}/10</span>
+                </div>
+                <div style={{ height:'6px', background:'var(--surface2)', borderRadius:'2px' }}>
+                  <div style={{ width:`${v * 10}%`, height:'100%', background: driverColors[k], borderRadius:'2px', transition:'width 0.3s' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  // ── Step 3: Probability dashboard ──
+  if (step === 3) {
+    const ci = { low: Math.max(5, geoProb - 8), high: Math.min(95, geoProb + 10) };
+    const polymarket = 34;
+    const radarScores: Record<string, number> = {
+      외교채널: drivers['외교채널'] * 10,
+      군사강도: (10 - drivers['군사강도']) * 10,
+      경제압박: (10 - drivers['경제압박']) * 10,
+      이란내부: drivers['이란내부'] * 10,
+      호르무즈: (10 - drivers['호르무즈']) * 10,
+    };
+    return (
+      <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 260px', gap:'16px' }}>
+
+          {/* Left: drivers + radar */}
+          <Panel title="드라이버 분석">
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'16px' }}>
+              {Object.entries(drivers).map(([k, v]) => (
+                <div key={k}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
+                    <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{driverLabels[k]}</span>
+                    <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: driverColors[k] }}>{v}/10</span>
+                  </div>
+                  <div style={{ height:'5px', background:'var(--surface2)', borderRadius:'2px' }}>
+                    <div style={{ width:`${v * 10}%`, height:'100%', background: driverColors[k], borderRadius:'2px' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', justifyContent:'center' }}>
+              <RadarChart scores={radarScores} size={200} />
+            </div>
+          </Panel>
+
+          {/* Center: probability */}
+          <Panel title="종전 가능성">
+            <div style={{ textAlign:'center', padding:'12px 0' }}>
+              <div style={{ fontSize:'64px', fontWeight:700, fontFamily:'IBM Plex Mono', color: probColor(geoProb), lineHeight:1 }}>
+                {geoProb}%
+              </div>
+              <div style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginTop:'4px' }}>
+                CI {ci.low}–{ci.high}%
+              </div>
+
+              {/* Bell curve SVG */}
+              <div style={{ margin:'20px 0' }}>
+                <svg width="220" height="80" viewBox="0 0 220 80">
+                  <path
+                    d={`M 10,70 C 30,70 40,10 110,10 C 180,10 190,70 210,70`}
+                    fill="none" stroke="var(--border)" strokeWidth="1.5"
+                  />
+                  {/* Filled area for CI range */}
+                  <path
+                    d={`M ${10 + ci.low * 2},70 C ${10 + ci.low * 2 + 10},40 ${10 + geoProb * 2 - 5},12 ${10 + geoProb * 2},10 C ${10 + geoProb * 2 + 5},12 ${10 + ci.high * 2 - 10},40 ${10 + ci.high * 2},70 Z`}
+                    fill="var(--brand)" opacity="0.15"
+                  />
+                  <line x1={10 + geoProb * 2} y1="8" x2={10 + geoProb * 2} y2="70" stroke="var(--brand)" strokeWidth="2" />
+                  <text x={10 + geoProb * 2} y="6" textAnchor="middle" fill="var(--brand)" fontSize="9" fontFamily="IBM Plex Mono">{geoProb}%</text>
+                  <text x="10" y="78" fill="var(--text-dim)" fontSize="8" fontFamily="IBM Plex Mono">0</text>
+                  <text x="200" y="78" fill="var(--text-dim)" fontSize="8" fontFamily="IBM Plex Mono">100</text>
+                </svg>
+              </div>
+
+              {/* Market comparison */}
+              <div style={{ background:'var(--surface2)', borderRadius:'2px', padding:'10px 14px', textAlign:'left' }}>
+                <div style={{ fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', letterSpacing:'1px', marginBottom:'8px' }}>시장 예측 비교</div>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
+                  <span style={{ fontSize:'12px', color:'var(--text)' }}>KT 분석</span>
+                  <span style={{ fontSize:'14px', fontFamily:'IBM Plex Mono', fontWeight:700, color: probColor(geoProb) }}>{geoProb}%</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between' }}>
+                  <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Polymarket</span>
+                  <span style={{ fontSize:'14px', fontFamily:'IBM Plex Mono', fontWeight:700, color:'var(--text-mid)' }}>{polymarket}%</span>
+                </div>
+                <div style={{ marginTop:'6px', fontSize:'10px', color:'var(--text-dim)' }}>
+                  {geoProb < polymarket ? `시장 대비 −${polymarket - geoProb}pp (보수적 판단)` : `시장 대비 +${geoProb - polymarket}pp`}
+                </div>
+              </div>
+            </div>
+          </Panel>
+
+          {/* Right: QR + vote count */}
+          <Panel title="분석 공유">
+            {/* QR code SVG (decorative) */}
+            <div style={{ display:'flex', justifyContent:'center', marginBottom:'12px' }}>
+              <svg width="120" height="120" viewBox="0 0 120 120" style={{ border:'1px solid var(--border)', padding:'8px', background:'#fff' }}>
+                {/* QR pattern — decorative blocks */}
+                {[
+                  [0,0,7,7], [14,0,7,7], [0,14,7,7],
+                  [2,2,3,3], [16,2,3,3], [2,16,3,3],
+                ].map(([x,y,w,h],i) => <rect key={i} x={x*3+6} y={y*3+6} width={w*3} height={h*3} fill="#1A1A1A" />)}
+                {Array.from({ length: 64 }).map((_, i) => {
+                  const cx = (i % 8) * 9 + 15, cy = Math.floor(i / 8) * 9 + 15;
+                  return Math.random() > 0.5 ? <rect key={`d${i}`} x={cx} y={cy} width={7} height={7} fill="#1A1A1A" /> : null;
+                })}
+                <rect x="48" y="48" width="24" height="24" fill="#E6001C" />
+                <text x="60" y="64" textAnchor="middle" fill="#fff" fontSize="9" fontFamily="IBM Plex Mono" fontWeight="bold">KT</text>
+              </svg>
+            </div>
+            <div style={{ fontSize:'11px', color:'var(--text-dim)', textAlign:'center', marginBottom:'12px', fontFamily:'IBM Plex Mono' }}>
+              QR로 의견 제출
+            </div>
+            <div style={{ background:'var(--surface2)', borderRadius:'2px', padding:'10px', textAlign:'center', marginBottom:'12px' }}>
+              <div style={{ fontSize:'24px', fontWeight:700, fontFamily:'IBM Plex Mono', color:'var(--text)' }}>{votes}</div>
+              <div style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>누적 응답</div>
+            </div>
+            {/* Simulate vote button for demo */}
+            <button
+              onClick={() => {
+                setVotes(v => v + 1);
+                const keys = Object.keys(drivers);
+                const k = keys[Math.floor(Math.random() * keys.length)];
+                setDrivers(prev => ({ ...prev, [k]: Math.min(10, Math.max(1, prev[k] + (Math.random() > 0.5 ? 0.5 : -0.5))) }));
+              }}
+              style={{ ...actionBtn, width:'100%', marginBottom:'8px', fontSize:'11px', padding:'6px' }}
+            >
+              + 시그널 입력 (데모)
+            </button>
+            <div style={{ fontSize:'10px', color:'var(--text-dim)', lineHeight:1.5 }}>
+              익명 응답 기반으로 드라이버가 실시간 업데이트됩니다.
+            </div>
+          </Panel>
+        </div>
+
+        <div style={{ display:'flex', gap:'12px', justifyContent:'flex-end' }}>
+          <button onClick={() => window.open(`/report/geo-iran`, '_blank')} style={{
+            ...actionBtn, background:'var(--surface)', border:'1px solid var(--border)', color:'var(--text)',
+          }}>
+            리포트 미리보기
+          </button>
+          <button onClick={() => setStep(4)} style={actionBtn}>리포트 발행 →</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 4: Report published ──
+  return (
+    <Panel title="리포트 발행 완료">
+      <div style={{ textAlign:'center', padding:'40px 0' }}>
+        <div style={{ fontSize:'48px', marginBottom:'16px' }}>✓</div>
+        <div style={{ fontSize:'16px', fontWeight:700, color:'var(--text)', marginBottom:'8px' }}>
+          지정학 분석 리포트가 발행되었습니다
+        </div>
+        <div style={{ fontSize:'13px', color:'var(--text-dim)', marginBottom:'24px' }}>
+          {query || '이란 전쟼 종전 가능성'} — 종전 가능성 {geoProb}%
+        </div>
+        <div style={{ display:'flex', gap:'12px', justifyContent:'center' }}>
+          <button onClick={() => window.open(`/report/geo-iran`, '_blank')} style={actionBtn}>
+            리포트 열기
+          </button>
+          <button onClick={() => setStep(1)} style={{
+            ...actionBtn, background:'var(--surface)', border:'1px solid var(--border)', color:'var(--text)',
+          }}>
+            새 분석
+          </button>
+        </div>
+      </div>
+    </Panel>
+  );
+}

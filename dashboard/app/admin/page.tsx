@@ -1955,6 +1955,12 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
   const [orgRows, setOrgRows] = useState<OrgRow[]>([]);
   const [vdcB, setVdcB] = useState<VdcBRow[]>([]);
   const [qna, setQna] = useState<QnaRow[]>([]);
+  // v1.2: Pillar 사유·대응 수동 편집
+  const [pillarRationale, setPillarRationale] = useState<Record<string, { reason: string; action: string }>>({
+    S: { reason: '', action: '' }, V: { reason: '', action: '' },
+    D: { reason: '', action: '' }, P: { reason: '', action: '' }, E: { reason: '', action: '' },
+  });
+  const [loadingLlm, setLoadingLlm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [loaded, setLoaded] = useState(false);
@@ -1994,6 +2000,14 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
         setOrgRows((d.deal.team_members ?? []).map((m: { division?: string; hq?: string; dept?: string; team?: string; role?: string; count?: number; name?: string }) => ({ division: m.division || '', hq: m.hq || '', dept: m.dept || m.name || '', team: m.team || '', role: m.role || '', count: m.count != null ? String(m.count) : '' })));
         setVdcB((d.deal.vdc_b_result ?? []).map((v: { decision?: string; detail?: string }) => ({ decision: v.decision || '', detail: v.detail || '' })));
         setQna((d.deal.qna_items ?? []).map((q: { question?: string; answer?: string }) => ({ question: q.question || '', answer: q.answer || '' })));
+        const pr = d.deal.pillar_rationale ?? {};
+        setPillarRationale({
+          S: { reason: pr.S?.reason || '', action: pr.S?.action || '' },
+          V: { reason: pr.V?.reason || '', action: pr.V?.action || '' },
+          D: { reason: pr.D?.reason || '', action: pr.D?.action || '' },
+          P: { reason: pr.P?.reason || '', action: pr.P?.action || '' },
+          E: { reason: pr.E?.reason || '', action: pr.E?.action || '' },
+        });
         setLoaded(true);
       }).catch(() => setLoaded(true));
   }, [dealId]);
@@ -2038,6 +2052,7 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
       team_members: orgRows.filter(m => m.dept || m.team || m.role).map(m => ({ division: m.division, hq: m.hq, dept: m.dept, team: m.team, role: m.role, ...(m.count ? { count: parseInt(m.count) || 0 } : {}) })),
       vdc_b_result: vdcB.filter(v => v.decision || v.detail).map(v => ({ decision: v.decision, detail: v.detail })),
       qna_items: qna.filter(q => q.question || q.answer).map(q => ({ question: q.question, answer: q.answer })),
+      pillar_rationale: pillarRationale,
     };
     const res = await fetch(`/api/admin/deals/${dealId}`, {
       method: 'PATCH', credentials: 'include',
@@ -2237,6 +2252,45 @@ function DashboardMetaSection({ dealId }: { dealId: number }) {
         </div>
       ))}
       <button onClick={() => setOrgRows(rs => [...rs, { division: '', hq: '', dept: '', team: '', role: '', count: '' }])} style={addBtn}>+ 조직</button>
+
+      {/* Pillar 사유·개선 액션 */}
+      <div style={sectionLabel}>Pillar 사유·개선 액션 (LLM 초안 또는 수동)</div>
+      <button
+        onClick={async () => {
+          setLoadingLlm(true);
+          try {
+            const res = await fetch(`/api/report/${dealId}`, { method: 'POST', credentials: 'include' });
+            const json = await res.json();
+            if (json.pillar_rationale && typeof json.pillar_rationale === 'object') {
+              const pr = json.pillar_rationale;
+              setPillarRationale({
+                S: { reason: pr.S?.reason || '', action: pr.S?.action || '' },
+                V: { reason: pr.V?.reason || '', action: pr.V?.action || '' },
+                D: { reason: pr.D?.reason || '', action: pr.D?.action || '' },
+                P: { reason: pr.P?.reason || '', action: pr.P?.action || '' },
+                E: { reason: pr.E?.reason || '', action: pr.E?.action || '' },
+              });
+            }
+          } catch { /* ignore */ }
+          setLoadingLlm(false);
+        }}
+        disabled={loadingLlm}
+        style={{ ...S.btn(), padding: '4px 12px', fontSize: '11px', marginBottom: '10px' }}
+      >
+        {loadingLlm ? '불러오는 중...' : 'LLM 초안 채우기'}
+      </button>
+      {(['S', 'V', 'D', 'P', 'E'] as const).map(pillar => {
+        const labels: Record<string, string> = { S: 'S 사전영업', V: 'V Value', D: 'D 차별화', P: 'P 가격', E: 'E Delivery' };
+        return (
+          <div key={pillar} style={{ display: 'flex', gap: '6px', marginBottom: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', color: 'var(--cyan)', minWidth: '70px', fontFamily: 'IBM Plex Mono' }}>{labels[pillar]}</span>
+            <input value={pillarRationale[pillar]?.reason ?? ''} onChange={e => setPillarRationale(pr => ({ ...pr, [pillar]: { ...pr[pillar], reason: e.target.value } }))}
+              placeholder="현황 사유" style={{ ...S.input, width: '260px', fontSize: '12px', padding: '4px 8px' }} />
+            <input value={pillarRationale[pillar]?.action ?? ''} onChange={e => setPillarRationale(pr => ({ ...pr, [pillar]: { ...pr[pillar], action: e.target.value } }))}
+              placeholder="개선 액션" style={{ ...S.input, width: '260px', fontSize: '12px', padding: '4px 8px' }} />
+          </div>
+        );
+      })}
 
       {/* VDC-B 의결 */}
       <div style={sectionLabel}>VDC-B 의결 결과</div>
