@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_MODEL } from '@/lib/geminiModel';
+import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 
 function extractJsonArray(text: string): unknown[] | null {
@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
     // Generate signal cards via Gemini
     let cards: { label: string; description: string; driver_deltas: Record<string, number>; direction: string }[] = [];
 
-    if (process.env.GEMINI_API_KEY) {
+    if (GEMINI_KEY) {
       try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
         const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
         const prompt = `다음 지정학 분석 텍스트를 읽고 참가자들이 선택할 수 있는 시그널 카드를 4~6개 생성하세요.
 

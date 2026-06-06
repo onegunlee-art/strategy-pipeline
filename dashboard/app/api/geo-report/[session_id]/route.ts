@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_MODEL } from '@/lib/geminiModel';
+import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 import { aggregate } from '@/lib/geoAggregate';
 
@@ -32,7 +32,7 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
 
     const agg = await aggregate(db, sessionId);
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!GEMINI_KEY) {
       return NextResponse.json({
         topic: session.topic,
         geo_prob: agg.geoProb,
@@ -47,7 +47,7 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
       });
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI(GEMINI_KEY);
     const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
     const cardSummary = cardRows.map((c: { label: string; direction: string; vote_count: number }) =>
