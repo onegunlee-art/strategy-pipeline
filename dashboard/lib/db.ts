@@ -482,6 +482,37 @@ async function runInit() {
     CREATE INDEX IF NOT EXISTS idx_dart_filings_corp ON dart_filings (corp_code, rcept_dt DESC);
     CREATE INDEX IF NOT EXISTS idx_dart_filings_relevance ON dart_filings (relevance_score DESC);
   `);
+
+  // v1.4: 지정학 분석 인프라
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS geo_sessions (
+      id SERIAL PRIMARY KEY,
+      topic TEXT NOT NULL,
+      analysis_text TEXT,
+      driver_scores JSONB,
+      geo_prob INTEGER,
+      token TEXT UNIQUE NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS geo_signal_cards (
+      id SERIAL PRIMARY KEY,
+      session_id INTEGER REFERENCES geo_sessions(id) ON DELETE CASCADE,
+      label TEXT NOT NULL,
+      description TEXT,
+      driver_deltas JSONB,
+      direction TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS geo_votes (
+      id SERIAL PRIMARY KEY,
+      session_id INTEGER REFERENCES geo_sessions(id),
+      card_id INTEGER REFERENCES geo_signal_cards(id),
+      voted_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_geo_votes_session ON geo_votes(session_id);
+    CREATE INDEX IF NOT EXISTS idx_geo_cards_session ON geo_signal_cards(session_id);
+  `);
+
   // v0.4: 2025 Q4 PDF 시드 (idempotent)
   try {
     const { seedFromBundledData } = await import('./seed');
