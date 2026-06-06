@@ -1311,12 +1311,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     return () => clearInterval(id);
   }, [step, geoToken]);
 
-  // 데모용 투표 URL (실제 투표 엔드포인트는 추후 연동). SSR 안전 처리.
-  const [voteUrl, setVoteUrl] = useState('https://strategy-pipeline.vercel.app/vote/geo-iran');
-  useEffect(() => {
-    if (typeof window !== 'undefined') setVoteUrl(`${window.location.origin}/vote/geo-iran`);
-  }, []);
-
   // ──────────────────────────────────────────────────────────────────────────
   // TODO(월요일): the gist RAG API 연동 지점
   // 현재는 데모용 하드코딩 텍스트. 월요일에 아래 ANALYSIS_TEXT를
