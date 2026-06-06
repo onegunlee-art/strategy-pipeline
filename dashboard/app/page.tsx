@@ -1258,23 +1258,58 @@ function GeoProcessSidebar({ step, onStepClick }: { step: number; onStepClick: (
 
 // ─── Geo: Step Content ────────────────────────────────────────────────────────
 
+interface GeoSignalCard {
+  id: number;
+  label: string;
+  description: string;
+  driver_deltas: Record<string, number>;
+  direction: string;
+}
+
 function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => void }) {
   const [query, setQuery] = useState('');
   const [typedLen, setTypedLen] = useState(0);
-  const [drivers, setDrivers] = useState<Record<string, number>>({
+  const [drivers] = useState<Record<string, number>>({
     외교채널: 2, 군사강도: 8, 경제압박: 8, 이란내부: 3, 호르무즈: 7,
   });
-  const [votes, setVotes] = useState(0);
 
-  const geoProb = Math.min(95, Math.max(5, Math.round(
-    (drivers['외교채널'] + (10 - drivers['군사강도']) + (10 - drivers['경제압박']) + drivers['이란내부'] + (10 - drivers['호르무즈'])) / 5 * 10
+  // Session state
+  const [geoSessionId, setGeoSessionId] = useState<number | null>(null);
+  const [geoToken, setGeoToken] = useState<string | null>(null);
+  const [geoCards, setGeoCards] = useState<GeoSignalCard[]>([]);
+  const [geoVoteCounts, setGeoVoteCounts] = useState<Record<number, number>>({});
+  const [liveDrivers, setLiveDrivers] = useState<Record<string, number> | null>(null);
+  const [liveProb, setLiveProb] = useState<number | null>(null);
+  const [startingSession, setStartingSession] = useState(false);
+
+  const activeDrivers = liveDrivers ?? drivers;
+  const geoProb = liveProb ?? Math.min(95, Math.max(5, Math.round(
+    (activeDrivers['외교채널'] + (10 - activeDrivers['군사강도']) + (10 - activeDrivers['경제압박']) + activeDrivers['이란내부'] + (10 - activeDrivers['호르무즈'])) / 5 * 10
   )));
+  const totalVotes = Object.values(geoVoteCounts).reduce((a, b) => a + b, 0);
 
-  // 데모용 투표 URL (실제 투표 엔드포인트는 추후 연동). SSR 안전 처리.
-  const [voteUrl, setVoteUrl] = useState('https://strategy-pipeline.vercel.app/vote/geo-iran');
+  const [voteUrl, setVoteUrl] = useState('');
   useEffect(() => {
-    if (typeof window !== 'undefined') setVoteUrl(`${window.location.origin}/vote/geo-iran`);
-  }, []);
+    if (typeof window !== 'undefined' && geoToken) {
+      setVoteUrl(`${window.location.origin}/vote/geo/${geoToken}`);
+    }
+  }, [geoToken]);
+
+  // Polling: refresh session data every 5s while in step 3
+  useEffect(() => {
+    if (step !== 3 || !geoToken) return;
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/geo/session/${geoToken}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.drivers) setLiveDrivers(json.drivers);
+        if (json.geoProb != null) setLiveProb(json.geoProb);
+        if (json.voteCounts) setGeoVoteCounts(json.voteCounts);
+      } catch { /* ignore */ }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [step, geoToken]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // TODO(월요일): the gist RAG API 연동 지점
@@ -1286,6 +1321,32 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   // GIST 성능 영향 없도록 검색 호출 → RAG가 결과만 push 하는 방식.
   // ──────────────────────────────────────────────────────────────────────────
   const ANALYSIS_TEXT = `분석 주제: ${query || '이란 전쟼 종전 가능성'}\n\n━━ 핵심 결론 ━━\n현재 이란-이스라엘 직접 충돌 구도와 호르무즈 해협 봉쇄 리스크가 교전 종료 가능성을 구조적으로 억제하고 있습니다. 외교 채널은 오만·카타르 중재 라인이 유지되고 있으나 실질적 협상 진전은 미미합니다.\n\n━━ 일치 신호 (종전 가능성 ↑) ━━\n• 오만 중재 채널 재가동 (2026.05)\n• 이란 내 경제 위기 심화 → 온건파 입지 강화\n• 미국-이란 간접 접촉 재개 (제네바 채널)\n\n━━ 충돌 신호 (종전 가능성 ↓) ━━\n• 이란 혁명수비대 미사일 발사 지속\n• 이스라엘 선제타격 옵션 공개 천명\n• 호르무즈 해협 훈련 강도 증가\n\n━━ 종합 판단 ━━\n단기(90일) 종전 가능성: 낮음. 중기(1년) 시나리오에서 경제 압박 심화 시 협상 가능성 열려 있으나, 군사적 긴장이 선행 완화되어야 합니다.`;
+
+  const handleEnterStep3 = async () => {
+    setStartingSession(true);
+    try {
+      const res = await fetch('/api/geo/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: query || '이란 전쟼 종전 가능성',
+          analysisText: ANALYSIS_TEXT,
+          driverScores: drivers,
+          geoProb: Math.min(95, Math.max(5, Math.round(
+            (drivers['외교채널'] + (10 - drivers['군사강도']) + (10 - drivers['경제압박']) + drivers['이란내부'] + (10 - drivers['호르무즈'])) / 5 * 10
+          ))),
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setGeoSessionId(json.sessionId);
+        setGeoToken(json.token);
+        setGeoCards(json.cards ?? []);
+      }
+    } catch { /* proceed anyway */ }
+    setStartingSession(false);
+    setStep(3);
+  };
 
   useEffect(() => {
     if (step !== 2) { setTypedLen(0); return; }
@@ -1377,8 +1438,9 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             )}
           </div>
           {typedLen >= ANALYSIS_TEXT.length && (
-            <div style={{ marginTop:'16px', display:'flex', justifyContent:'flex-end' }}>
-              <button onClick={() => setStep(3)} style={actionBtn}>확인 →</button>
+            <div style={{ marginTop:'16px', display:'flex', justifyContent:'flex-end', gap:'12px', alignItems:'center' }}>
+              {startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>시그널 카드 생성 중...</span>}
+              <button onClick={handleEnterStep3} disabled={startingSession} style={{ ...actionBtn, opacity: startingSession ? 0.6 : 1 }}>확인 →</button>
             </div>
           )}
         </Panel>
@@ -1406,18 +1468,18 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   if (step === 3) {
     const polymarket = 34;
     // 시그널이 누적될수록 표준편차가 줄어 분포가 좁아진다.
-    const sigma = 18 / Math.sqrt(1 + votes / 3);
+    const sigma = 18 / Math.sqrt(1 + totalVotes / 3);
     const ci = {
       low: Math.max(0, Math.round(geoProb - sigma)),
       high: Math.min(100, Math.round(geoProb + sigma)),
     };
     // RadarChart는 0~1 스케일. 종전 가능성에 기여하는 방향으로 정규화.
     const radarScores: Record<string, number> = {
-      외교채널: drivers['외교채널'] / 10,
-      군사강도: (10 - drivers['군사강도']) / 10,
-      경제압박: (10 - drivers['경제압박']) / 10,
-      이란내부: drivers['이란내부'] / 10,
-      호르무즈: (10 - drivers['호르무즈']) / 10,
+      외교채널: activeDrivers['외교채널'] / 10,
+      군사강도: (10 - activeDrivers['군사강도']) / 10,
+      경제압박: (10 - activeDrivers['경제압박']) / 10,
+      이란내부: activeDrivers['이란내부'] / 10,
+      호르무즈: (10 - activeDrivers['호르무즈']) / 10,
     };
     const geoPillars = [
       { key: '외교채널', label: '외교' },
@@ -1433,7 +1495,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           {/* Left: drivers + radar */}
           <Panel title="드라이버 분석">
             <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'16px' }}>
-              {Object.entries(drivers).map(([k, v]) => (
+              {Object.entries(activeDrivers).map(([k, v]) => (
                 <div key={k}>
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
                     <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{driverLabels[k]}</span>
@@ -1483,46 +1545,54 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             </div>
           </Panel>
 
-          {/* Right: QR + vote count */}
+          {/* Right: QR + signal cards */}
           <Panel title="분석 공유">
-            {/* 실제 스캔 가능한 QR */}
+            {/* QR */}
             <div style={{ display:'flex', justifyContent:'center', marginBottom:'12px' }}>
               <div style={{ padding:'8px', background:'#fff', border:'1px solid var(--border)', borderRadius:'2px' }}>
-                <QRCodeSVG value={voteUrl} size={120} level="M" fgColor="#1A1A1A" bgColor="#FFFFFF" />
+                {voteUrl
+                  ? <QRCodeSVG value={voteUrl} size={120} level="M" fgColor="#1A1A1A" bgColor="#FFFFFF" />
+                  : <div style={{ width:120, height:120, display:'flex', alignItems:'center', justifyContent:'center', color:'#999', fontSize:'11px' }}>QR 생성 중...</div>
+                }
               </div>
             </div>
             <div style={{ fontSize:'11px', color:'var(--text-dim)', textAlign:'center', marginBottom:'12px', fontFamily:'IBM Plex Mono' }}>
               QR로 의견 제출
             </div>
             <div style={{ background:'var(--surface2)', borderRadius:'2px', padding:'10px', textAlign:'center', marginBottom:'12px' }}>
-              <div style={{ fontSize:'24px', fontWeight:700, fontFamily:'IBM Plex Mono', color:'var(--text)' }}>{votes}</div>
+              <div style={{ fontSize:'24px', fontWeight:700, fontFamily:'IBM Plex Mono', color:'var(--text)' }}>{totalVotes}</div>
               <div style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>누적 응답</div>
             </div>
-            {/* Simulate vote button for demo */}
-            <button
-              onClick={() => {
-                setVotes(v => v + 1);
-                const keys = Object.keys(drivers);
-                const k = keys[Math.floor(Math.random() * keys.length)];
-                setDrivers(prev => ({ ...prev, [k]: Math.min(10, Math.max(1, prev[k] + (Math.random() > 0.5 ? 0.5 : -0.5))) }));
-              }}
-              style={{ ...actionBtn, width:'100%', marginBottom:'8px', fontSize:'11px', padding:'6px' }}
-            >
-              + 시그널 입력 (데모)
-            </button>
-            <div style={{ fontSize:'10px', color:'var(--text-dim)', lineHeight:1.5 }}>
+
+            {/* Signal cards */}
+            <div style={{ fontSize:'10px', color:'var(--text-dim)', marginBottom:'8px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px' }}>시그널 카드</div>
+            {geoCards.length === 0
+              ? <div style={{ fontSize:'11px', color:'var(--text-dim)', padding:'8px 0' }}>카드 생성 중...</div>
+              : geoCards.map(card => (
+                <div key={card.id} style={{
+                  padding:'8px 10px', marginBottom:'6px',
+                  border:`1px solid ${card.direction === 'agree' ? 'var(--green)' : 'var(--red)'}`,
+                  borderRadius:'2px', fontSize:'11px',
+                  display:'flex', justifyContent:'space-between', alignItems:'center',
+                }}>
+                  <div>
+                    <div style={{ fontWeight:600, color:'var(--text)', marginBottom:'2px' }}>{card.label}</div>
+                    <div style={{ color:'var(--text-dim)', fontSize:'10px' }}>{card.description}</div>
+                  </div>
+                  <div style={{ fontFamily:'IBM Plex Mono', fontWeight:700, fontSize:'13px', color:'var(--text-mid)', minWidth:'24px', textAlign:'right' }}>
+                    {geoVoteCounts[card.id] ?? 0}
+                  </div>
+                </div>
+              ))
+            }
+            <div style={{ fontSize:'10px', color:'var(--text-dim)', lineHeight:1.5, marginTop:'8px' }}>
               익명 응답 기반으로 드라이버가 실시간 업데이트됩니다.
             </div>
           </Panel>
         </div>
 
         <div style={{ display:'flex', gap:'12px', justifyContent:'flex-end' }}>
-          <button onClick={() => window.open(`/report/geo-iran`, '_blank')} style={{
-            ...actionBtn, background:'var(--surface)', border:'1px solid var(--border)', color:'var(--text)',
-          }}>
-            리포트 미리보기
-          </button>
-          <button onClick={() => setStep(4)} style={actionBtn}>리포트 발행 →</button>
+          <button onClick={() => { setStep(4); if (geoSessionId) window.open(`/report/geo/${geoSessionId}`, '_blank'); }} style={actionBtn}>리포트 발행 →</button>
         </div>
       </div>
     );
@@ -1540,7 +1610,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           {query || '이란 전쟼 종전 가능성'} — 종전 가능성 {geoProb}%
         </div>
         <div style={{ display:'flex', gap:'12px', justifyContent:'center' }}>
-          <button onClick={() => window.open(`/report/geo-iran`, '_blank')} style={actionBtn}>
+          <button onClick={() => window.open(`/report/geo/${geoSessionId}`, '_blank')} style={actionBtn}>
             리포트 열기
           </button>
           <button onClick={() => setStep(1)} style={{
