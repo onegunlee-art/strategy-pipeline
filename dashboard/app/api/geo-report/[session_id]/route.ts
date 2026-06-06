@@ -4,6 +4,8 @@ import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 import { aggregate } from '@/lib/geoAggregate';
 
+export const maxDuration = 60;
+
 export async function POST(_req: NextRequest, ctx: { params: { session_id: string } }) {
   try {
     const sessionId = parseInt(ctx.params.session_id, 10);

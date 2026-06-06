@@ -4,6 +4,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 
+export const maxDuration = 60;
+
 function extractJsonArray(text: string): unknown[] | null {
   const start = text.indexOf('[');
   if (start === -1) return null;
