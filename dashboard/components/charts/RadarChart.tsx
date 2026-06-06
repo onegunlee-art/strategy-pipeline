@@ -5,6 +5,8 @@
 interface RadarChartProps {
   scores: Record<string, number>;  // pillar_scores from prediction (0~1)
   size?: number;
+  pillars?: { key: string; label: string }[];  // 축 정의 override (기본: KT 5 pillar)
+  color?: string;                                // 데이터 색 (기본: green)
 }
 
 const PILLARS = [
@@ -15,25 +17,26 @@ const PILLARS = [
   { key: 'E', label: 'Delivery' },
 ];
 
-// Angles: top=−90°, then clockwise 72° each
-const ANGLES = PILLARS.map((_, i) => -Math.PI / 2 + (2 * Math.PI * i) / 5);
 const CX = 150, CY = 145, R = 95;
 
 function polar(angle: number, r: number) {
   return { x: CX + r * Math.cos(angle), y: CY + r * Math.sin(angle) };
 }
 
-function polygonPoints(values: number[]): string {
-  return values
-    .map((v, i) => {
+export default function RadarChart({ scores, size = 300, pillars, color }: RadarChartProps) {
+  const axes = pillars ?? PILLARS;
+  const n = axes.length;
+  // Angles: top=−90°, then clockwise 360/n each
+  const ANGLES = axes.map((_, i) => -Math.PI / 2 + (2 * Math.PI * i) / n);
+  const dataColor = color ?? 'var(--green)';
+
+  const polygonPoints = (values: number[]): string =>
+    values.map((v, i) => {
       const pt = polar(ANGLES[i], v * R);
       return `${pt.x},${pt.y}`;
-    })
-    .join(' ');
-}
+    }).join(' ');
 
-export default function RadarChart({ scores, size = 300 }: RadarChartProps) {
-  const vals = PILLARS.map(p => Math.max(0, Math.min(1, scores[p.key] ?? 0)));
+  const vals = axes.map(p => Math.max(0, Math.min(1, scores[p.key] ?? 0)));
   const hasData = vals.some(v => v > 0);
 
   const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
@@ -45,7 +48,7 @@ export default function RadarChart({ scores, size = 300 }: RadarChartProps) {
       {/* Grid circles (pentagons) */}
       {gridLevels.map(lv => (
         <polygon key={lv}
-          points={polygonPoints(PILLARS.map(() => lv))}
+          points={polygonPoints(axes.map(() => lv))}
           fill="none"
           stroke="var(--border)"
           strokeWidth="0.8"
@@ -69,14 +72,15 @@ export default function RadarChart({ scores, size = 300 }: RadarChartProps) {
         <>
           <polygon
             points={polygonPoints(vals)}
-            fill="rgba(26,127,60,0.15)"
-            stroke="var(--green)"
+            fill={dataColor}
+            fillOpacity={0.15}
+            stroke={dataColor}
             strokeWidth="2"
             strokeLinejoin="round"
           />
           {vals.map((v, i) => {
             const pt = polar(ANGLES[i], v * R);
-            return <circle key={i} cx={pt.x} cy={pt.y} r="4" fill="var(--green)" />;
+            return <circle key={i} cx={pt.x} cy={pt.y} r="4" fill={dataColor} />;
           })}
         </>
       )}
@@ -88,7 +92,7 @@ export default function RadarChart({ scores, size = 300 }: RadarChartProps) {
       )}
 
       {/* Labels */}
-      {PILLARS.map((p, i) => {
+      {axes.map((p, i) => {
         const labelR = R + 22;
         const pt = polar(ANGLES[i], labelR);
         const score = hasData ? (vals[i] * 10).toFixed(1) : null;

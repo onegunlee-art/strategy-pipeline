@@ -1,1 +1,8 @@
 .claude/settings.local.json
+
+# 데모/발표용 목업 산출물 (코드베이스 미포함)
+make_ui_*.py
+make_demo_*.py
+make_ui_mockup.py
+ui_v*_screen*.png
+*.pptx
