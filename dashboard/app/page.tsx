@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import RadarChart from '@/components/charts/RadarChart';
+import ProbabilityDistribution from '@/components/charts/ProbabilityDistribution';
+import { QRCodeSVG } from 'qrcode.react';
 import PositionMatrix from '@/components/charts/PositionMatrix';
 import PartnerNetwork from '@/components/charts/PartnerNetwork';
 import TimelineChart from '@/components/charts/TimelineChart';
@@ -97,6 +99,9 @@ function probColor(p: number) {
   return p >= 65 ? 'var(--green)' : p >= 45 ? 'var(--yellow)' : 'var(--red)';
 }
 
+// 수주전략 DB가 준비되면 true로 바꿔 모드 토글을 노출한다.
+const SHOW_MODE_TOGGLE = false;
+
 function todayKST() {
   return new Date().toLocaleDateString('ko-KR', {
     timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -151,7 +156,8 @@ export default function ExecutiveDashboard() {
   const [scenarios, setScenarios] = useState<SavedScenario[]>([]);
   const [actionLog, setActionLog] = useState<ActionLogEntry[]>([]);
 
-  const [mode, setMode] = useState<'bid' | 'geo'>('bid');
+  // 데모: 수주전략 DB가 아직 없어 지정학 분석을 기본 화면으로. 토글은 숨김.
+  const [mode, setMode] = useState<'bid' | 'geo'>('geo');
   const [geoStep, setGeoStep] = useState(1);
 
   const simProb = simSubs
@@ -281,18 +287,20 @@ export default function ExecutiveDashboard() {
             <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>수주 전략 플랫폼</span>
           </div>
 
-          {/* Mode toggle */}
-          <div style={{ display:'flex', gap:'4px', fontFamily:'IBM Plex Mono', fontSize:'11px', flexShrink:0 }}>
-            {(['bid','geo'] as const).map(m => (
-              <button key={m} onClick={() => setMode(m)} style={{
-                padding:'5px 12px', borderRadius:'2px', border:'none', cursor:'pointer',
-                background: mode===m ? 'var(--brand)' : 'var(--surface2)',
-                color: mode===m ? '#fff' : 'var(--text-mid)', letterSpacing:'0.3px',
-              }}>
-                {m === 'bid' ? '수주전략' : '지정학 분석'}
-              </button>
-            ))}
-          </div>
+          {/* Mode toggle (수주전략 DB 준비 시 SHOW_MODE_TOGGLE=true) */}
+          {SHOW_MODE_TOGGLE && (
+            <div style={{ display:'flex', gap:'4px', fontFamily:'IBM Plex Mono', fontSize:'11px', flexShrink:0 }}>
+              {(['bid','geo'] as const).map(m => (
+                <button key={m} onClick={() => setMode(m)} style={{
+                  padding:'5px 12px', borderRadius:'2px', border:'none', cursor:'pointer',
+                  background: mode===m ? 'var(--brand)' : 'var(--surface2)',
+                  color: mode===m ? '#fff' : 'var(--text-mid)', letterSpacing:'0.3px',
+                }}>
+                  {m === 'bid' ? '수주전략' : '지정학 분석'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Deal selector */}
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
@@ -1262,6 +1270,12 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     (drivers['외교채널'] + (10 - drivers['군사강도']) + (10 - drivers['경제압박']) + drivers['이란내부'] + (10 - drivers['호르무즈'])) / 5 * 10
   )));
 
+  // 데모용 투표 URL (실제 투표 엔드포인트는 추후 연동). SSR 안전 처리.
+  const [voteUrl, setVoteUrl] = useState('https://strategy-pipeline.vercel.app/vote/geo-iran');
+  useEffect(() => {
+    if (typeof window !== 'undefined') setVoteUrl(`${window.location.origin}/vote/geo-iran`);
+  }, []);
+
   // ──────────────────────────────────────────────────────────────────────────
   // TODO(월요일): the gist RAG API 연동 지점
   // 현재는 데모용 하드코딩 텍스트. 월요일에 아래 ANALYSIS_TEXT를
@@ -1375,10 +1389,10 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
               <div key={k}>
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
                   <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{driverLabels[k]}</span>
-                  <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: driverColors[k] }}>{v}/10</span>
+                  <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: driverColors[k] }}>{v.toFixed(1)}/10</span>
                 </div>
                 <div style={{ height:'6px', background:'var(--surface2)', borderRadius:'2px' }}>
-                  <div style={{ width:`${v * 10}%`, height:'100%', background: driverColors[k], borderRadius:'2px', transition:'width 0.3s' }} />
+                  <div style={{ width:`${Math.max(4, v * 10)}%`, height:'100%', background: driverColors[k], borderRadius:'2px', transition:'width 0.3s' }} />
                 </div>
               </div>
             ))}
@@ -1390,15 +1404,28 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
   // ── Step 3: Probability dashboard ──
   if (step === 3) {
-    const ci = { low: Math.max(5, geoProb - 8), high: Math.min(95, geoProb + 10) };
     const polymarket = 34;
-    const radarScores: Record<string, number> = {
-      외교채널: drivers['외교채널'] * 10,
-      군사강도: (10 - drivers['군사강도']) * 10,
-      경제압박: (10 - drivers['경제압박']) * 10,
-      이란내부: drivers['이란내부'] * 10,
-      호르무즈: (10 - drivers['호르무즈']) * 10,
+    // 시그널이 누적될수록 표준편차가 줄어 분포가 좁아진다.
+    const sigma = 18 / Math.sqrt(1 + votes / 3);
+    const ci = {
+      low: Math.max(0, Math.round(geoProb - sigma)),
+      high: Math.min(100, Math.round(geoProb + sigma)),
     };
+    // RadarChart는 0~1 스케일. 종전 가능성에 기여하는 방향으로 정규화.
+    const radarScores: Record<string, number> = {
+      외교채널: drivers['외교채널'] / 10,
+      군사강도: (10 - drivers['군사강도']) / 10,
+      경제압박: (10 - drivers['경제압박']) / 10,
+      이란내부: drivers['이란내부'] / 10,
+      호르무즈: (10 - drivers['호르무즈']) / 10,
+    };
+    const geoPillars = [
+      { key: '외교채널', label: '외교' },
+      { key: '군사강도', label: '군사' },
+      { key: '경제압박', label: '경제' },
+      { key: '이란내부', label: '내부' },
+      { key: '호르무즈', label: '호르무즈' },
+    ];
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 260px', gap:'16px' }}>
@@ -1410,16 +1437,16 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                 <div key={k}>
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
                     <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{driverLabels[k]}</span>
-                    <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: driverColors[k] }}>{v}/10</span>
+                    <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: driverColors[k] }}>{v.toFixed(1)}/10</span>
                   </div>
-                  <div style={{ height:'5px', background:'var(--surface2)', borderRadius:'2px' }}>
-                    <div style={{ width:`${v * 10}%`, height:'100%', background: driverColors[k], borderRadius:'2px' }} />
+                  <div style={{ height:'6px', background:'var(--surface2)', borderRadius:'2px' }}>
+                    <div style={{ width:`${Math.max(4, v * 10)}%`, height:'100%', background: driverColors[k], borderRadius:'2px', transition:'width 0.3s' }} />
                   </div>
                 </div>
               ))}
             </div>
             <div style={{ display:'flex', justifyContent:'center' }}>
-              <RadarChart scores={radarScores} size={200} />
+              <RadarChart scores={radarScores} size={200} pillars={geoPillars} color="var(--brand)" />
             </div>
           </Panel>
 
@@ -1433,23 +1460,9 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                 CI {ci.low}–{ci.high}%
               </div>
 
-              {/* Bell curve SVG */}
-              <div style={{ margin:'20px 0' }}>
-                <svg width="220" height="80" viewBox="0 0 220 80">
-                  <path
-                    d={`M 10,70 C 30,70 40,10 110,10 C 180,10 190,70 210,70`}
-                    fill="none" stroke="var(--border)" strokeWidth="1.5"
-                  />
-                  {/* Filled area for CI range */}
-                  <path
-                    d={`M ${10 + ci.low * 2},70 C ${10 + ci.low * 2 + 10},40 ${10 + geoProb * 2 - 5},12 ${10 + geoProb * 2},10 C ${10 + geoProb * 2 + 5},12 ${10 + ci.high * 2 - 10},40 ${10 + ci.high * 2},70 Z`}
-                    fill="var(--brand)" opacity="0.15"
-                  />
-                  <line x1={10 + geoProb * 2} y1="8" x2={10 + geoProb * 2} y2="70" stroke="var(--brand)" strokeWidth="2" />
-                  <text x={10 + geoProb * 2} y="6" textAnchor="middle" fill="var(--brand)" fontSize="9" fontFamily="IBM Plex Mono">{geoProb}%</text>
-                  <text x="10" y="78" fill="var(--text-dim)" fontSize="8" fontFamily="IBM Plex Mono">0</text>
-                  <text x="200" y="78" fill="var(--text-dim)" fontSize="8" fontFamily="IBM Plex Mono">100</text>
-                </svg>
+              {/* 정규분포 — 시그널 누적 시 좁아짐 */}
+              <div style={{ margin:'16px 0', display:'flex', justifyContent:'center' }}>
+                <ProbabilityDistribution mean={geoProb} sigma={sigma} marketValue={polymarket} width={240} height={150} />
               </div>
 
               {/* Market comparison */}
@@ -1472,21 +1485,11 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
           {/* Right: QR + vote count */}
           <Panel title="분석 공유">
-            {/* QR code SVG (decorative) */}
+            {/* 실제 스캔 가능한 QR */}
             <div style={{ display:'flex', justifyContent:'center', marginBottom:'12px' }}>
-              <svg width="120" height="120" viewBox="0 0 120 120" style={{ border:'1px solid var(--border)', padding:'8px', background:'#fff' }}>
-                {/* QR pattern — decorative blocks */}
-                {[
-                  [0,0,7,7], [14,0,7,7], [0,14,7,7],
-                  [2,2,3,3], [16,2,3,3], [2,16,3,3],
-                ].map(([x,y,w,h],i) => <rect key={i} x={x*3+6} y={y*3+6} width={w*3} height={h*3} fill="#1A1A1A" />)}
-                {Array.from({ length: 64 }).map((_, i) => {
-                  const cx = (i % 8) * 9 + 15, cy = Math.floor(i / 8) * 9 + 15;
-                  return Math.random() > 0.5 ? <rect key={`d${i}`} x={cx} y={cy} width={7} height={7} fill="#1A1A1A" /> : null;
-                })}
-                <rect x="48" y="48" width="24" height="24" fill="#E6001C" />
-                <text x="60" y="64" textAnchor="middle" fill="#fff" fontSize="9" fontFamily="IBM Plex Mono" fontWeight="bold">KT</text>
-              </svg>
+              <div style={{ padding:'8px', background:'#fff', border:'1px solid var(--border)', borderRadius:'2px' }}>
+                <QRCodeSVG value={voteUrl} size={120} level="M" fgColor="#1A1A1A" bgColor="#FFFFFF" />
+              </div>
             </div>
             <div style={{ fontSize:'11px', color:'var(--text-dim)', textAlign:'center', marginBottom:'12px', fontFamily:'IBM Plex Mono' }}>
               QR로 의견 제출
