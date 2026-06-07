@@ -14,7 +14,7 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
     const db = await getDb();
 
     const { rows } = await db.query(
-      `SELECT id, topic, analysis_text, driver_scores, geo_prob FROM geo_sessions WHERE id = $1`,
+      `SELECT id, topic, analysis_text, driver_scores, geo_prob, hypothesis, strategy_low, strategy_mid, strategy_high FROM geo_sessions WHERE id = $1`,
       [sessionId]
     );
     if (rows.length === 0) return NextResponse.json({ error: 'session not found' }, { status: 404 });
@@ -34,6 +34,13 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
 
     const agg = await aggregate(db, sessionId);
 
+    const pickStrategy = (prob: number) => {
+      if (prob < 40) return session.strategy_low ?? '';
+      if (prob < 65) return session.strategy_mid ?? '';
+      return session.strategy_high ?? '';
+    };
+    const currentStrategy = pickStrategy(agg.geoProb);
+
     if (!GEMINI_KEY) {
       return NextResponse.json({
         topic: session.topic,
@@ -41,6 +48,8 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
         driver_scores: agg.drivers,
         total_votes: agg.totalVotes,
         cards: cardRows,
+        hypothesis: session.hypothesis ?? '',
+        strategy: currentStrategy,
         executive_summary: '(GEMINI_API_KEY 미설정 — 텍스트 생성 불가)',
         driver_analysis: '',
         signal_summary: '',
@@ -60,10 +69,14 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
       .map(([k, v]) => `${k}: ${(v as number).toFixed(1)}/10`)
       .join(', ');
 
+    const strategyLabel = agg.geoProb < 40 ? '확률 상승 전략' : agg.geoProb < 65 ? '모멘텀 유지 전략' : '리스크 관리 전략';
+
     const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 데이터를 바탕으로 간결하고 전문적인 지정학 분석 보고서를 작성하세요.
 
 분석 주제: ${session.topic}
 종전 가능성: ${agg.geoProb}%
+전략 가설: ${session.hypothesis ?? '(없음)'}
+${strategyLabel}: ${currentStrategy || '(없음)'}
 총 참여 시그널: ${agg.totalVotes}건
 드라이버 현황: ${driverSummary}
 
@@ -79,7 +92,7 @@ ${session.analysis_text ?? ''}
   "driver_analysis": "각 드라이버별 현황과 시사점 (200자 이내)",
   "signal_summary": "시그널 투표 결과 해석 (100자 이내)",
   "risk_scenarios": "낙관/기준/비관 3개 시나리오 (각 1문장)",
-  "recommendation": "정책/전략 권고사항 (2~3문장)"
+  "recommendation": "가설과 전략을 반영한 최종 정책/전략 권고사항 (2~3문장)"
 }`;
 
     const result = await model.generateContent(prompt);
@@ -100,6 +113,9 @@ ${session.analysis_text ?? ''}
       driver_scores: agg.drivers,
       total_votes: agg.totalVotes,
       cards: cardRows,
+      hypothesis: session.hypothesis ?? '',
+      strategy: currentStrategy,
+      strategy_label: strategyLabel,
       executive_summary: reportData.executive_summary ?? '',
       driver_analysis: reportData.driver_analysis ?? '',
       signal_summary: reportData.signal_summary ?? '',

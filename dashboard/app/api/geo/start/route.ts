@@ -6,8 +6,8 @@ import { getDb } from '@/lib/db';
 
 export const maxDuration = 60;
 
-function extractJsonArray(text: string): unknown[] | null {
-  const start = text.indexOf('[');
+function extractJsonObject(text: string): Record<string, unknown> | null {
+  const start = text.indexOf('{');
   if (start === -1) return null;
   let depth = 0; let inString = false; let escaped = false;
   for (let i = start; i < text.length; i++) {
@@ -16,11 +16,11 @@ function extractJsonArray(text: string): unknown[] | null {
     if (ch === '\\' && inString) { escaped = true; continue; }
     if (ch === '"') { inString = !inString; continue; }
     if (inString) continue;
-    if (ch === '[') depth++;
-    if (ch === ']') {
+    if (ch === '{') depth++;
+    if (ch === '}') {
       depth--;
       if (depth === 0) {
-        try { return JSON.parse(text.slice(start, i + 1)) as unknown[]; } catch { return null; }
+        try { return JSON.parse(text.slice(start, i + 1)) as Record<string, unknown>; } catch { return null; }
       }
     }
   }
@@ -41,48 +41,67 @@ export async function POST(req: NextRequest) {
     const db = await getDb();
     const token = randomBytes(10).toString('hex');
 
-    // Insert session
-    const { rows } = await db.query(
-      `INSERT INTO geo_sessions (topic, analysis_text, driver_scores, geo_prob, token)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [topic, analysisText, JSON.stringify(driverScores), geoProb, token]
-    );
-    const sessionId: number = rows[0].id;
-
-    // Generate signal cards via Gemini
+    // Gemini: 카드 + 가설 + 조건부 전략 한 번에 생성
     let cards: { label: string; description: string; driver_deltas: Record<string, number>; direction: string }[] = [];
+    let hypothesis = '';
+    let strategyLow = '';
+    let strategyMid = '';
+    let strategyHigh = '';
 
     if (GEMINI_KEY) {
       try {
         const genAI = new GoogleGenerativeAI(GEMINI_KEY);
         const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-        const prompt = `다음 지정학 분석 텍스트를 읽고 참가자들이 선택할 수 있는 시그널 카드를 4~6개 생성하세요.
+        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 분석 텍스트와 드라이버 현황을 바탕으로 JSON 하나를 출력하세요.
 
 분석 텍스트:
 ${analysisText}
 
-드라이버 현황: ${JSON.stringify(driverScores)}
+드라이버 현황 (0~10, 종전 기여도 기준): ${JSON.stringify(driverScores)}
+현재 종전 가능성: ${geoProb}%
 
-출력 규칙:
-- JSON 배열만 출력 (마크다운 코드블록 없이)
-- 각 카드: { "label": "짧은 제목(10자 이내)", "description": "설명(30자 이내)", "driver_deltas": { "외교채널": 숫자, "군사강도": 숫자, ... }, "direction": "agree" 또는 "conflict" }
-- driver_deltas: 해당 카드 선택 시 각 드라이버의 변화량 (-3 ~ +3, 종전 가능성에 영향)
+출력 규칙 (마크다운 코드블록 없이 JSON만):
+{
+  "cards": [
+    { "label": "짧은 제목(10자 이내)", "description": "설명(30자 이내)", "driver_deltas": {"외교채널": 숫자, "군사강도": 숫자, "경제압박": 숫자, "이란내부": 숫자, "호르무즈": 숫자}, "direction": "agree 또는 conflict" }
+  ],
+  "hypothesis": "분석 기반 핵심 전략 가설 1~2문장 (예: '오만 중재 채널 활성화가 단기 종전의 현실적 경로이다')",
+  "strategy_low": "종전 가능성이 낮을 때(< 40%) 확률을 올리기 위한 구체적 행동 전략 2~3문장",
+  "strategy_mid": "종전 가능성이 40~65%일 때 모멘텀 유지 및 가설 검증 전략 2~3문장",
+  "strategy_high": "종전 가능성이 높을 때(> 65%) 리스크 관리 및 승기 확보 전략 2~3문장"
+}
+
+cards 규칙:
+- 4~6개 생성
+- driver_deltas 값: -3 ~ +3 (해당 카드 선택 시 드라이버 변화량)
 - direction: "agree"=종전 가능성 상승, "conflict"=종전 가능성 하락
-- 드라이버 키: 외교채널, 군사강도, 경제압박, 이란내부, 호르무즈
-
-예시:
-[{"label":"오만 중재 성사","description":"오만 채널 통해 양측 대화 재개","driver_deltas":{"외교채널":2,"군사강도":-1},"direction":"agree"}]`;
+- 드라이버 키: 외교채널, 군사강도, 경제압박, 이란내부, 호르무즈`;
 
         const result = await model.generateContent(prompt);
         const text = result.response.text();
-        const parsed = extractJsonArray(text);
-        if (parsed && Array.isArray(parsed)) {
-          cards = parsed as typeof cards;
+        const parsed = extractJsonObject(text);
+        if (parsed) {
+          if (Array.isArray(parsed.cards)) {
+            cards = parsed.cards as typeof cards;
+          }
+          hypothesis = (parsed.hypothesis as string) ?? '';
+          strategyLow = (parsed.strategy_low as string) ?? '';
+          strategyMid = (parsed.strategy_mid as string) ?? '';
+          strategyHigh = (parsed.strategy_high as string) ?? '';
         }
       } catch (e) {
-        console.error('[geo/start] Gemini card generation failed:', e);
+        console.error('[geo/start] Gemini generation failed:', e);
       }
     }
+
+    // Insert session with hypothesis + strategy
+    const { rows } = await db.query(
+      `INSERT INTO geo_sessions (topic, analysis_text, driver_scores, geo_prob, token, hypothesis, strategy_low, strategy_mid, strategy_high)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [topic, analysisText, JSON.stringify(driverScores), geoProb, token,
+       hypothesis || null, strategyLow || null, strategyMid || null, strategyHigh || null]
+    );
+    const sessionId: number = rows[0].id;
 
     // Insert cards
     if (cards.length > 0) {
@@ -101,7 +120,7 @@ ${analysisText}
       [sessionId]
     );
 
-    return NextResponse.json({ sessionId, token, cards: cardRows });
+    return NextResponse.json({ sessionId, token, cards: cardRows, hypothesis, strategyLow, strategyMid, strategyHigh });
   } catch (e) {
     console.error('[geo/start]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });

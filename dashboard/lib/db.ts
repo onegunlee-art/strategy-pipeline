@@ -515,6 +515,12 @@ async function runInit() {
     -- v1.5: 지정학 투표에 역할 가중치 — 참여자 이름/역할 기록
     ALTER TABLE geo_votes ADD COLUMN IF NOT EXISTS voter_name TEXT;
     ALTER TABLE geo_votes ADD COLUMN IF NOT EXISTS voter_role TEXT;
+
+    -- v1.6: 지정학 파이프라인에 가설 + 조건부 전략 추가
+    ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS hypothesis TEXT;
+    ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS strategy_low TEXT;
+    ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS strategy_mid TEXT;
+    ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS strategy_high TEXT;
   `);
 
   // v0.4: 2025 Q4 PDF 시드 (idempotent)

@@ -8,7 +8,7 @@ export async function GET(_req: NextRequest, ctx: { params: { token: string } })
     const db = await getDb();
 
     const { rows } = await db.query(
-      `SELECT id, topic, driver_scores, geo_prob FROM geo_sessions WHERE token = $1`,
+      `SELECT id, topic, driver_scores, geo_prob, hypothesis, strategy_low, strategy_mid, strategy_high FROM geo_sessions WHERE token = $1`,
       [token]
     );
     if (rows.length === 0) return NextResponse.json({ error: 'session not found' }, { status: 404 });
@@ -28,6 +28,10 @@ export async function GET(_req: NextRequest, ctx: { params: { token: string } })
       topic: session.topic,
       baseGeoProb: session.geo_prob,
       cards: cardRows,
+      hypothesis: session.hypothesis ?? '',
+      strategyLow: session.strategy_low ?? '',
+      strategyMid: session.strategy_mid ?? '',
+      strategyHigh: session.strategy_high ?? '',
       ...agg,
     });
   } catch (e) {
