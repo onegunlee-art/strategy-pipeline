@@ -521,7 +521,43 @@ async function runInit() {
     ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS strategy_low TEXT;
     ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS strategy_mid TEXT;
     ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS strategy_high TEXT;
+
+    -- v1.7: 폴리마켓 시장 데이터 (수동 인입)
+    CREATE TABLE IF NOT EXISTS polymarket_markets (
+      id SERIAL PRIMARY KEY,
+      label TEXT NOT NULL,
+      category TEXT NOT NULL,   -- 지정학 | AI | 글로벌경제
+      question TEXT,
+      yes_price_pct INTEGER,    -- 0~100
+      end_date DATE,
+      our_prob BOOLEAN NOT NULL DEFAULT FALSE,  -- 우리 geoProb와 비교 대상 여부
+      volume_usd BIGINT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
+
+  // v1.7: 폴리마켓 시장 데이터 시드 (idempotent)
+  const { rows: pmCount } = await pool.query('SELECT COUNT(*)::int as c FROM polymarket_markets');
+  if (pmCount[0].c === 0) {
+    const IRAN_Q = '미국, 새로운 이란 협정/휴전 연장 발표...?';
+    const iranMarkets: [string, string, string, number, string, boolean, number][] = [
+      // [label, category, question, yes_price_pct, end_date, our_prob, volume_usd]
+      ['미-이란 휴전 연장 (6/7)',  '지정학', IRAN_Q,  1, '2026-06-07', true,  2813240],
+      ['미-이란 휴전 연장 (6/9)',  '지정학', IRAN_Q,  4, '2026-06-09', true,   360871],
+      ['미-이란 휴전 연장 (6/12)', '지정학', IRAN_Q, 10, '2026-06-12', true,   194431],
+      ['미-이란 휴전 연장 (6/15)', '지정학', IRAN_Q, 14, '2026-06-15', true,   145105],
+      ['미-이란 휴전 연장 (6/30)', '지정학', IRAN_Q, 38, '2026-06-30', true,  1235300],
+      ['미-이란 휴전 연장 (7/31)', '지정학', IRAN_Q, 59, '2026-07-31', true,    96967],
+    ];
+    for (const [label, category, question, yesPrice, endDate, ourProb, volume] of iranMarkets) {
+      await pool.query(
+        `INSERT INTO polymarket_markets (label, category, question, yes_price_pct, end_date, our_prob, volume_usd)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [label, category, question, yesPrice, endDate, ourProb, volume]
+      );
+    }
+  }
 
   // v0.4: 2025 Q4 PDF 시드 (idempotent)
   try {
