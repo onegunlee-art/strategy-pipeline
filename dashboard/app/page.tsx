@@ -1283,12 +1283,24 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [liveDrivers, setLiveDrivers] = useState<Record<string, number> | null>(null);
   const [liveProb, setLiveProb] = useState<number | null>(null);
   const [startingSession, setStartingSession] = useState(false);
+  const [geoHypothesis, setGeoHypothesis] = useState('');
+  const [geoStrategy, setGeoStrategy] = useState('');
+  const [geoStrategyLow, setGeoStrategyLow] = useState('');
+  const [geoStrategyMid, setGeoStrategyMid] = useState('');
+  const [geoStrategyHigh, setGeoStrategyHigh] = useState('');
 
   const activeDrivers = liveDrivers ?? drivers;
   const geoProb = liveProb ?? Math.min(95, Math.max(5, Math.round(
     (activeDrivers['외교채널'] + (10 - activeDrivers['군사강도']) + (10 - activeDrivers['경제압박']) + activeDrivers['이란내부'] + (10 - activeDrivers['호르무즈'])) / 5 * 10
   )));
   const totalVotes = Object.values(geoVoteCounts).reduce((a, b) => a + b, 0);
+
+  // geoProb 변화 시 strategy 구간 재선택
+  useEffect(() => {
+    if (!geoStrategyLow) return;
+    setGeoStrategy(geoProb < 40 ? geoStrategyLow : geoProb < 65 ? geoStrategyMid : geoStrategyHigh);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geoProb, geoStrategyLow]);
 
   const [voteUrl, setVoteUrl] = useState('');
   useEffect(() => {
@@ -1309,6 +1321,14 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         if (json.geoProb != null) setLiveProb(json.geoProb);
         if (json.voteCounts) setGeoVoteCounts(json.voteCounts);
         if (json.roleCounts) setGeoRoleCounts(json.roleCounts);
+        if (json.strategyLow) {
+          setGeoStrategyLow(json.strategyLow);
+          setGeoStrategyMid(json.strategyMid ?? '');
+          setGeoStrategyHigh(json.strategyHigh ?? '');
+          const p = json.geoProb ?? 50;
+          setGeoStrategy(p < 40 ? json.strategyLow : p < 65 ? (json.strategyMid ?? '') : (json.strategyHigh ?? ''));
+        }
+        if (json.hypothesis) setGeoHypothesis(json.hypothesis);
       } catch { /* ignore */ }
     }, 5000);
     return () => clearInterval(id);
@@ -1345,6 +1365,14 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         setGeoSessionId(json.sessionId);
         setGeoToken(json.token);
         setGeoCards(json.cards ?? []);
+        setGeoHypothesis(json.hypothesis ?? '');
+        setGeoStrategyLow(json.strategyLow ?? '');
+        setGeoStrategyMid(json.strategyMid ?? '');
+        setGeoStrategyHigh(json.strategyHigh ?? '');
+        const initProb = Math.min(95, Math.max(5, Math.round(
+          (drivers['외교채널'] + (10 - drivers['군사강도']) + (10 - drivers['경제압박']) + drivers['이란내부'] + (10 - drivers['호르무즈'])) / 5 * 10
+        )));
+        setGeoStrategy(initProb < 40 ? (json.strategyLow ?? '') : initProb < 65 ? (json.strategyMid ?? '') : (json.strategyHigh ?? ''));
       }
     } catch { /* proceed anyway */ }
     setStartingSession(false);
@@ -1445,9 +1473,23 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             )}
           </div>
           {typedLen >= ANALYSIS_TEXT.length && (
-            <div style={{ marginTop:'16px', display:'flex', justifyContent:'flex-end', gap:'12px', alignItems:'center' }}>
-              {startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>시그널 카드 생성 중...</span>}
-              <button onClick={handleEnterStep3} disabled={startingSession} style={{ ...actionBtn, opacity: startingSession ? 0.6 : 1 }}>확인 →</button>
+            <div style={{ marginTop:'16px' }}>
+              {/* 가설 박스 */}
+              {(geoHypothesis || startingSession) && (
+                <div style={{ padding:'12px 16px', borderRadius:'6px', border:'1px solid var(--brand)',
+                  background:'var(--surface2)', marginBottom:'12px' }}>
+                  <div style={{ fontSize:'10px', color:'var(--brand)', fontFamily:'IBM Plex Mono',
+                    letterSpacing:'1px', marginBottom:'6px' }}>HYPOTHESIS</div>
+                  {geoHypothesis
+                    ? <div style={{ fontSize:'13px', color:'var(--text)', lineHeight:1.6 }}>{geoHypothesis}</div>
+                    : <div style={{ fontSize:'12px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>가설 생성 중...</div>
+                  }
+                </div>
+              )}
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', alignItems:'center' }}>
+                {startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>시그널 카드 + 전략 생성 중...</span>}
+                <button onClick={handleEnterStep3} disabled={startingSession} style={{ ...actionBtn, opacity: startingSession ? 0.6 : 1 }}>확인 →</button>
+              </div>
             </div>
           )}
         </Panel>
@@ -1615,6 +1657,28 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             </div>
           </Panel>
         </div>
+
+        {/* 전략 패널 — 확률 구간 조건부 */}
+        {geoStrategy && (
+          <Panel title={geoProb < 40 ? '확률 상승 전략' : geoProb < 65 ? '모멘텀 유지 전략' : '리스크 관리 전략'}>
+            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+              <span style={{
+                fontSize:'10px', padding:'3px 10px', borderRadius:'3px',
+                fontFamily:'IBM Plex Mono', letterSpacing:'0.5px',
+                background: geoProb < 40 ? 'rgba(220,38,38,0.15)' : geoProb < 65 ? 'rgba(217,119,6,0.15)' : 'rgba(22,163,74,0.15)',
+                color: geoProb < 40 ? 'var(--red)' : geoProb < 65 ? 'var(--yellow)' : 'var(--green)',
+              }}>
+                {geoProb < 40 ? 'RISK — LOW PROB' : geoProb < 65 ? 'HOLD — MID PROB' : 'SECURE — HIGH PROB'}
+              </span>
+              {geoHypothesis && (
+                <span style={{ fontSize:'11px', color:'var(--text-dim)', fontStyle:'italic' }}>
+                  가설: {geoHypothesis}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize:'13px', color:'var(--text)', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{geoStrategy}</div>
+          </Panel>
+        )}
 
         <div style={{ display:'flex', gap:'12px', justifyContent:'flex-end' }}>
           <button onClick={() => { setStep(4); if (geoSessionId) window.open(`/report/geo/${geoSessionId}`, '_blank'); }} style={actionBtn}>리포트 발행 →</button>

@@ -13,6 +13,9 @@ interface GeoReportData {
   driver_scores: Record<string, number>;
   total_votes: number;
   cards: { label: string; direction: string; vote_count: number }[];
+  hypothesis: string;
+  strategy: string;
+  strategy_label: string;
   executive_summary: string;
   driver_analysis: string;
   signal_summary: string;
@@ -22,10 +25,13 @@ interface GeoReportData {
 
 function probColor(p: number) { return p >= 65 ? '#16a34a' : p >= 45 ? '#d97706' : '#dc2626'; }
 
-const DRIVER_LABELS: Record<string, string> = {
-  외교채널: '외교 채널', 군사강도: '군사 강도', 경제압박: '경제 압박',
-  이란내부: '이란 내부', 호르무즈: '호르무즈',
-};
+const DRIVER_META_REPORT = [
+  { key: '외교채널', label: 'Diplomacy',              invert: false },
+  { key: '군사강도', label: 'Military De-escalation', invert: true  },
+  { key: '경제압박', label: 'Economic Off-ramp',      invert: true  },
+  { key: '이란내부', label: 'Iran Stability',         invert: false },
+  { key: '호르무즈', label: 'Hormuz Flow',            invert: true  },
+];
 
 export default function GeoReportPage({ params }: Props) {
   const { session_id } = params;
@@ -83,21 +89,52 @@ export default function GeoReportPage({ params }: Props) {
           </div>
         </div>
         <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 8 }}>종전 기여도 (높을수록 종전↑)</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px' }}>
-            {Object.entries(data.driver_scores).map(([key, val]) => (
-              <div key={key}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
-                  <span style={{ color: '#374151' }}>{DRIVER_LABELS[key] ?? key}</span>
-                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#374151' }}>{(val as number).toFixed(1)}</span>
+            {DRIVER_META_REPORT.map(m => {
+              const raw = (data.driver_scores[m.key] as number) ?? 0;
+              const val = m.invert ? 10 - raw : raw;
+              return (
+                <div key={m.key}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                    <span style={{ color: '#374151' }}>{m.label}</span>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#374151' }}>{val.toFixed(1)}</span>
+                  </div>
+                  <div style={{ height: 6, background: '#e5e7eb', borderRadius: 2 }}>
+                    <div style={{ width: `${Math.max(4, val * 10)}%`, height: '100%', background: '#E6001C', borderRadius: 2 }} />
+                  </div>
                 </div>
-                <div style={{ height: 6, background: '#e5e7eb', borderRadius: 2 }}>
-                  <div style={{ width: `${Math.max(4, (val as number) * 10)}%`, height: '100%', background: '#E6001C', borderRadius: 2 }} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
+
+      {/* Hypothesis */}
+      {data.hypothesis && (
+        <div style={{ ...S, border: '1px solid #E6001C', background: '#fff5f5' }}>
+          <div style={{ ...H, color: '#E6001C' }}>전략 가설</div>
+          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.7, fontWeight: 500 }}>{data.hypothesis}</p>
+        </div>
+      )}
+
+      {/* Conditional Strategy */}
+      {data.strategy && (
+        <div style={{ ...S, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ ...H, color: '#1d4ed8', margin: 0 }}>{data.strategy_label || '전략 제언'}</div>
+            <span style={{
+              fontSize: 10, padding: '2px 8px', borderRadius: 3,
+              background: data.geo_prob < 40 ? '#fee2e2' : data.geo_prob < 65 ? '#fef9c3' : '#dcfce7',
+              color: data.geo_prob < 40 ? '#b91c1c' : data.geo_prob < 65 ? '#92400e' : '#15803d',
+              fontFamily: 'IBM Plex Mono, monospace',
+            }}>
+              {data.geo_prob < 40 ? 'RISK — LOW PROB' : data.geo_prob < 65 ? 'HOLD — MID PROB' : 'SECURE — HIGH PROB'}
+            </span>
+          </div>
+          <p style={{ margin: 0, lineHeight: 1.7, fontSize: 14, whiteSpace: 'pre-wrap' }}>{data.strategy}</p>
+        </div>
+      )}
 
       {/* Executive Summary */}
       {data.executive_summary && (
