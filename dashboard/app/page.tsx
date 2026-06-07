@@ -1427,6 +1427,7 @@ interface GeoSignalCard {
   description: string;
   driver_deltas: Record<string, number>;
   direction: string;
+  evidence?: string;
 }
 
 function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => void }) {
@@ -1450,6 +1451,9 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [geoStrategyLow, setGeoStrategyLow] = useState('');
   const [geoStrategyMid, setGeoStrategyMid] = useState('');
   const [geoStrategyHigh, setGeoStrategyHigh] = useState('');
+  const [geoPriorProb, setGeoPriorProb] = useState<number | null>(null);
+  const [geoFacts, setGeoFacts] = useState<Array<{ type: string; key: string; value: string; source: string }>>([]);
+  const [calibration, setCalibration] = useState<{ entries: Array<{ topic: string; predictedProb: number; actualOutcome: string; resolvedAt: string; correct: boolean; note: string }>; totalCount: number; correctCount: number; brierScore: number | null } | null>(null);
 
   const activeDrivers = liveDrivers ?? drivers;
   const geoProb = liveProb ?? Math.min(95, Math.max(5, Math.round(
@@ -1491,10 +1495,19 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           setGeoStrategy(p < 40 ? json.strategyLow : p < 65 ? (json.strategyMid ?? '') : (json.strategyHigh ?? ''));
         }
         if (json.hypothesis) setGeoHypothesis(json.hypothesis);
+        if (json.priorProb != null) setGeoPriorProb(json.priorProb);
+        if (Array.isArray(json.facts) && json.facts.length > 0) setGeoFacts(json.facts);
+        if (json.cards) setGeoCards(json.cards);
       } catch { /* ignore */ }
     }, 5000);
     return () => clearInterval(id);
   }, [step, geoToken]);
+
+  // Calibration data fetch (step 3 진입 시 1회)
+  useEffect(() => {
+    if (step !== 3) return;
+    fetch('/api/geo/calibration').then(r => r.json()).then(d => setCalibration(d)).catch(() => {});
+  }, [step]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // TODO(월요일): the gist RAG API 연동 지점
@@ -1531,6 +1544,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         setGeoStrategyLow(json.strategyLow ?? '');
         setGeoStrategyMid(json.strategyMid ?? '');
         setGeoStrategyHigh(json.strategyHigh ?? '');
+        if (json.priorProb != null) setGeoPriorProb(json.priorProb);
+        if (Array.isArray(json.facts)) setGeoFacts(json.facts);
         const initProb = Math.min(95, Math.max(5, Math.round(
           (drivers['외교채널'] + (10 - drivers['군사강도']) + (10 - drivers['경제압박']) + drivers['이란내부'] + (10 - drivers['호르무즈'])) / 5 * 10
         )));
@@ -1636,20 +1651,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           </div>
           {typedLen >= ANALYSIS_TEXT.length && (
             <div style={{ marginTop:'16px' }}>
-              {/* 가설 박스 */}
-              {(geoHypothesis || startingSession) && (
-                <div style={{ padding:'12px 16px', borderRadius:'6px', border:'1px solid var(--brand)',
-                  background:'var(--surface2)', marginBottom:'12px' }}>
-                  <div style={{ fontSize:'10px', color:'var(--brand)', fontFamily:'IBM Plex Mono',
-                    letterSpacing:'1px', marginBottom:'6px' }}>HYPOTHESIS</div>
-                  {geoHypothesis
-                    ? <div style={{ fontSize:'13px', color:'var(--text)', lineHeight:1.6 }}>{geoHypothesis}</div>
-                    : <div style={{ fontSize:'12px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>가설 생성 중...</div>
-                  }
-                </div>
-              )}
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', alignItems:'center' }}>
-                {startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>시그널 카드 + 전략 생성 중...</span>}
+                {startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>팩트 수집 · 가설 생성 중...</span>}
                 <button onClick={handleEnterStep3} disabled={startingSession} style={{ ...actionBtn, opacity: startingSession ? 0.6 : 1 }}>확인 →</button>
               </div>
             </div>
@@ -1657,25 +1660,58 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         </Panel>
 
         <Panel title="드라이버 현황">
-          <div style={{ fontSize:'10px', color:'var(--text-dim)', marginBottom:'10px', lineHeight:1.5 }}>
-            각 축은 0~10 종전 기여도 — 높을수록 종전 가능성에 유리
+          {/* FACTS 배지 */}
+          <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono',
+            background:'var(--surface2)', padding:'2px 8px', borderRadius:'2px', display:'inline-block', marginBottom:'10px' }}>
+            OBSERVED FACTS
           </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'16px' }}>
             {DRIVER_META.map(m => {
               const v = contrib(m.key, drivers[m.key]);
               return (
                 <div key={m.key}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
                     <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{m.label}</span>
                     <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: m.color }}>{v.toFixed(1)}/10</span>
                   </div>
-                  <div style={{ height:'6px', background:'var(--surface2)', borderRadius:'2px' }}>
+                  <div style={{ height:'5px', background:'var(--surface2)', borderRadius:'2px' }}>
                     <div style={{ width:`${Math.max(4, v * 10)}%`, height:'100%', background: m.color, borderRadius:'2px', transition:'width 0.3s' }} />
                   </div>
                 </div>
               );
             })}
           </div>
+          {/* AI-generated facts (event/market types) */}
+          {geoFacts.filter(f => f.type !== 'driver').length > 0 && (
+            <div style={{ marginBottom:'16px', display:'flex', flexDirection:'column', gap:'5px' }}>
+              {geoFacts.filter(f => f.type !== 'driver').map((f, i) => (
+                <div key={i} style={{ display:'flex', gap:'8px', padding:'6px 8px', background:'var(--surface2)', borderRadius:'3px', fontSize:'11px' }}>
+                  <span style={{ fontFamily:'IBM Plex Mono', color: f.type === 'market' ? '#818cf8' : 'var(--text-mid)', minWidth:'40px', fontSize:'9px', marginTop:'1px' }}>
+                    {f.type === 'market' ? 'MKT' : 'EVT'}
+                  </span>
+                  <div style={{ flex:1 }}>
+                    <span style={{ color:'var(--text)', fontWeight:600 }}>{f.key}</span>
+                    <span style={{ color:'var(--text-dim)', marginLeft:'6px' }}>{f.value}</span>
+                  </div>
+                  <span style={{ fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', textAlign:'right', maxWidth:'80px', lineHeight:1.3 }}>{f.source}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* HYPOTHESIS 영역 — API 응답 후 표시 */}
+          {(geoHypothesis || startingSession) && (
+            <div>
+              <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--brand)', fontFamily:'IBM Plex Mono',
+                background:'rgba(34,211,238,0.08)', padding:'2px 8px', borderRadius:'2px', display:'inline-block', marginBottom:'8px' }}>
+                AI HYPOTHESIS
+              </div>
+              {geoHypothesis
+                ? <div style={{ fontSize:'12px', color:'var(--text)', lineHeight:1.6, padding:'8px 10px',
+                    border:'1px solid var(--brand)', borderRadius:'4px', background:'var(--surface2)' }}>{geoHypothesis}</div>
+                : <div style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>AI 추론 중...</div>
+              }
+            </div>
+          )}
         </Panel>
       </div>
     );
@@ -1726,11 +1762,29 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           {/* Center: probability */}
           <Panel title="종전 가능성">
             <div style={{ textAlign:'center', padding:'12px 0' }}>
+              {geoPriorProb !== null && (
+                <div style={{ marginBottom:'8px', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px', flexWrap:'wrap' }}>
+                  <span style={{ fontSize:'10px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)' }}>PRIOR</span>
+                  <span style={{ fontSize:'14px', fontFamily:'IBM Plex Mono', fontWeight:600, color:'var(--text-mid)' }}>{geoPriorProb}%</span>
+                  <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>→</span>
+                  <span style={{ fontSize:'10px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)' }}>POSTERIOR</span>
+                  {totalVotes > 0 && (
+                    <span style={{ fontSize:'10px', fontFamily:'IBM Plex Mono', color: geoProb > geoPriorProb ? 'var(--green)' : geoProb < geoPriorProb ? 'var(--red)' : 'var(--text-dim)' }}>
+                      {geoProb > geoPriorProb ? `+${geoProb - geoPriorProb}pp` : geoProb < geoPriorProb ? `${geoProb - geoPriorProb}pp` : '±0pp'}
+                    </span>
+                  )}
+                </div>
+              )}
               <div style={{ fontSize:'64px', fontWeight:700, fontFamily:'IBM Plex Mono', color: probColor(geoProb), lineHeight:1 }}>
                 {geoProb}%
               </div>
-              <div style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginTop:'4px' }}>
-                CI {ci.low}–{ci.high}%
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', marginTop:'6px' }}>
+                <div style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>
+                  CI {ci.low}–{ci.high}%
+                </div>
+                <span style={{ fontSize:'9px', padding:'2px 7px', borderRadius:'3px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px', background:'rgba(99,102,241,0.15)', color:'#818cf8' }}>
+                  FORMULA-BASED
+                </span>
               </div>
 
               {/* 정규분포 — 시그널 누적 시 좁아짐 */}
@@ -1802,15 +1856,21 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                   padding:'8px 10px', marginBottom:'6px',
                   border:`1px solid ${card.direction === 'agree' ? 'var(--green)' : 'var(--red)'}`,
                   borderRadius:'2px', fontSize:'11px',
-                  display:'flex', justifyContent:'space-between', alignItems:'center',
                 }}>
-                  <div>
-                    <div style={{ fontWeight:600, color:'var(--text)', marginBottom:'2px' }}>{card.label}</div>
-                    <div style={{ color:'var(--text-dim)', fontSize:'10px' }}>{card.description}</div>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:600, color:'var(--text)', marginBottom:'2px' }}>{card.label}</div>
+                      <div style={{ color:'var(--text-dim)', fontSize:'10px' }}>{card.description}</div>
+                    </div>
+                    <div style={{ fontFamily:'IBM Plex Mono', fontWeight:700, fontSize:'13px', color:'var(--text-mid)', minWidth:'24px', textAlign:'right', marginLeft:'8px' }}>
+                      {geoVoteCounts[card.id] ?? 0}
+                    </div>
                   </div>
-                  <div style={{ fontFamily:'IBM Plex Mono', fontWeight:700, fontSize:'13px', color:'var(--text-mid)', minWidth:'24px', textAlign:'right' }}>
-                    {geoVoteCounts[card.id] ?? 0}
-                  </div>
+                  {card.evidence && (
+                    <div style={{ marginTop:'5px', paddingTop:'5px', borderTop:'1px solid var(--border)', fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', lineHeight:1.4 }}>
+                      ↗ {card.evidence}
+                    </div>
+                  )}
                 </div>
               ))
             }
@@ -1832,6 +1892,9 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
               }}>
                 {geoProb < 40 ? 'RISK — LOW PROB' : geoProb < 65 ? 'HOLD — MID PROB' : 'SECURE — HIGH PROB'}
               </span>
+              <span style={{ fontSize:'9px', padding:'2px 7px', borderRadius:'3px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px', background:'rgba(16,185,129,0.15)', color:'#34d399' }}>
+                AI ANALYSIS
+              </span>
               {geoHypothesis && (
                 <span style={{ fontSize:'11px', color:'var(--text-dim)', fontStyle:'italic' }}>
                   가설: {geoHypothesis}
@@ -1839,6 +1902,37 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
               )}
             </div>
             <div style={{ fontSize:'13px', color:'var(--text)', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{geoStrategy}</div>
+          </Panel>
+        )}
+
+        {/* Calibration panel — Judgment DB */}
+        {calibration && calibration.totalCount > 0 && (
+          <Panel title="과거 판단 정확도 (Judgment DB)">
+            <div style={{ display:'flex', alignItems:'center', gap:'16px', marginBottom:'12px', flexWrap:'wrap' }}>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 16px', background:'var(--surface2)', borderRadius:'4px' }}>
+                <span style={{ fontSize:'22px', fontWeight:700, fontFamily:'IBM Plex Mono', color:'var(--text)' }}>{calibration.correctCount}/{calibration.totalCount}</span>
+                <span style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>예측 정확도</span>
+              </div>
+              {calibration.brierScore !== null && (
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 16px', background:'var(--surface2)', borderRadius:'4px' }}>
+                  <span style={{ fontSize:'22px', fontWeight:700, fontFamily:'IBM Plex Mono', color: calibration.brierScore < 0.2 ? 'var(--green)' : calibration.brierScore < 0.33 ? 'var(--yellow)' : 'var(--red)' }}>
+                    {calibration.brierScore.toFixed(3)}
+                  </span>
+                  <span style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>Brier Score (낮을수록 정확)</span>
+                </div>
+              )}
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {calibration.entries.map((e, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', background:'var(--surface2)', borderRadius:'3px', flexWrap:'wrap' }}>
+                  <span style={{ fontFamily:'IBM Plex Mono', fontWeight:700, fontSize:'13px', color: probColor(e.predictedProb), minWidth:'38px' }}>{e.predictedProb}%</span>
+                  <span style={{ fontSize:'10px', color:'var(--text-dim)', flex:1 }}>{e.topic}</span>
+                  <span style={{ fontSize:'10px', fontFamily:'IBM Plex Mono', color: e.correct ? 'var(--green)' : 'var(--red)' }}>{e.actualOutcome}</span>
+                  <span style={{ fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>{e.resolvedAt}</span>
+                  <span style={{ fontSize:'11px' }}>{e.correct ? '✓' : '✗'}</span>
+                </div>
+              ))}
+            </div>
           </Panel>
         )}
 

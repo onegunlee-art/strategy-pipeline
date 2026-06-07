@@ -4,6 +4,7 @@ import { ROLE_WEIGHTS, VoterRole } from './voteWeights';
 export interface GeoAggregateResult {
   drivers: Record<string, number>;
   geoProb: number;
+  priorProb: number;
   totalVotes: number;
   voteCounts: Record<number, number>; // cardId → headcount
   roleCounts: Record<string, number>; // voterRole → headcount
@@ -20,12 +21,13 @@ function clamp(min: number, max: number, v: number) {
 export async function aggregate(pool: Pool, sessionId: number): Promise<GeoAggregateResult> {
   // base driver_scores from session
   const { rows: sessionRows } = await pool.query(
-    `SELECT driver_scores FROM geo_sessions WHERE id = $1`,
+    `SELECT driver_scores, prior_prob, geo_prob FROM geo_sessions WHERE id = $1`,
     [sessionId]
   );
   const base: Record<string, number> = sessionRows[0]?.driver_scores ?? {
     외교채널: 2, 군사강도: 8, 경제압박: 8, 이란내부: 3, 호르무즈: 7,
   };
+  const priorProb: number = sessionRows[0]?.prior_prob ?? sessionRows[0]?.geo_prob ?? 50;
 
   // cards with per-role vote counts (역할 가중치 집계용)
   const { rows: voteRows } = await pool.query(
@@ -82,5 +84,5 @@ export async function aggregate(pool: Pool, sessionId: number): Promise<GeoAggre
   const raw = (d['외교채널'] + (10 - d['군사강도']) + (10 - d['경제압박']) + d['이란내부'] + (10 - d['호르무즈'])) / 5 * 10;
   const geoProb = clamp(5, 95, Math.round(raw));
 
-  return { drivers: accumulated, geoProb, totalVotes, voteCounts, roleCounts };
+  return { drivers: accumulated, geoProb, priorProb, totalVotes, voteCounts, roleCounts };
 }

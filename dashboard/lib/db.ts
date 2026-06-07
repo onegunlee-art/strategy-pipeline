@@ -535,7 +535,37 @@ async function runInit() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+
+    -- v1.8: 가설 방법론 — Fact/Evidence/Bayesian/JudgmentDB
+    ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS prior_prob INTEGER;
+    ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS facts JSONB;
+    ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS actual_outcome TEXT;
+    ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+    ALTER TABLE geo_signal_cards ADD COLUMN IF NOT EXISTS evidence TEXT;
   `);
+
+  // v1.8: Judgment DB 데모 시드 (과거 예측 3개)
+  const { rows: jdCount } = await pool.query(
+    `SELECT COUNT(*)::int as c FROM geo_sessions WHERE token LIKE 'demo_seed_%'`
+  );
+  if (jdCount[0].c === 0) {
+    type JudgmentRow = [string, string, number, number, string, string, string];
+    const judgeSeeds: JudgmentRow[] = [
+      ['이란-이스라엘 휴전 협상 (2026.04)', 'demo_seed_001', 28, 31, 'ceasefire_extended', '2026-04-21', '오만 중재로 90일 휴전 합의 → 예측 방향 일치'],
+      ['호르무즈 해협 봉쇄 리스크 (2026.01)', 'demo_seed_002', 41, 38, 'no_blockade', '2026-01-31', '이란 봉쇄 미실시 → 낮은 확률 예측 일치'],
+      ['우크라이나 휴전 협상 (2025.12)', 'demo_seed_003', 58, 61, 'talks_failed', '2025-12-31', '협상 결렬 → 높은 확률 예측이 오판'],
+    ];
+    for (const [topic, token, priorProb, geoProb, outcome, resolvedAt, note] of judgeSeeds) {
+      await pool.query(
+        `INSERT INTO geo_sessions (topic, token, prior_prob, geo_prob, actual_outcome, resolved_at, analysis_text)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (token) DO NOTHING`,
+        [topic, token, priorProb, geoProb, outcome, resolvedAt, note]
+      );
+    }
+  }
+
 
   // v1.7: 폴리마켓 시장 데이터 시드 (idempotent)
   const { rows: pmCount } = await pool.query('SELECT COUNT(*)::int as c FROM polymarket_markets');
