@@ -536,6 +536,7 @@ async function runInit() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+
     -- v1.8: 가설 방법론 — Fact/Evidence/Bayesian/JudgmentDB
     ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS prior_prob INTEGER;
     ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS facts JSONB;
@@ -564,6 +565,7 @@ async function runInit() {
       );
     }
   }
+
 
   // v1.7: 폴리마켓 시장 데이터 시드 (idempotent)
   const { rows: pmCount } = await pool.query('SELECT COUNT(*)::int as c FROM polymarket_markets');
