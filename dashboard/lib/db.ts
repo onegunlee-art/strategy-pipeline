@@ -511,6 +511,10 @@ async function runInit() {
     );
     CREATE INDEX IF NOT EXISTS idx_geo_votes_session ON geo_votes(session_id);
     CREATE INDEX IF NOT EXISTS idx_geo_cards_session ON geo_signal_cards(session_id);
+
+    -- v1.5: 지정학 투표에 역할 가중치 — 참여자 이름/역할 기록
+    ALTER TABLE geo_votes ADD COLUMN IF NOT EXISTS voter_name TEXT;
+    ALTER TABLE geo_votes ADD COLUMN IF NOT EXISTS voter_role TEXT;
   `);
 
   // v0.4: 2025 Q4 PDF 시드 (idempotent)

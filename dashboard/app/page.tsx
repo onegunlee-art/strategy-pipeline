@@ -12,6 +12,7 @@ import type { Partner, Risk, Milestone, CompPos, BidTimeline } from '@/lib/types
 import { pillarScoreFromSubs, pillarMultiplication } from '@/lib/pillars';
 import type { SubScores } from '@/lib/pillars';
 import { ACTION_CATALOG } from '@/lib/actionCatalog';
+import { ROLE_LABEL, ROLE_WEIGHTS, VoterRole } from '@/lib/voteWeights';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1278,6 +1279,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [geoToken, setGeoToken] = useState<string | null>(null);
   const [geoCards, setGeoCards] = useState<GeoSignalCard[]>([]);
   const [geoVoteCounts, setGeoVoteCounts] = useState<Record<number, number>>({});
+  const [geoRoleCounts, setGeoRoleCounts] = useState<Record<string, number>>({});
   const [liveDrivers, setLiveDrivers] = useState<Record<string, number> | null>(null);
   const [liveProb, setLiveProb] = useState<number | null>(null);
   const [startingSession, setStartingSession] = useState(false);
@@ -1306,6 +1308,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         if (json.drivers) setLiveDrivers(json.drivers);
         if (json.geoProb != null) setLiveProb(json.geoProb);
         if (json.voteCounts) setGeoVoteCounts(json.voteCounts);
+        if (json.roleCounts) setGeoRoleCounts(json.roleCounts);
       } catch { /* ignore */ }
     }, 5000);
     return () => clearInterval(id);
@@ -1564,6 +1567,24 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
               <div style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>누적 응답</div>
             </div>
 
+            {/* Role breakdown — 역할별 참여자 수 */}
+            <div style={{ fontSize:'10px', color:'var(--text-dim)', marginBottom:'8px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px' }}>역할별 참여</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'4px', marginBottom:'12px' }}>
+              {(Object.keys(ROLE_WEIGHTS) as VoterRole[]).map(r => {
+                const c = geoRoleCounts[r] ?? 0;
+                return (
+                  <div key={r} style={{
+                    padding:'6px 4px', borderRadius:'2px', textAlign:'center',
+                    background:'var(--surface2)', opacity: c > 0 ? 1 : 0.4,
+                  }}>
+                    <div style={{ fontFamily:'IBM Plex Mono', fontWeight:700, fontSize:'14px', color: c > 0 ? 'var(--text)' : 'var(--text-dim)' }}>{c}</div>
+                    <div style={{ fontSize:'9px', color:'var(--text-dim)' }}>{ROLE_LABEL[r]}</div>
+                    <div style={{ fontSize:'8px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>{ROLE_WEIGHTS[r].toFixed(1)}×</div>
+                  </div>
+                );
+              })}
+            </div>
+
             {/* Signal cards */}
             <div style={{ fontSize:'10px', color:'var(--text-dim)', marginBottom:'8px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px' }}>시그널 카드</div>
             {geoCards.length === 0
@@ -1586,7 +1607,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
               ))
             }
             <div style={{ fontSize:'10px', color:'var(--text-dim)', lineHeight:1.5, marginTop:'8px' }}>
-              익명 응답 기반으로 드라이버가 실시간 업데이트됩니다.
+              역할 가중치가 반영된 응답으로 드라이버가 실시간 업데이트됩니다.
             </div>
           </Panel>
         </div>

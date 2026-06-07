@@ -1,6 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ROLE_WEIGHTS, ROLE_LABEL, VoterRole } from '@/lib/voteWeights';
+
+const ROLE_OPTIONS = (Object.keys(ROLE_WEIGHTS) as VoterRole[]).map(id => ({
+  id,
+  label: ROLE_LABEL[id],
+  weight: `${ROLE_WEIGHTS[id].toFixed(1)}×`,
+}));
 
 interface GeoCard {
   id: number;
@@ -22,11 +29,13 @@ function probColor(p: number) {
 
 export default function GeoVotePage({ params }: { params: { token: string } }) {
   const { token } = params;
-  const [phase, setPhase] = useState<'loading' | 'voting' | 'done'>('loading');
+  const [phase, setPhase] = useState<'loading' | 'identify' | 'voting' | 'done'>('loading');
   const [session, setSession] = useState<SessionData | null>(null);
   const [resultProb, setResultProb] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [name, setName] = useState('');
+  const [role, setRole] = useState<VoterRole | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -40,7 +49,7 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
           geoProb: json.geoProb,
           cards: json.cards ?? [],
         });
-        setPhase('voting');
+        setPhase('identify');
       } catch (e) {
         setError(String(e));
       }
@@ -55,7 +64,7 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
       const res = await fetch(`/api/geo/vote/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cardId }),
+        body: JSON.stringify({ cardId, voterName: name, voterRole: role }),
       });
       const json = await res.json();
       if (res.ok) {
@@ -113,6 +122,79 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+
+  if (phase === 'identify') return (
+    <div style={root}>
+      <div style={{ maxWidth: 440, width: '100%' }}>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: '1px', fontFamily: 'IBM Plex Mono, monospace', marginBottom: 6 }}>
+            지정학 시그널 분석
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.4 }}>
+            {session?.topic}
+          </div>
+        </div>
+
+        <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, padding: 20 }}>
+          <div style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '1px', marginBottom: 10, fontFamily: 'IBM Plex Mono, monospace' }}>
+            참여자 이름
+          </div>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            autoFocus
+            placeholder="예: 홍길동"
+            style={{
+              width: '100%', background: '#111', border: '1px solid #333',
+              borderRadius: 8, padding: '12px 14px', color: '#f4f4f5', fontSize: 16,
+              fontFamily: 'inherit', boxSizing: 'border-box',
+            }}
+          />
+
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '1px', marginBottom: 10, fontFamily: 'IBM Plex Mono, monospace' }}>
+              본인 역할
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {ROLE_OPTIONS.map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setRole(opt.id)}
+                  style={{
+                    padding: '10px 8px', borderRadius: 6,
+                    border: '1px solid ' + (role === opt.id ? '#22d3ee' : '#333'),
+                    background: role === opt.id ? '#0e3a44' : '#111',
+                    color: role === opt.id ? '#22d3ee' : '#f4f4f5',
+                    fontSize: 12, cursor: 'pointer', textAlign: 'center',
+                  }}>
+                  <div>{opt.label}</div>
+                  <div style={{ fontSize: 10, color: role === opt.id ? '#22d3ee' : '#6b7280', marginTop: 2, fontFamily: 'IBM Plex Mono, monospace' }}>
+                    {opt.weight}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
+              역할별로 시그널 반영 가중치가 달라집니다
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => { if (name.trim() && role) setPhase('voting'); }}
+          disabled={!name.trim() || !role}
+          style={{
+            width: '100%', marginTop: 20, padding: 14, borderRadius: 10, border: 'none',
+            background: name.trim() && role ? '#22d3ee' : '#1a1a1a',
+            color: name.trim() && role ? '#06262d' : '#6b7280',
+            fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700,
+            cursor: name.trim() && role ? 'pointer' : 'default',
+          }}>
+          ▶  시그널 선택 →
+        </button>
       </div>
     </div>
   );
@@ -190,7 +272,7 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
         </div>
 
         <div style={{ marginTop: 32, fontSize: 10, color: '#4b5563', textAlign: 'center', lineHeight: 1.6 }}>
-          익명으로 수집됩니다. 개인 정보는 저장되지 않습니다.
+          {name ? `${name} 님` : '참여자'}의 역할 가중치가 분석에 반영됩니다.
         </div>
       </div>
     </div>
