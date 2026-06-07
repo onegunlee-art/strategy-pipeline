@@ -14,6 +14,7 @@ interface GeoCard {
   label: string;
   description: string;
   direction: string;
+  evidence?: string;
 }
 
 interface SessionData {
@@ -296,6 +297,11 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
                 <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.4 }}>
                   {card.description}
                 </div>
+                {card.evidence && (
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #2a2a2a', fontSize: 10, color: '#4b5563', fontFamily: 'IBM Plex Mono, monospace', lineHeight: 1.4 }}>
+                    ↗ {card.evidence}
+                  </div>
+                )}
               </button>
             );
           })}
