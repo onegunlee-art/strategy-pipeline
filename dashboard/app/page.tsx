@@ -303,9 +303,9 @@ export default function ExecutiveDashboard() {
             </div>
           )}
 
-          {/* Deal selector */}
+          {/* Deal selector — 지정학 모드에선 숨김(목적과 무관) */}
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-            {loadingDeals ? (
+            {mode === 'geo' ? null : loadingDeals ? (
               <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>LOADING...</span>
             ) : deals.length > 0 ? (
               <select
@@ -1366,13 +1366,17 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
   const startAnalysis = () => { if (query.trim() || true) setStep(2); };
 
-  const driverColors: Record<string, string> = {
-    외교채널: 'var(--green)', 군사강도: 'var(--red)', 경제압박: 'var(--yellow)',
-    이란내부: 'var(--cyan, #0ea5e9)', 호르무즈: 'var(--brand)',
-  };
-  const driverLabels: Record<string, string> = {
-    외교채널: '외교 채널', 군사강도: '군사 강도', 경제압박: '경제 압박',
-    이란내부: '이란 내부', 호르무즈: '호르무즈',
+  // 모든 축을 "높을수록 종전 가능성↑"인 종전 기여도로 통일 (표시 전용 변환)
+  const DRIVER_META = [
+    { key: '외교채널', label: 'Diplomacy',              axis: 'Diplomacy', invert: false, color: 'var(--green)' },
+    { key: '군사강도', label: 'Military De-escalation', axis: 'De-escal.', invert: true,  color: 'var(--red)' },
+    { key: '경제압박', label: 'Economic Off-ramp',      axis: 'Economy',   invert: true,  color: 'var(--yellow)' },
+    { key: '이란내부', label: 'Iran Stability',         axis: 'Stability', invert: false, color: 'var(--cyan, #0ea5e9)' },
+    { key: '호르무즈', label: 'Hormuz Flow',            axis: 'Hormuz',    invert: true,  color: 'var(--brand)' },
+  ] as const;
+  const contrib = (key: string, raw: number) => {
+    const m = DRIVER_META.find(d => d.key === key);
+    return m && m.invert ? 10 - raw : raw;   // 0~10 종전 기여도
   };
 
   // ── Step 1: Search ──
@@ -1449,18 +1453,24 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         </Panel>
 
         <Panel title="드라이버 현황">
+          <div style={{ fontSize:'10px', color:'var(--text-dim)', marginBottom:'10px', lineHeight:1.5 }}>
+            각 축은 0~10 종전 기여도 — 높을수록 종전 가능성에 유리
+          </div>
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-            {Object.entries(drivers).map(([k, v]) => (
-              <div key={k}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
-                  <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{driverLabels[k]}</span>
-                  <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: driverColors[k] }}>{v.toFixed(1)}/10</span>
+            {DRIVER_META.map(m => {
+              const v = contrib(m.key, drivers[m.key]);
+              return (
+                <div key={m.key}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                    <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{m.label}</span>
+                    <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: m.color }}>{v.toFixed(1)}/10</span>
+                  </div>
+                  <div style={{ height:'6px', background:'var(--surface2)', borderRadius:'2px' }}>
+                    <div style={{ width:`${Math.max(4, v * 10)}%`, height:'100%', background: m.color, borderRadius:'2px', transition:'width 0.3s' }} />
+                  </div>
                 </div>
-                <div style={{ height:'6px', background:'var(--surface2)', borderRadius:'2px' }}>
-                  <div style={{ width:`${Math.max(4, v * 10)}%`, height:'100%', background: driverColors[k], borderRadius:'2px', transition:'width 0.3s' }} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Panel>
       </div>
@@ -1476,21 +1486,12 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
       low: Math.max(0, Math.round(geoProb - sigma)),
       high: Math.min(100, Math.round(geoProb + sigma)),
     };
-    // RadarChart는 0~1 스케일. 종전 가능성에 기여하는 방향으로 정규화.
-    const radarScores: Record<string, number> = {
-      외교채널: activeDrivers['외교채널'] / 10,
-      군사강도: (10 - activeDrivers['군사강도']) / 10,
-      경제압박: (10 - activeDrivers['경제압박']) / 10,
-      이란내부: activeDrivers['이란내부'] / 10,
-      호르무즈: (10 - activeDrivers['호르무즈']) / 10,
-    };
-    const geoPillars = [
-      { key: '외교채널', label: '외교' },
-      { key: '군사강도', label: '군사' },
-      { key: '경제압박', label: '경제' },
-      { key: '이란내부', label: '내부' },
-      { key: '호르무즈', label: '호르무즈' },
-    ];
+    // 바·오각형 모두 동일한 종전 기여도(0~10)를 그린다. 오각형 면적 = 종전 가능성.
+    const radarScores: Record<string, number> = {};
+    const geoPillars = DRIVER_META.map(m => {
+      radarScores[m.axis] = contrib(m.key, activeDrivers[m.key]) / 10;
+      return { key: m.axis, label: m.axis };
+    });
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 260px', gap:'16px' }}>
@@ -1498,17 +1499,20 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           {/* Left: drivers + radar */}
           <Panel title="드라이버 분석">
             <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'16px' }}>
-              {Object.entries(activeDrivers).map(([k, v]) => (
-                <div key={k}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
-                    <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{driverLabels[k]}</span>
-                    <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: driverColors[k] }}>{v.toFixed(1)}/10</span>
+              {DRIVER_META.map(m => {
+                const v = contrib(m.key, activeDrivers[m.key]);
+                return (
+                  <div key={m.key}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
+                      <span style={{ fontSize:'11px', color:'var(--text-mid)' }}>{m.label}</span>
+                      <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: m.color }}>{v.toFixed(1)}/10</span>
+                    </div>
+                    <div style={{ height:'6px', background:'var(--surface2)', borderRadius:'2px' }}>
+                      <div style={{ width:`${Math.max(4, v * 10)}%`, height:'100%', background: m.color, borderRadius:'2px', transition:'width 0.3s' }} />
+                    </div>
                   </div>
-                  <div style={{ height:'6px', background:'var(--surface2)', borderRadius:'2px' }}>
-                    <div style={{ width:`${Math.max(4, v * 10)}%`, height:'100%', background: driverColors[k], borderRadius:'2px', transition:'width 0.3s' }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div style={{ display:'flex', justifyContent:'center' }}>
               <RadarChart scores={radarScores} size={200} pillars={geoPillars} color="var(--brand)" />
