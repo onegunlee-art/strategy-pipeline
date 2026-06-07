@@ -6,15 +6,17 @@ import { isVoterRole } from '@/lib/voteWeights';
 export async function POST(req: NextRequest, ctx: { params: { token: string } }) {
   try {
     const { token } = ctx.params;
-    const { cardId, voterName, voterRole } = await req.json() as {
-      cardId: number; voterName?: string; voterRole?: string;
+    const body = await req.json() as {
+      cardIds?: number[]; cardId?: number; voterName?: string; voterRole?: string;
     };
 
-    if (!cardId) return NextResponse.json({ error: 'cardId required' }, { status: 400 });
+    // Accept both cardIds[] (multi-select) and legacy cardId (single)
+    const ids: number[] = body.cardIds ?? (body.cardId ? [body.cardId] : []);
+    if (ids.length === 0) return NextResponse.json({ error: 'cardIds required' }, { status: 400 });
+    if (ids.length < 2) return NextResponse.json({ error: 'minimum 2 cards required' }, { status: 400 });
 
-    // 데모: 잘못되거나 누락된 역할은 reviewer(1.0×)로 폴백
-    const role = voterRole && isVoterRole(voterRole) ? voterRole : 'reviewer';
-    const name = (voterName ?? '').trim() || null;
+    const role = body.voterRole && isVoterRole(body.voterRole) ? body.voterRole : 'reviewer';
+    const name = (body.voterName ?? '').trim() || null;
 
     const db = await getDb();
 
@@ -26,18 +28,23 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
 
     const sessionId: number = rows[0].id;
 
-    // Verify card belongs to session
+    // Verify all cards belong to this session in one query
     const { rows: cardCheck } = await db.query(
-      `SELECT id FROM geo_signal_cards WHERE id = $1 AND session_id = $2`,
-      [cardId, sessionId]
+      `SELECT id FROM geo_signal_cards WHERE id = ANY($1::int[]) AND session_id = $2`,
+      [ids, sessionId]
     );
-    if (cardCheck.length === 0) return NextResponse.json({ error: 'card not found' }, { status: 404 });
+    if (cardCheck.length !== ids.length) {
+      return NextResponse.json({ error: 'one or more cards not found' }, { status: 404 });
+    }
 
-    await db.query(
-      `INSERT INTO geo_votes (session_id, card_id, voter_name, voter_role)
-       VALUES ($1, $2, $3, $4)`,
-      [sessionId, cardId, name, role]
-    );
+    // Insert one vote row per card (independent weighted accumulation)
+    for (const cardId of ids) {
+      await db.query(
+        `INSERT INTO geo_votes (session_id, card_id, voter_name, voter_role)
+         VALUES ($1, $2, $3, $4)`,
+        [sessionId, cardId, name, role]
+      );
+    }
 
     const agg = await aggregate(db, sessionId);
     return NextResponse.json(agg);

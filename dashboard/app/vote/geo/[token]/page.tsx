@@ -36,6 +36,7 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [role, setRole] = useState<VoterRole | null>(null);
+  const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     async function load() {
@@ -57,14 +58,22 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
     load();
   }, [token]);
 
-  const handleVote = async (cardId: number) => {
-    if (submitting) return;
+  const toggleCard = (id: number) => {
+    setSelectedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (selectedCards.size < 2 || submitting) return;
     setSubmitting(true);
     try {
       const res = await fetch(`/api/geo/vote/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cardId, voterName: name, voterRole: role }),
+        body: JSON.stringify({ cardIds: [...selectedCards], voterName: name, voterRole: role }),
       });
       const json = await res.json();
       if (res.ok) {
@@ -199,14 +208,13 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
     </div>
   );
 
+  const canSubmit = selectedCards.size >= 2 && !submitting;
+
   return (
     <div style={root}>
       <div style={{ maxWidth: 440, width: '100%' }}>
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, color: '#f4f4f5', marginBottom: 10 }}>
-            안녕 이하진^^
-          </div>
           <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: '1px', fontFamily: 'IBM Plex Mono, monospace', marginBottom: 6 }}>
             지정학 시그널 분석
           </div>
@@ -221,8 +229,16 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
           </div>
         </div>
 
-        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
-          가장 중요하다고 생각하는 시그널 1개를 선택하세요
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: '#6b7280' }}>
+            중요하다고 생각하는 시그널을 <strong style={{ color: '#f4f4f5' }}>2개 이상</strong> 선택하세요
+          </div>
+          <div style={{
+            fontSize: 11, fontFamily: 'IBM Plex Mono, monospace',
+            color: selectedCards.size >= 2 ? '#22d3ee' : '#6b7280',
+          }}>
+            {selectedCards.size}개 선택
+          </div>
         </div>
 
         {/* Cards */}
@@ -232,46 +248,82 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {session?.cards.map(card => (
-            <button
-              key={card.id}
-              onClick={() => handleVote(card.id)}
-              disabled={submitting}
-              style={{
-                minHeight: 80,
-                padding: '16px 20px',
-                background: '#1a1a1a',
-                border: `2px solid ${card.direction === 'agree' ? '#16a34a' : '#dc2626'}`,
-                borderRadius: 8,
-                color: '#f4f4f5',
-                cursor: submitting ? 'default' : 'pointer',
-                textAlign: 'left',
-                opacity: submitting ? 0.6 : 1,
-                transition: 'opacity 0.2s',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{
-                  fontSize: 9,
-                  padding: '2px 6px',
-                  borderRadius: 3,
-                  background: card.direction === 'agree' ? '#14532d' : '#7f1d1d',
-                  color: card.direction === 'agree' ? '#4ade80' : '#fca5a5',
-                  fontFamily: 'IBM Plex Mono, monospace',
-                  letterSpacing: '0.5px',
-                }}>
-                  {card.direction === 'agree' ? '종전↑' : '긴장↑'}
-                </span>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>{card.label}</span>
-              </div>
-              <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.4 }}>
-                {card.description}
-              </div>
-            </button>
-          ))}
+          {session?.cards.map(card => {
+            const selected = selectedCards.has(card.id);
+            return (
+              <button
+                key={card.id}
+                onClick={() => toggleCard(card.id)}
+                disabled={submitting}
+                style={{
+                  minHeight: 80,
+                  padding: '16px 20px',
+                  background: selected ? (card.direction === 'agree' ? '#0a2e16' : '#2e0a0a') : '#1a1a1a',
+                  border: selected
+                    ? `2px solid #22d3ee`
+                    : `2px solid ${card.direction === 'agree' ? '#16a34a' : '#dc2626'}`,
+                  borderRadius: 8,
+                  color: '#f4f4f5',
+                  cursor: submitting ? 'default' : 'pointer',
+                  textAlign: 'left',
+                  opacity: submitting ? 0.6 : 1,
+                  transition: 'background 0.15s, border-color 0.15s',
+                  position: 'relative',
+                }}
+              >
+                {selected && (
+                  <div style={{
+                    position: 'absolute', top: 10, right: 12,
+                    width: 18, height: 18, borderRadius: '50%',
+                    background: '#22d3ee', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 10, color: '#06262d', fontWeight: 700,
+                  }}>✓</div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{
+                    fontSize: 9,
+                    padding: '2px 6px',
+                    borderRadius: 3,
+                    background: card.direction === 'agree' ? '#14532d' : '#7f1d1d',
+                    color: card.direction === 'agree' ? '#4ade80' : '#fca5a5',
+                    fontFamily: 'IBM Plex Mono, monospace',
+                    letterSpacing: '0.5px',
+                  }}>
+                    {card.direction === 'agree' ? '종전↑' : '긴장↑'}
+                  </span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>{card.label}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.4 }}>
+                  {card.description}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        <div style={{ marginTop: 32, fontSize: 10, color: '#4b5563', textAlign: 'center', lineHeight: 1.6 }}>
+        {/* Submit */}
+        <div style={{ marginTop: 20 }}>
+          {selectedCards.size < 2 && selectedCards.size > 0 && (
+            <div style={{ fontSize: 11, color: '#d97706', textAlign: 'center', marginBottom: 10, fontFamily: 'IBM Plex Mono, monospace' }}>
+              최소 2개를 선택하세요 ({selectedCards.size}/2)
+            </div>
+          )}
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            style={{
+              width: '100%', padding: 14, borderRadius: 10, border: 'none',
+              background: canSubmit ? '#22d3ee' : '#1a1a1a',
+              color: canSubmit ? '#06262d' : '#6b7280',
+              fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700,
+              cursor: canSubmit ? 'pointer' : 'default',
+              transition: 'background 0.2s',
+            }}>
+            {submitting ? '제출 중...' : `시그널 ${selectedCards.size}개 제출 →`}
+          </button>
+        </div>
+
+        <div style={{ marginTop: 16, fontSize: 10, color: '#4b5563', textAlign: 'center', lineHeight: 1.6 }}>
           {name ? `${name} 님` : '참여자'}의 역할 가중치가 분석에 반영됩니다.
         </div>
       </div>
