@@ -51,7 +51,9 @@ export async function queryGistRag(req: GistRagRequest): Promise<GistRagResult |
         include_analysis: req.include_analysis ?? false,
         analysis_cluster_name: req.analysis_cluster_name ?? '',
       }),
-      signal: AbortSignal.timeout(60_000), // 60초 초과 시 건너뜀
+      // Hobby 플랜은 함수 전체가 60초에서 강제 종료된다. Gist에 40초까지 주고
+      // 나머지(약 18초)를 Gemini 생성에 남겨 504를 피한다.
+      signal: AbortSignal.timeout(40_000),
     });
 
     if (!res.ok) {
@@ -66,33 +68,41 @@ export async function queryGistRag(req: GistRagRequest): Promise<GistRagResult |
   }
 }
 
-// RAG 결과를 Gemini 프롬프트에 주입할 텍스트 블록으로 변환
-export function formatGistContextForPrompt(rag: GistRagResult): string {
+// RAG 결과를 Gemini 프롬프트에 주입할 텍스트 블록으로 변환.
+// Gist 응답 형태가 예상과 달라도(필드 누락/타입 불일치) 절대 throw 하지 않는다.
+// 여기서 예외가 나면 호출부에서 Gemini 생성 전체가 스킵되므로 방어가 중요.
+export function formatGistContextForPrompt(rag: GistRagResult | null | undefined): string {
+  if (!rag || typeof rag !== 'object') return '';
+  const search = rag.search ?? ({} as Partial<GistRagResult['search']>);
   const lines: string[] = [];
 
-  if (rag.search.insight) {
-    lines.push(`[지스트 뉴스 핵심 인사이트]\n${rag.search.insight}`);
+  if (typeof search.insight === 'string' && search.insight.trim()) {
+    lines.push(`[지스트 뉴스 핵심 인사이트]\n${search.insight.trim()}`);
   }
 
-  if (rag.search.clusters.length > 0) {
+  const clusters = Array.isArray(search.clusters) ? search.clusters : [];
+  if (clusters.length > 0) {
     lines.push('\n[주요 이슈 클러스터]');
-    for (const c of rag.search.clusters) {
-      lines.push(`• ${c.name}: ${c.question}`);
+    for (const c of clusters) {
+      if (!c) continue;
+      lines.push(`• ${c.name ?? ''}: ${c.question ?? ''}`);
     }
   }
 
-  const articles = rag.search.results.slice(0, 8);
+  const results = Array.isArray(search.results) ? search.results : [];
+  const articles = results.slice(0, 8);
   if (articles.length > 0) {
     lines.push('\n[관련 뉴스 기사]');
     for (const a of articles) {
-      const date = a.published_at ? a.published_at.slice(0, 10) : '';
+      if (!a || !a.title) continue;
+      const date = typeof a.published_at === 'string' ? a.published_at.slice(0, 10) : '';
       const src = a.source ?? '';
       lines.push(`• [${date}${src ? ' ' + src : ''}] ${a.title}${a.summary ? ' — ' + a.summary : ''}`);
     }
   }
 
-  if (rag.analysis?.full_text) {
-    lines.push(`\n[지스트 전문 분석]\n${rag.analysis.full_text}`);
+  if (rag.analysis && typeof rag.analysis.full_text === 'string' && rag.analysis.full_text.trim()) {
+    lines.push(`\n[지스트 전문 분석]\n${rag.analysis.full_text.trim()}`);
   }
 
   return lines.join('\n');
