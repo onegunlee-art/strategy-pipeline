@@ -38,6 +38,8 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
   const [name, setName] = useState('');
   const [role, setRole] = useState<VoterRole | null>(null);
   const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set());
+  const [suggestions, setSuggestions] = useState<{ name: string; voter_role: string }[]>([]);
+  const [autoMatched, setAutoMatched] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -58,6 +60,33 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
     }
     load();
   }, [token]);
+
+  // 이름 입력 시 DB 자동완성
+  useEffect(() => {
+    if (autoMatched) return; // 이미 매칭됐으면 재조회 안 함
+    if (name.trim().length === 0) { setSuggestions([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/geo/participants?q=${encodeURIComponent(name.trim())}`);
+        const json = await res.json();
+        setSuggestions(json.participants ?? []);
+      } catch { setSuggestions([]); }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [name, autoMatched]);
+
+  const applySuggestion = (p: { name: string; voter_role: string }) => {
+    setName(p.name);
+    if (p.voter_role in ROLE_WEIGHTS) setRole(p.voter_role as VoterRole);
+    setSuggestions([]);
+    setAutoMatched(true);
+  };
+
+  const handleNameChange = (v: string) => {
+    setName(v);
+    setAutoMatched(false);
+    if (v === '') setRole(null);
+  };
 
   const toggleCard = (id: number) => {
     setSelectedCards(prev => {
@@ -152,45 +181,81 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
           <div style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '1px', marginBottom: 10, fontFamily: 'IBM Plex Mono, monospace' }}>
             참여자 이름
           </div>
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            autoFocus
-            placeholder="예: 홍길동"
-            style={{
-              width: '100%', background: '#111', border: '1px solid #333',
-              borderRadius: 8, padding: '12px 14px', color: '#f4f4f5', fontSize: 16,
-              fontFamily: 'inherit', boxSizing: 'border-box',
-            }}
-          />
-
-          <div style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '1px', marginBottom: 10, fontFamily: 'IBM Plex Mono, monospace' }}>
-              본인 역할
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {ROLE_OPTIONS.map(opt => (
-                <button
-                  key={opt.id}
-                  onClick={() => setRole(opt.id)}
-                  style={{
-                    padding: '10px 8px', borderRadius: 6,
-                    border: '1px solid ' + (role === opt.id ? '#22d3ee' : '#333'),
-                    background: role === opt.id ? '#0e3a44' : '#111',
-                    color: role === opt.id ? '#22d3ee' : '#f4f4f5',
-                    fontSize: 12, cursor: 'pointer', textAlign: 'center',
-                  }}>
-                  <div>{opt.label}</div>
-                  <div style={{ fontSize: 10, color: role === opt.id ? '#22d3ee' : '#6b7280', marginTop: 2, fontFamily: 'IBM Plex Mono, monospace' }}>
-                    {opt.weight}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
-              역할별로 시그널 반영 가중치가 달라집니다
-            </div>
+          {/* 이름 입력 + 드롭다운 */}
+          <div style={{ position: 'relative' }}>
+            <input
+              value={name}
+              onChange={e => handleNameChange(e.target.value)}
+              autoFocus
+              placeholder="이름 입력 (예: 홍길동)"
+              style={{
+                width: '100%', background: '#111',
+                border: `1px solid ${autoMatched ? '#22d3ee' : '#333'}`,
+                borderRadius: 8, padding: '12px 14px', color: '#f4f4f5', fontSize: 16,
+                fontFamily: 'inherit', boxSizing: 'border-box',
+              }}
+            />
+            {suggestions.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                background: '#1a1a1a', border: '1px solid #333', borderRadius: 8,
+                marginTop: 4, overflow: 'hidden',
+              }}>
+                {suggestions.map(p => (
+                  <button
+                    key={p.name}
+                    onClick={() => applySuggestion(p)}
+                    style={{
+                      width: '100%', padding: '12px 16px', background: 'transparent',
+                      border: 'none', borderBottom: '1px solid #222',
+                      color: '#f4f4f5', fontSize: 14, cursor: 'pointer',
+                      textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                    <span>{p.name}</span>
+                    <span style={{ fontSize: 11, color: '#22d3ee', fontFamily: 'IBM Plex Mono, monospace' }}>
+                      {ROLE_LABEL[p.voter_role as VoterRole] ?? p.voter_role}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+          {autoMatched && role && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#22d3ee', fontFamily: 'IBM Plex Mono, monospace' }}>
+              ✓ {ROLE_LABEL[role]} 역할로 자동 설정되었습니다
+            </div>
+          )}
+
+          {/* 역할 선택 — 자동 매칭 안 된 경우만 표시 */}
+          {!autoMatched && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '1px', marginBottom: 10, fontFamily: 'IBM Plex Mono, monospace' }}>
+                본인 역할
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {ROLE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setRole(opt.id)}
+                    style={{
+                      padding: '10px 8px', borderRadius: 6,
+                      border: '1px solid ' + (role === opt.id ? '#22d3ee' : '#333'),
+                      background: role === opt.id ? '#0e3a44' : '#111',
+                      color: role === opt.id ? '#22d3ee' : '#f4f4f5',
+                      fontSize: 12, cursor: 'pointer', textAlign: 'center',
+                    }}>
+                    <div>{opt.label}</div>
+                    <div style={{ fontSize: 10, color: role === opt.id ? '#22d3ee' : '#6b7280', marginTop: 2, fontFamily: 'IBM Plex Mono, monospace' }}>
+                      {opt.weight}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6 }}>
+                역할별로 시그널 반영 가중치가 달라집니다
+              </div>
+            </div>
+          )}
         </div>
 
         <button

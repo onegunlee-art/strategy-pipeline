@@ -543,6 +543,13 @@ async function runInit() {
     ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS actual_outcome TEXT;
     ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
     ALTER TABLE geo_signal_cards ADD COLUMN IF NOT EXISTS evidence TEXT;
+
+    -- v1.9: 데모 참가자 명단 (이름 자동완성 + 역할 자동 채움)
+    CREATE TABLE IF NOT EXISTS demo_participants (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      voter_role TEXT NOT NULL
+    );
   `);
 
   // v1.8: Judgment DB 데모 시드 (과거 예측 3개)
@@ -566,6 +573,33 @@ async function runInit() {
     }
   }
 
+
+  // v1.9: 데모 참가자 시드 (idempotent)
+  const { rows: dpCount } = await pool.query(
+    `SELECT COUNT(*)::int as c FROM demo_participants`
+  );
+  if (dpCount[0].c === 0) {
+    type ParticipantRow = [string, string];
+    const participants: ParticipantRow[] = [
+      ['전현호', 'pmo'],
+      ['홍해천', 'executive'],
+      ['정용섭', 'executive'],
+      ['안지운', 'pmo'],
+      ['박희철', 'reviewer'],
+      ['김대희', 'reviewer'],
+      ['김종혁', 'executive'],
+      ['김도완', 'reviewer'],
+      ['정운석', 'reviewer'],
+      ['허윤범', 'reviewer'],
+      ['조광배', 'reviewer'],
+    ];
+    for (const [name, role] of participants) {
+      await pool.query(
+        `INSERT INTO demo_participants (name, voter_role) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`,
+        [name, role]
+      );
+    }
+  }
 
   // v1.7: 폴리마켓 시장 데이터 시드 (idempotent)
   const { rows: pmCount } = await pool.query('SELECT COUNT(*)::int as c FROM polymarket_markets');
