@@ -51,7 +51,7 @@ export async function queryGistRag(req: GistRagRequest): Promise<GistRagResult |
         include_analysis: req.include_analysis ?? false,
         analysis_cluster_name: req.analysis_cluster_name ?? '',
       }),
-      signal: AbortSignal.timeout(15_000), // 15초 초과 시 건너뜀
+      signal: AbortSignal.timeout(60_000), // 60초 초과 시 건너뜀
     });
 
     if (!res.ok) {

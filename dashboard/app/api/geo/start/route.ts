@@ -5,7 +5,8 @@ import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 import { queryGistRag, formatGistContextForPrompt } from '@/lib/gistRag';
 
-export const maxDuration = 60;
+// Gist RAG(최대 60s) + Gemini 호출이 직렬로 이어지므로 함수 타임아웃을 상향.
+export const maxDuration = 300;
 
 function extractJsonObject(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{');
