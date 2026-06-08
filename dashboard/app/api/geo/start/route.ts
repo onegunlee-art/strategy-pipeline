@@ -68,8 +68,10 @@ export async function POST(req: NextRequest) {
             analysis_cluster_name: topic,
           });
           gistContext = formatGistContextForPrompt(gistRag);
+          if (!gistContext) console.warn(`[geo/start] Gist returned no usable content for topic="${topic}"`);
         } catch (gistErr) {
-          console.error('[geo/start] Gist context build failed (continuing without it):', gistErr);
+          const isTimeout = gistErr instanceof Error && gistErr.name === 'AbortError';
+          console.error(`[geo/start] Gist ${isTimeout ? 'TIMEOUT' : 'ERROR'} for topic="${topic}":`, gistErr);
         }
 
         // 동적 드라이버 키/라벨 — 카드 driver_deltas가 정확히 같은 키를 쓰게 한다.

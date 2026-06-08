@@ -54,8 +54,10 @@ export async function POST(req: NextRequest) {
             query: topic, limit: 10, include_analysis: true, analysis_cluster_name: topic,
           });
           gistContext = formatGistContextForPrompt(gistRag);
+          if (!gistContext) console.warn(`[geo/analyze] Gist returned no usable content for topic="${topic}"`);
         } catch (gistErr) {
-          console.error('[geo/analyze] Gist context build failed:', gistErr);
+          const isTimeout = gistErr instanceof Error && gistErr.name === 'AbortError';
+          console.error(`[geo/analyze] Gist ${isTimeout ? 'TIMEOUT' : 'ERROR'} for topic="${topic}":`, gistErr);
         }
 
         const genAI = new GoogleGenerativeAI(GEMINI_KEY);

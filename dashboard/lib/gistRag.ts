@@ -59,9 +59,23 @@ export async function queryGistRag(req: GistRagRequest): Promise<GistRagResult |
       return null;
     }
 
-    return (await res.json()) as GistRagResult;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw: any = await res.json();
+
+    // 응답 구조 진단 로그 — 어떤 필드가 실제로 왔는지 기록
+    const articlesCount = Array.isArray(raw?.search?.results) ? (raw.search.results as unknown[]).length : 0;
+    const hasInsight = typeof raw?.search?.insight === 'string' && (raw.search.insight as string).trim().length > 0;
+    const hasClusters = Array.isArray(raw?.search?.clusters) && (raw.search.clusters as unknown[]).length > 0;
+    const hasAnalysis = typeof raw?.analysis?.full_text === 'string' && (raw.analysis.full_text as string).trim().length > 0;
+    console.log(`[gistRag] query="${req.query}" articles=${articlesCount} insight=${hasInsight} clusters=${hasClusters} analysis=${hasAnalysis}`);
+    if (articlesCount === 0 && !hasInsight && !hasAnalysis) {
+      console.warn(`[gistRag] response has no usable content for query="${req.query}"`);
+    }
+
+    return raw as GistRagResult;
   } catch (e) {
-    console.error('[gistRag] fetch failed:', e);
+    const isTimeout = e instanceof Error && e.name === 'AbortError';
+    console.error(`[gistRag] ${isTimeout ? 'TIMEOUT (60s)' : 'fetch failed'} for query="${req.query}":`, e);
     return null;
   }
 }
@@ -103,5 +117,11 @@ export function formatGistContextForPrompt(rag: GistRagResult | null | undefined
     lines.push(`\n[지스트 전문 분석]\n${rag.analysis.full_text.trim()}`);
   }
 
-  return lines.join('\n');
+  const result = lines.join('\n');
+  if (!result) {
+    console.warn('[gistRag] formatGistContextForPrompt: all sections empty — no usable content from Gist response');
+  } else {
+    console.log(`[gistRag] formatted context: ${lines.length} section(s), ${result.length} chars`);
+  }
+  return result;
 }
