@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import '../../../brief/print.css';
+import { GeoDriver, contribution, normalizeDriverMeta } from '@/lib/geoDrivers';
 
 interface Props {
   params: { session_id: string };
@@ -11,6 +12,7 @@ interface GeoReportData {
   topic: string;
   geo_prob: number;
   driver_scores: Record<string, number>;
+  driver_meta: GeoDriver[];
   total_votes: number;
   cards: { label: string; direction: string; vote_count: number }[];
   hypothesis: string;
@@ -24,14 +26,6 @@ interface GeoReportData {
 }
 
 function probColor(p: number) { return p >= 65 ? '#16a34a' : p >= 45 ? '#d97706' : '#dc2626'; }
-
-const DRIVER_META_REPORT = [
-  { key: '외교채널', label: 'Diplomacy',              invert: false },
-  { key: '군사강도', label: 'Military De-escalation', invert: true  },
-  { key: '경제압박', label: 'Economic Off-ramp',      invert: true  },
-  { key: '이란내부', label: 'Iran Stability',         invert: false },
-  { key: '호르무즈', label: 'Hormuz Flow',            invert: true  },
-];
 
 export default function GeoReportPage({ params }: Props) {
   const { session_id } = params;
@@ -104,13 +98,12 @@ export default function GeoReportPage({ params }: Props) {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 8 }}>종전 기여도 (높을수록 종전↑)</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px' }}>
-            {DRIVER_META_REPORT.map(m => {
-              const raw = (data.driver_scores[m.key] as number) ?? 0;
-              const val = m.invert ? 10 - raw : raw;
+            {normalizeDriverMeta(data.driver_meta).map(m => {
+              const val = contribution(m, data.driver_scores[m.key] ?? 0);
               return (
                 <div key={m.key}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
-                    <span style={{ color: '#374151' }}>{m.label}</span>
+                    <span style={{ color: '#374151' }}>{m.labelEn}</span>
                     <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#374151' }}>{val.toFixed(1)}</span>
                   </div>
                   <div style={{ height: 6, background: '#e5e7eb', borderRadius: 2 }}>
