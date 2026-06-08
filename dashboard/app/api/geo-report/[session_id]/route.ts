@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 import { aggregate } from '@/lib/geoAggregate';
+import { contribution } from '@/lib/geoDrivers';
 
 // Vercel 함수 타임아웃 — 기존 60초에서 대폭 상향 (플랫폼 상한까지).
 // Gemini 응답 지연 시 504로 잘려 클라이언트 JSON 파싱이 폭발하던 문제 완화.
@@ -59,6 +60,7 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
         topic: session.topic,
         geo_prob: agg.geoProb,
         driver_scores: agg.drivers,
+        driver_meta: agg.driverMeta,
         total_votes: agg.totalVotes,
         cards: cardRows,
         hypothesis: session.hypothesis ?? '',
@@ -78,8 +80,9 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
       `- [${c.direction === 'agree' ? '종전↑' : '긴장↑'}] ${c.label}: ${c.vote_count}표`
     ).join('\n');
 
-    const driverSummary = Object.entries(agg.drivers)
-      .map(([k, v]) => `${k}: ${(v as number).toFixed(1)}/10`)
+    // 라벨 + 종전 기여도(invert 반영) 기준으로 요약
+    const driverSummary = agg.driverMeta
+      .map(m => `${m.labelKo}: ${contribution(m, agg.drivers[m.key] ?? 0).toFixed(1)}/10`)
       .join(', ');
 
     const strategyLabel = agg.geoProb < 40 ? '확률 상승 전략' : agg.geoProb < 65 ? '모멘텀 유지 전략' : '리스크 관리 전략';
@@ -129,6 +132,7 @@ ${session.analysis_text ?? ''}
       topic: session.topic,
       geo_prob: agg.geoProb,
       driver_scores: agg.drivers,
+      driver_meta: agg.driverMeta,
       total_votes: agg.totalVotes,
       cards: cardRows,
       hypothesis: session.hypothesis ?? '',

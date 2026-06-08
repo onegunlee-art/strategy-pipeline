@@ -1,8 +1,10 @@
 import { Pool } from 'pg';
 import { ROLE_WEIGHTS, VoterRole } from './voteWeights';
+import { GeoDriver, computeGeoProb, normalizeDriverMeta, FALLBACK_DRIVER_META } from './geoDrivers';
 
 export interface GeoAggregateResult {
   drivers: Record<string, number>;
+  driverMeta: GeoDriver[];
   geoProb: number;
   priorProb: number;
   totalVotes: number;
@@ -19,14 +21,18 @@ function clamp(min: number, max: number, v: number) {
 }
 
 export async function aggregate(pool: Pool, sessionId: number): Promise<GeoAggregateResult> {
-  // base driver_scores from session
+  // base driver_scores + driver_meta from session
   const { rows: sessionRows } = await pool.query(
-    `SELECT driver_scores, prior_prob, geo_prob FROM geo_sessions WHERE id = $1`,
+    `SELECT driver_scores, driver_meta, prior_prob, geo_prob FROM geo_sessions WHERE id = $1`,
     [sessionId]
   );
-  const base: Record<string, number> = sessionRows[0]?.driver_scores ?? {
-    외교채널: 2, 군사강도: 8, 경제압박: 8, 이란내부: 3, 호르무즈: 7,
-  };
+  // 동적 드라이버 메타. 없으면(레거시/시드) 범용 fallback.
+  const driverMeta: GeoDriver[] = sessionRows[0]?.driver_meta
+    ? normalizeDriverMeta(sessionRows[0].driver_meta)
+    : FALLBACK_DRIVER_META;
+  // base 점수: 없으면 메타 키 기준 중립값(5)으로 채운다 (이란 기본값 제거).
+  const base: Record<string, number> = sessionRows[0]?.driver_scores
+    ?? Object.fromEntries(driverMeta.map(m => [m.key, 5]));
   const priorProb: number = sessionRows[0]?.prior_prob ?? sessionRows[0]?.geo_prob ?? 50;
 
   // cards with per-role vote counts (역할 가중치 집계용)
@@ -80,9 +86,7 @@ export async function aggregate(pool: Pool, sessionId: number): Promise<GeoAggre
     }
   }
 
-  const d = accumulated;
-  const raw = (d['외교채널'] + (10 - d['군사강도']) + (10 - d['경제압박']) + d['이란내부'] + (10 - d['호르무즈'])) / 5 * 10;
-  const geoProb = clamp(5, 95, Math.round(raw));
+  const geoProb = computeGeoProb(driverMeta, accumulated);
 
-  return { drivers: accumulated, geoProb, priorProb, totalVotes, voteCounts, roleCounts };
+  return { drivers: accumulated, driverMeta, geoProb, priorProb, totalVotes, voteCounts, roleCounts };
 }

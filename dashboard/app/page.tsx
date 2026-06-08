@@ -13,6 +13,7 @@ import { pillarScoreFromSubs, pillarMultiplication } from '@/lib/pillars';
 import type { SubScores } from '@/lib/pillars';
 import { ACTION_CATALOG } from '@/lib/actionCatalog';
 import { ROLE_LABEL, ROLE_WEIGHTS, VoterRole } from '@/lib/voteWeights';
+import { GeoDriver, contribution, computeGeoProb, normalizeDriverMeta, FALLBACK_DRIVER_META, FALLBACK_DRIVER_SCORES, DRIVER_COLORS } from '@/lib/geoDrivers';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1433,9 +1434,11 @@ interface GeoSignalCard {
 function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => void }) {
   const [query, setQuery] = useState('');
   const [typedLen, setTypedLen] = useState(0);
-  const [drivers] = useState<Record<string, number>>({
-    외교채널: 2, 군사강도: 8, 경제압박: 8, 이란내부: 3, 호르무즈: 7,
-  });
+  // 토픽별 동적 드라이버 (analyze 응답으로 채워짐). 초기엔 범용 fallback.
+  const [driverScores, setDriverScores] = useState<Record<string, number>>({ ...FALLBACK_DRIVER_SCORES });
+  const [driverMeta, setDriverMeta] = useState<GeoDriver[]>(FALLBACK_DRIVER_META);
+  const [analyzing, setAnalyzing] = useState(false);
+  const drivers = driverScores;
 
   // Session state
   const [geoSessionId, setGeoSessionId] = useState<number | null>(null);
@@ -1444,6 +1447,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [geoVoteCounts, setGeoVoteCounts] = useState<Record<number, number>>({});
   const [geoRoleCounts, setGeoRoleCounts] = useState<Record<string, number>>({});
   const [liveDrivers, setLiveDrivers] = useState<Record<string, number> | null>(null);
+  const [liveMeta, setLiveMeta] = useState<GeoDriver[] | null>(null);
   const [liveProb, setLiveProb] = useState<number | null>(null);
   const [startingSession, setStartingSession] = useState(false);
   const [geoHypothesis, setGeoHypothesis] = useState('');
@@ -1453,12 +1457,12 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [geoStrategyHigh, setGeoStrategyHigh] = useState('');
   const [geoPriorProb, setGeoPriorProb] = useState<number | null>(null);
   const [geoFacts, setGeoFacts] = useState<Array<{ type: string; key: string; value: string; source: string }>>([]);
+  const [analysisText, setAnalysisText] = useState('');
   const [calibration, setCalibration] = useState<{ entries: Array<{ topic: string; predictedProb: number; actualOutcome: string; resolvedAt: string; correct: boolean; note: string }>; totalCount: number; correctCount: number; brierScore: number | null } | null>(null);
 
   const activeDrivers = liveDrivers ?? drivers;
-  const geoProb = liveProb ?? Math.min(95, Math.max(5, Math.round(
-    (activeDrivers['외교채널'] + (10 - activeDrivers['군사강도']) + (10 - activeDrivers['경제압박']) + activeDrivers['이란내부'] + (10 - activeDrivers['호르무즈'])) / 5 * 10
-  )));
+  const activeMeta = liveMeta ?? driverMeta;
+  const geoProb = liveProb ?? computeGeoProb(activeMeta, activeDrivers);
   const totalVotes = Object.values(geoVoteCounts).reduce((a, b) => a + b, 0);
 
   // geoProb 변화 시 strategy 구간 재선택
@@ -1484,6 +1488,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         if (!res.ok) return;
         const json = await res.json();
         if (json.drivers) setLiveDrivers(json.drivers);
+        if (Array.isArray(json.driverMeta) && json.driverMeta.length > 0) setLiveMeta(normalizeDriverMeta(json.driverMeta));
         if (json.geoProb != null) setLiveProb(json.geoProb);
         if (json.voteCounts) setGeoVoteCounts(json.voteCounts);
         if (json.roleCounts) setGeoRoleCounts(json.roleCounts);
@@ -1509,16 +1514,35 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     fetch('/api/geo/calibration').then(r => r.json()).then(d => setCalibration(d)).catch(() => {});
   }, [step]);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // TODO(월요일): the gist RAG API 연동 지점
-  // 현재는 데모용 하드코딩 텍스트. 월요일에 아래 ANALYSIS_TEXT를
-  // read-only RAG 엔드포인트 fetch 결과로 교체.
-  //   예) const res = await fetch(`/api/geo/analyze?q=${encodeURIComponent(query)}`);
-  //       → { conclusion, agree_signals[], conflict_signals[], driver_scores } 형태로 받아
-  //         ANALYSIS_TEXT 조립 + setDrivers(driver_scores)
-  // GIST 성능 영향 없도록 검색 호출 → RAG가 결과만 push 하는 방식.
-  // ──────────────────────────────────────────────────────────────────────────
-  const ANALYSIS_TEXT = `분석 주제: ${query || '이란 전쟼 종전 가능성'}\n\n━━ 핵심 결론 ━━\n현재 이란-이스라엘 직접 충돌 구도와 호르무즈 해협 봉쇄 리스크가 교전 종료 가능성을 구조적으로 억제하고 있습니다. 외교 채널은 오만·카타르 중재 라인이 유지되고 있으나 실질적 협상 진전은 미미합니다.\n\n━━ 일치 신호 (종전 가능성 ↑) ━━\n• 오만 중재 채널 재가동 (2026.05)\n• 이란 내 경제 위기 심화 → 온건파 입지 강화\n• 미국-이란 간접 접촉 재개 (제네바 채널)\n\n━━ 충돌 신호 (종전 가능성 ↓) ━━\n• 이란 혁명수비대 미사일 발사 지속\n• 이스라엘 선제타격 옵션 공개 천명\n• 호르무즈 해협 훈련 강도 증가\n\n━━ 종합 판단 ━━\n단기(90일) 종전 가능성: 낮음. 중기(1년) 시나리오에서 경제 압박 심화 시 협상 가능성 열려 있으나, 군사적 긴장이 선행 완화되어야 합니다.`;
+  // Step2 표시용 분석 텍스트. analyze 응답 도착 전엔 placeholder를 타이핑한다.
+  const analysisPlaceholder = `분석 주제: ${query || '주제 미입력'}\n\n━━ 분석 진행 중 ━━\n지스트 뉴스 검색 및 AI 드라이버 도출을 수행하고 있습니다.\n실시간 팩트 수집 → 5개 평가 드라이버 정의 → 종전/완화 가능성 산출 순으로 분석됩니다.\n\n잠시만 기다려 주세요...`;
+  const ANALYSIS_TEXT = analysisText || analysisPlaceholder;
+
+  // Step2 진입 시 백그라운드 분석 생성 (타이핑 연출은 유지)
+  useEffect(() => {
+    if (step !== 2) return;
+    let cancelled = false;
+    setAnalyzing(true);
+    setAnalysisText('');
+    (async () => {
+      try {
+        const res = await fetch('/api/geo/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: query || '지정학 리스크' }),
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        if (typeof json.analysisText === 'string') setAnalysisText(json.analysisText);
+        if (Array.isArray(json.driverMeta) && json.driverMeta.length > 0) setDriverMeta(normalizeDriverMeta(json.driverMeta));
+        if (json.driverScores && typeof json.driverScores === 'object') setDriverScores(json.driverScores);
+      } catch { /* placeholder 유지 */ }
+      finally { if (!cancelled) setAnalyzing(false); }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const handleEnterStep3 = async () => {
     setStartingSession(true);
@@ -1527,12 +1551,11 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: query || '이란 전쟼 종전 가능성',
+          topic: query || '지정학 리스크',
           analysisText: ANALYSIS_TEXT,
           driverScores: drivers,
-          geoProb: Math.min(95, Math.max(5, Math.round(
-            (drivers['외교채널'] + (10 - drivers['군사강도']) + (10 - drivers['경제압박']) + drivers['이란내부'] + (10 - drivers['호르무즈'])) / 5 * 10
-          ))),
+          driverMeta,
+          geoProb: computeGeoProb(driverMeta, drivers),
         }),
       });
       if (res.ok) {
@@ -1544,11 +1567,10 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         setGeoStrategyLow(json.strategyLow ?? '');
         setGeoStrategyMid(json.strategyMid ?? '');
         setGeoStrategyHigh(json.strategyHigh ?? '');
+        if (Array.isArray(json.driverMeta) && json.driverMeta.length > 0) setDriverMeta(normalizeDriverMeta(json.driverMeta));
         if (json.priorProb != null) setGeoPriorProb(json.priorProb);
         if (Array.isArray(json.facts)) setGeoFacts(json.facts);
-        const initProb = Math.min(95, Math.max(5, Math.round(
-          (drivers['외교채널'] + (10 - drivers['군사강도']) + (10 - drivers['경제압박']) + drivers['이란내부'] + (10 - drivers['호르무즈'])) / 5 * 10
-        )));
+        const initProb = computeGeoProb(driverMeta, drivers);
         setGeoStrategy(initProb < 40 ? (json.strategyLow ?? '') : initProb < 65 ? (json.strategyMid ?? '') : (json.strategyHigh ?? ''));
       }
     } catch { /* proceed anyway */ }
@@ -1571,17 +1593,15 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
   const startAnalysis = () => { if (query.trim() || true) setStep(2); };
 
-  // 모든 축을 "높을수록 종전 가능성↑"인 종전 기여도로 통일 (표시 전용 변환)
-  const DRIVER_META = [
-    { key: '외교채널', label: 'Diplomacy',              axis: 'Diplomacy', invert: false, color: 'var(--green)' },
-    { key: '군사강도', label: 'Military De-escalation', axis: 'De-escal.', invert: true,  color: 'var(--red)' },
-    { key: '경제압박', label: 'Economic Off-ramp',      axis: 'Economy',   invert: true,  color: 'var(--yellow)' },
-    { key: '이란내부', label: 'Iran Stability',         axis: 'Stability', invert: false, color: 'var(--cyan, #0ea5e9)' },
-    { key: '호르무즈', label: 'Hormuz Flow',            axis: 'Hormuz',    invert: true,  color: 'var(--brand)' },
-  ] as const;
+  // 동적 드라이버 메타 → 표시용 (라벨/축/색상). Step1·2는 driverMeta, Step3는 activeMeta.
+  const metaForView = step === 3 ? activeMeta : driverMeta;
+  const DRIVER_META = metaForView.map((m, i) => ({
+    key: m.key, label: m.labelKo, axis: m.labelEn, invert: m.invert,
+    color: DRIVER_COLORS[i % DRIVER_COLORS.length],
+  }));
   const contrib = (key: string, raw: number) => {
-    const m = DRIVER_META.find(d => d.key === key);
-    return m && m.invert ? 10 - raw : raw;   // 0~10 종전 기여도
+    const m = metaForView.find(d => d.key === key);
+    return m ? contribution(m, raw) : raw;   // 0~10 종전 기여도
   };
 
   // ── Step 1: Search ──
@@ -1652,8 +1672,9 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           {typedLen >= ANALYSIS_TEXT.length && (
             <div style={{ marginTop:'16px' }}>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', alignItems:'center' }}>
-                {startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>팩트 수집 · 가설 생성 중...</span>}
-                <button onClick={handleEnterStep3} disabled={startingSession} style={{ ...actionBtn, opacity: startingSession ? 0.6 : 1 }}>확인 →</button>
+                {analyzing && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>뉴스 수집 · 드라이버 도출 중...</span>}
+                {!analyzing && startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>팩트 수집 · 가설 생성 중...</span>}
+                <button onClick={handleEnterStep3} disabled={analyzing || startingSession} style={{ ...actionBtn, opacity: (analyzing || startingSession) ? 0.6 : 1 }}>확인 →</button>
               </div>
             </div>
           )}
