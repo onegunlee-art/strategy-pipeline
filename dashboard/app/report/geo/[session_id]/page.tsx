@@ -44,10 +44,23 @@ export default function GeoReportPage({ params }: Props) {
     async function load() {
       try {
         const res = await fetch(`/api/geo-report/${session_id}`, { method: 'POST' });
-        const json = await res.json();
+        // 504/타임아웃 시 응답이 HTML일 수 있어 text로 먼저 받고 안전하게 파싱한다.
+        const rawText = await res.text();
         if (cancelled) return;
+        let json: Partial<GeoReportData> & { error?: string };
+        try {
+          json = JSON.parse(rawText);
+        } catch {
+          setError(res.ok ? '보고서 응답을 해석할 수 없습니다.' : `HTTP ${res.status} — 서버 응답 시간 초과로 추정됩니다. 잠시 후 다시 시도하세요.`);
+          return;
+        }
         if (!res.ok || json.error) { setError(json.error ?? `HTTP ${res.status}`); return; }
-        setData(json);
+        // 필수 배열 필드 기본값 보정 — 렌더 중 client-side exception 방지
+        setData({
+          ...(json as GeoReportData),
+          cards: Array.isArray(json.cards) ? json.cards : [],
+          driver_scores: json.driver_scores ?? {},
+        });
       } catch (e) {
         if (!cancelled) setError(String(e));
       }
