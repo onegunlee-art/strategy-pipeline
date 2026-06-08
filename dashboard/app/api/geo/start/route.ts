@@ -3,8 +3,10 @@ import { randomBytes } from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
+import { queryGistRag, formatGistContextForPrompt } from '@/lib/gistRag';
 
-export const maxDuration = 60;
+// Gist RAG(최대 60s) + Gemini 호출이 직렬로 이어지므로 함수 타임아웃을 상향 (Vercel Pro).
+export const maxDuration = 300;
 
 function extractJsonObject(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{');
@@ -51,13 +53,28 @@ export async function POST(req: NextRequest) {
 
     if (GEMINI_KEY) {
       try {
+        // Gist RAG: 실제 뉴스 컨텍스트 수집. 호출/포맷 어느 단계가 실패해도
+        // Gemini 생성은 반드시 진행되도록 별도 try로 격리한다.
+        let gistContext = '';
+        try {
+          const gistRag = await queryGistRag({
+            query: topic,
+            limit: 10,
+            include_analysis: true,
+            analysis_cluster_name: topic,
+          });
+          gistContext = formatGistContextForPrompt(gistRag);
+        } catch (gistErr) {
+          console.error('[geo/start] Gist context build failed (continuing without it):', gistErr);
+        }
+
         const genAI = new GoogleGenerativeAI(GEMINI_KEY);
         const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
         const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 분석 텍스트와 드라이버 현황을 바탕으로 JSON 하나를 출력하세요.
 
 분석 텍스트:
 ${analysisText}
-
+${gistContext ? `\n최신 뉴스 컨텍스트 (지스트 검색 결과 — 아래 내용을 facts·evidence·hypothesis에 적극 반영하세요):\n${gistContext}\n` : ''}
 드라이버 현황 (0~10, 종전 기여도 기준): ${JSON.stringify(driverScores)}
 현재 종전 가능성: ${geoProb}%
 
