@@ -51,9 +51,7 @@ export async function queryGistRag(req: GistRagRequest): Promise<GistRagResult |
         include_analysis: req.include_analysis ?? false,
         analysis_cluster_name: req.analysis_cluster_name ?? '',
       }),
-      // Hobby 플랜은 함수 전체가 60초에서 강제 종료된다. Gist에 40초까지 주고
-      // 나머지(약 18초)를 Gemini 생성에 남겨 504를 피한다.
-      signal: AbortSignal.timeout(40_000),
+      signal: AbortSignal.timeout(60_000), // 60초 초과 시 건너뜀
     });
 
     if (!res.ok) {

@@ -5,10 +5,8 @@ import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 import { queryGistRag, formatGistContextForPrompt } from '@/lib/gistRag';
 
-// Vercel Hobby 플랜은 함수가 60초에서 강제 종료된다(300으로 올려도 무시됨).
-// Gist RAG(최대 40s) + Gemini가 직렬로 이어지므로 합산이 60초를 넘지 않도록
-// gistRag 타임아웃을 40초로 두어 Gemini 여유를 남긴다.
-export const maxDuration = 60;
+// Gist RAG(최대 60s) + Gemini 호출이 직렬로 이어지므로 함수 타임아웃을 상향 (Vercel Pro).
+export const maxDuration = 300;
 
 function extractJsonObject(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{');
