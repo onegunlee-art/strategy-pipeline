@@ -14,6 +14,7 @@ import type { SubScores } from '@/lib/pillars';
 import { ACTION_CATALOG } from '@/lib/actionCatalog';
 import { ROLE_LABEL, ROLE_WEIGHTS, VoterRole } from '@/lib/voteWeights';
 import { GeoDriver, contribution, computeGeoProb, normalizeDriverMeta, FALLBACK_DRIVER_META, FALLBACK_DRIVER_SCORES, DRIVER_COLORS } from '@/lib/geoDrivers';
+import type { GistArticle } from '@/lib/gistRag';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1433,7 +1434,6 @@ interface GeoSignalCard {
 
 function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => void }) {
   const [query, setQuery] = useState('');
-  const [typedLen, setTypedLen] = useState(0);
   // 토픽별 동적 드라이버 (analyze 응답으로 채워짐). 초기엔 범용 fallback.
   const [driverScores, setDriverScores] = useState<Record<string, number>>({ ...FALLBACK_DRIVER_SCORES });
   const [driverMeta, setDriverMeta] = useState<GeoDriver[]>(FALLBACK_DRIVER_META);
@@ -1457,7 +1457,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [geoStrategyHigh, setGeoStrategyHigh] = useState('');
   const [geoPriorProb, setGeoPriorProb] = useState<number | null>(null);
   const [geoFacts, setGeoFacts] = useState<Array<{ type: string; key: string; value: string; source: string }>>([]);
-  const [analysisText, setAnalysisText] = useState('');
+  const [gistArticles, setGistArticles] = useState<GistArticle[]>([]);
+  const [gistInsight, setGistInsight] = useState('');
   const [calibration, setCalibration] = useState<{ entries: Array<{ topic: string; predictedProb: number; actualOutcome: string; resolvedAt: string; correct: boolean; note: string }>; totalCount: number; correctCount: number; brierScore: number | null } | null>(null);
 
   const activeDrivers = liveDrivers ?? drivers;
@@ -1514,16 +1515,13 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     fetch('/api/geo/calibration').then(r => r.json()).then(d => setCalibration(d)).catch(() => {});
   }, [step]);
 
-  // Step2 표시용 분석 텍스트. analyze 응답 도착 전엔 placeholder를 타이핑한다.
-  const analysisPlaceholder = `분석 주제: ${query || '주제 미입력'}\n\n━━ 분석 진행 중 ━━\n지스트 뉴스 검색 및 AI 드라이버 도출을 수행하고 있습니다.\n실시간 팩트 수집 → 5개 평가 드라이버 정의 → 종전/완화 가능성 산출 순으로 분석됩니다.\n\n잠시만 기다려 주세요...`;
-  const ANALYSIS_TEXT = analysisText || analysisPlaceholder;
-
-  // Step2 진입 시 백그라운드 분석 생성 (타이핑 연출은 유지)
+  // Step2 진입 시 Gist 기사 + AI 드라이버 점수 수집
   useEffect(() => {
     if (step !== 2) return;
     let cancelled = false;
     setAnalyzing(true);
-    setAnalysisText('');
+    setGistArticles([]);
+    setGistInsight('');
     (async () => {
       try {
         const res = await fetch('/api/geo/analyze', {
@@ -1534,10 +1532,11 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         if (!res.ok) return;
         const json = await res.json();
         if (cancelled) return;
-        if (typeof json.analysisText === 'string') setAnalysisText(json.analysisText);
+        if (Array.isArray(json.gistArticles)) setGistArticles(json.gistArticles);
+        if (typeof json.gistInsight === 'string') setGistInsight(json.gistInsight);
         if (Array.isArray(json.driverMeta) && json.driverMeta.length > 0) setDriverMeta(normalizeDriverMeta(json.driverMeta));
         if (json.driverScores && typeof json.driverScores === 'object') setDriverScores(json.driverScores);
-      } catch { /* placeholder 유지 */ }
+      } catch { /* fallback 드라이버 유지 */ }
       finally { if (!cancelled) setAnalyzing(false); }
     })();
     return () => { cancelled = true; };
@@ -1546,13 +1545,20 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
   const handleEnterStep3 = async () => {
     setStartingSession(true);
+    // geo/start Gemini용: Gist 기사 원문을 이어붙여 분석 컨텍스트로 전달
+    const analysisText = [
+      gistInsight,
+      ...gistArticles.map(a =>
+        `[${a.published_at?.slice(0, 10) ?? ''} ${a.source ?? ''}] ${a.title}${a.summary ? ': ' + a.summary : ''}`
+      ),
+    ].filter(Boolean).join('\n\n');
     try {
       const res = await fetch('/api/geo/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: query || '지정학 리스크',
-          analysisText: ANALYSIS_TEXT,
+          analysisText: analysisText || `분석 주제: ${query || '지정학 리스크'}`,
           driverScores: drivers,
           driverMeta,
           geoProb: computeGeoProb(driverMeta, drivers),
@@ -1578,18 +1584,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     setStep(3);
   };
 
-  useEffect(() => {
-    if (step !== 2) { setTypedLen(0); return; }
-    setTypedLen(0);
-    const id = setInterval(() => {
-      setTypedLen(n => {
-        if (n >= ANALYSIS_TEXT.length) { clearInterval(id); return n; }
-        return n + 5;
-      });
-    }, 25);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
 
   const startAnalysis = () => { if (query.trim() || true) setStep(2); };
 
@@ -1638,46 +1632,75 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     </Panel>
   );
 
-  // ── Step 2: Analysis streaming ──
+  // ── Step 2: News articles + driver scores ──
   if (step === 2) {
-    const displayed = ANALYSIS_TEXT.slice(0, typedLen);
-    const lines = displayed.split('\n');
     return (
       <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:'16px' }}>
-        <Panel title="지정학 분석">
+        <Panel title="관련 뉴스">
           <div style={{ minHeight:'320px' }}>
-            {lines.map((line, i) => {
-              const isPositive = line.startsWith('•') && displayed.includes('일치 신호') && i > displayed.split('\n').findIndex(l => l.includes('일치 신호')) && i < displayed.split('\n').findIndex(l => l.includes('충돌 신호'));
-              const isNegative = line.startsWith('•') && displayed.includes('충돌 신호') && i > displayed.split('\n').findIndex(l => l.includes('충돌 신호'));
-              const isHeader = line.startsWith('━━');
-              return (
-                <div key={i} style={{
-                  fontSize: isHeader ? '11px' : '13px',
-                  fontFamily: isHeader ? 'IBM Plex Mono' : 'inherit',
-                  color: isHeader ? 'var(--text-dim)' : isPositive ? 'var(--green)' : isNegative ? 'var(--red)' : 'var(--text)',
-                  fontWeight: isHeader ? 600 : 400,
-                  lineHeight: 1.6,
-                  letterSpacing: isHeader ? '0.5px' : 0,
-                  marginTop: isHeader ? '12px' : 0,
-                  whiteSpace: 'pre-wrap',
-                }}>
-                  {line}
+            {analyzing && gistArticles.length === 0 && (
+              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                {[1,2,3,4].map(i => (
+                  <div key={i} style={{ height:'60px', background:'var(--surface2)', borderRadius:'4px', opacity: 0.5 + i * 0.1 }} />
+                ))}
+                <div style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginTop:'4px' }}>
+                  뉴스 수집 · 드라이버 도출 중...
                 </div>
-              );
-            })}
-            {typedLen < ANALYSIS_TEXT.length && (
-              <span style={{ display:'inline-block', width:'2px', height:'14px', background:'var(--brand)', animation:'none', verticalAlign:'middle' }}>▌</span>
-            )}
-          </div>
-          {typedLen >= ANALYSIS_TEXT.length && (
-            <div style={{ marginTop:'16px' }}>
-              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', alignItems:'center' }}>
-                {analyzing && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>뉴스 수집 · 드라이버 도출 중...</span>}
-                {!analyzing && startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>팩트 수집 · 가설 생성 중...</span>}
-                <button onClick={handleEnterStep3} disabled={analyzing || startingSession} style={{ ...actionBtn, opacity: (analyzing || startingSession) ? 0.6 : 1 }}>확인 →</button>
               </div>
+            )}
+            {!analyzing && gistArticles.length === 0 && (
+              <div style={{ fontSize:'12px', color:'var(--text-dim)', padding:'20px 0', fontFamily:'IBM Plex Mono' }}>
+                뉴스 데이터를 불러오지 못했습니다. 확인을 눌러 계속할 수 있습니다.
+              </div>
+            )}
+            {gistInsight && (
+              <div style={{ padding:'10px 12px', background:'rgba(34,211,238,0.08)', border:'1px solid var(--brand)',
+                borderRadius:'4px', marginBottom:'12px', fontSize:'12px', color:'var(--text)', lineHeight:1.6 }}>
+                <span style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--brand)', marginRight:'8px' }}>INSIGHT</span>
+                {gistInsight}
+              </div>
+            )}
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {gistArticles.slice(0, 8).map((a, i) => (
+                <div key={i} style={{ padding:'10px 12px', background:'var(--surface2)', borderRadius:'4px',
+                  border:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:'4px' }}>
+                  <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                    {a.published_at && (
+                      <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', whiteSpace:'nowrap' }}>
+                        {a.published_at.slice(0, 10)}
+                      </span>
+                    )}
+                    {a.source && (
+                      <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--brand)',
+                        background:'rgba(34,211,238,0.08)', padding:'1px 6px', borderRadius:'2px', whiteSpace:'nowrap' }}>
+                        {a.source}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize:'13px', fontWeight:600, color:'var(--text)', lineHeight:1.4 }}>
+                    {a.url
+                      ? <a href={a.url} target="_blank" rel="noopener noreferrer"
+                          style={{ color:'var(--text)', textDecoration:'none' }}
+                          onMouseEnter={e => (e.currentTarget.style.textDecoration='underline')}
+                          onMouseLeave={e => (e.currentTarget.style.textDecoration='none')}>
+                          {a.title}
+                        </a>
+                      : a.title
+                    }
+                  </div>
+                  {a.summary && (
+                    <div style={{ fontSize:'11px', color:'var(--text-dim)', lineHeight:1.5 }}>{a.summary}</div>
+                  )}
+                </div>
+              ))}
             </div>
-          )}
+          </div>
+          <div style={{ marginTop:'16px' }}>
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', alignItems:'center' }}>
+              {startingSession && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>팩트 수집 · 가설 생성 중...</span>}
+              <button onClick={handleEnterStep3} disabled={analyzing || startingSession} style={{ ...actionBtn, opacity: (analyzing || startingSession) ? 0.6 : 1 }}>확인 →</button>
+            </div>
+          </div>
         </Panel>
 
         <Panel title="드라이버 현황">
