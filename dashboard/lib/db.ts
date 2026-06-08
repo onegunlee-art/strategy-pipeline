@@ -601,6 +601,7 @@ async function runInit() {
     }
   }
 
+
   // v1.7: 폴리마켓 시장 데이터 시드 (idempotent)
   const { rows: pmCount } = await pool.query('SELECT COUNT(*)::int as c FROM polymarket_markets');
   if (pmCount[0].c === 0) {
