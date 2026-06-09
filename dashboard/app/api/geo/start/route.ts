@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
 // Gist RAG not called here — analysisText from geo/analyze already contains gistAnalysis
-import { GeoDriver, normalizeDriverMeta } from '@/lib/geoDrivers';
+import { GeoDriver, normalizeDriverMeta, buildFallbackCards, buildFallbackFacts } from '@/lib/geoDrivers';
 
 // Gist RAG(최대 60s) + Gemini 호출이 직렬로 이어지므로 함수 타임아웃을 상향 (Vercel Pro).
 export const maxDuration = 300;
+
+type Card = { label: string; description: string; evidence: string; driver_deltas: Record<string, number>; direction: string };
+type Fact = { type: string; key: string; value: string; source: string };
 
 function extractJsonObject(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{');
@@ -48,17 +51,18 @@ export async function POST(req: NextRequest) {
     const token = randomBytes(10).toString('hex');
 
     // Gemini: 카드 + 가설 + 전략 + 팩트 + 에비던스 한 번에 생성
-    let cards: { label: string; description: string; evidence: string; driver_deltas: Record<string, number>; direction: string }[] = [];
+    let cards: Card[] = [];
     let hypothesis = '';
     let strategyLow = '';
     let strategyMid = '';
     let strategyHigh = '';
-    let facts: Array<{ type: string; key: string; value: string; source: string }> = [];
+    let facts: Fact[] = [];
+    let geminiError: string | null = null;
+    let geminiRawLen = 0;
 
     if (GEMINI_KEY) {
-      console.log(`[geo/start] GEMINI_KEY present, analysisText length=${analysisText.length}, driverMeta keys=${driverMeta.map(m=>m.key).join(',')}`);
+      console.log(`[geo/start] GEMINI_KEY present, analysisText length=${analysisText?.length ?? 0}, driverMeta keys=${driverMeta.map(m=>m.key).join(',')}`);
       try {
-        // analysisText already contains gistAnalysis from geo/analyze — no second Gist call needed.
         const driverKeyList = driverMeta.map(m => m.key).join(', ');
         const driverLegend = driverMeta.map(m => `${m.key}=${m.labelKo}(${m.invert ? '높을수록 가능성↓' : '높을수록 가능성↑'})`).join(', ');
         const d1 = driverMeta[0]?.key ?? 'd1';
@@ -70,64 +74,113 @@ export async function POST(req: NextRequest) {
         const genAI = new GoogleGenerativeAI(GEMINI_KEY);
         const model = genAI.getGenerativeModel({
           model: GEMINI_MODEL,
-          generationConfig: { maxOutputTokens: 4096 },
+          generationConfig: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 8192,
+            responseSchema: {
+              type: SchemaType.OBJECT,
+              properties: {
+                hypothesis:    { type: SchemaType.STRING },
+                strategy_low:  { type: SchemaType.STRING },
+                strategy_mid:  { type: SchemaType.STRING },
+                strategy_high: { type: SchemaType.STRING },
+                facts: {
+                  type: SchemaType.ARRAY,
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      type:   { type: SchemaType.STRING },
+                      key:    { type: SchemaType.STRING },
+                      value:  { type: SchemaType.STRING },
+                      source: { type: SchemaType.STRING },
+                    },
+                  },
+                },
+                cards: {
+                  type: SchemaType.ARRAY,
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      label:         { type: SchemaType.STRING },
+                      description:   { type: SchemaType.STRING },
+                      evidence:      { type: SchemaType.STRING },
+                      direction:     { type: SchemaType.STRING },
+                      driver_deltas: {
+                        type: SchemaType.OBJECT,
+                        properties: Object.fromEntries(
+                          driverMeta.map(m => [m.key, { type: SchemaType.NUMBER }])
+                        ),
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         });
-        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 분석 내용을 읽고 JSON 하나만 출력하세요. 마크다운 코드블록 없이 JSON만 출력하세요.
+
+        const prompt = `당신은 지정학 리스크 분석 전문가입니다.
 
 분석 내용:
-${analysisText.slice(0, 3000)}
+${(analysisText ?? '').slice(0, 3000)}
 
 드라이버 정의: ${driverLegend}
 드라이버 현황 (원점수 0~10): ${JSON.stringify(driverScores)}
 현재 종전/완화 가능성: ${geoProb}%
 
-출력 형식 (이 구조 그대로):
-{
-  "hypothesis": "분석 기반 핵심 가설 1~2문장",
-  "strategy_low": "가능성 낮을 때(<40%) 전략 2문장",
-  "strategy_mid": "가능성 중간(40~65%) 전략 2문장",
-  "strategy_high": "가능성 높을 때(>65%) 전략 2문장",
-  "facts": [
-    { "type": "driver", "key": "드라이버 한글명", "value": "현재값", "source": "출처" },
-    { "type": "event", "key": "사건명", "value": "긍정/부정/중립", "source": "날짜+출처" }
-  ],
-  "cards": [
-    { "label": "제목(10자이내)", "description": "설명(30자이내)", "evidence": "근거1문장", "driver_deltas": {"${d1}": 1, "${d2}": -1, "${d3}": 0, "${d4}": 1, "${d5}": -1}, "direction": "agree" },
-    { "label": "제목(10자이내)", "description": "설명(30자이내)", "evidence": "근거1문장", "driver_deltas": {"${d1}": -1, "${d2}": 2, "${d3}": -1, "${d4}": 0, "${d5}": 1}, "direction": "conflict" },
-    { "label": "제목(10자이내)", "description": "설명(30자이내)", "evidence": "근거1문장", "driver_deltas": {"${d1}": 0, "${d2}": -2, "${d3}": 1, "${d4}": 1, "${d5}": 0}, "direction": "agree" },
-    { "label": "제목(10자이내)", "description": "설명(30자이내)", "evidence": "근거1문장", "driver_deltas": {"${d1}": 1, "${d2}": 0, "${d3}": -1, "${d4}": -1, "${d5}": 2}, "direction": "conflict" }
-  ]
-}
-
-규칙:
-- cards는 반드시 4개. driver_deltas 키는 반드시 이 5개만: ${driverKeyList}
-- direction: "agree" 또는 "conflict" 중 하나
-- facts: 총 6~7개 (driver 5개 + event 1~2개)`;
+다음을 생성하세요:
+- hypothesis: 분석 기반 핵심 가설 1~2문장
+- strategy_low: 가능성 낮을 때(<40%) 전략 2문장
+- strategy_mid: 가능성 중간(40~65%) 전략 2문장
+- strategy_high: 가능성 높을 때(>65%) 전략 2문장
+- facts: 6~7개 (driver 5개는 type="driver", event 1~2개는 type="event")
+- cards: 반드시 4개. driver_deltas 키는 반드시 이 5개만: ${driverKeyList}. direction은 "agree" 또는 "conflict".
+  예시: {"${d1}": 1, "${d2}": -1, "${d3}": 0, "${d4}": 1, "${d5}": -1}`;
 
         const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        console.log(`[geo/start] Gemini response length=${text.length}, preview="${text.slice(0, 200)}"`);
-        const parsed = extractJsonObject(text);
+        const rawText = result.response.text();
+        geminiRawLen = rawText.length;
+        console.log(`[geo/start] Gemini response length=${rawText.length}, preview="${rawText.slice(0, 200)}"`);
+
+        // responseSchema 모드에서는 순수 JSON이 보장됨. 파서는 안전망으로만 사용.
+        let parsed: Record<string, unknown> | null = null;
+        try {
+          parsed = JSON.parse(rawText) as Record<string, unknown>;
+        } catch {
+          parsed = extractJsonObject(rawText);
+        }
+
         if (parsed) {
-          console.log(`[geo/start] Parsed OK — cards=${Array.isArray(parsed.cards) ? (parsed.cards as unknown[]).length : 'none'} facts=${Array.isArray(parsed.facts) ? (parsed.facts as unknown[]).length : 'none'}`);
-          if (Array.isArray(parsed.cards)) {
-            cards = parsed.cards as typeof cards;
-          }
-          if (Array.isArray(parsed.facts)) {
-            facts = parsed.facts as typeof facts;
-          }
+          const parsedCards = Array.isArray(parsed.cards) ? parsed.cards : [];
+          const parsedFacts = Array.isArray(parsed.facts) ? parsed.facts : [];
+          console.log(`[geo/start] Parsed OK — cards=${parsedCards.length} facts=${parsedFacts.length}`);
+          if (parsedCards.length > 0) cards = parsedCards as Card[];
+          if (parsedFacts.length > 0) facts = parsedFacts as Fact[];
           hypothesis = (parsed.hypothesis as string) ?? '';
           strategyLow = (parsed.strategy_low as string) ?? '';
           strategyMid = (parsed.strategy_mid as string) ?? '';
           strategyHigh = (parsed.strategy_high as string) ?? '';
         } else {
-          console.error(`[geo/start] extractJsonObject FAILED — raw response: "${text.slice(0, 500)}"`);
+          geminiError = `parse failed — raw: ${rawText.slice(0, 300)}`;
+          console.error(`[geo/start] JSON parse FAILED — raw response: "${rawText.slice(0, 500)}"`);
         }
       } catch (e) {
+        geminiError = String(e);
         console.error('[geo/start] Gemini generation failed:', e);
       }
     } else {
+      geminiError = 'GEMINI_KEY missing';
       console.error('[geo/start] GEMINI_KEY missing — skipping card/fact/hypothesis generation');
+    }
+
+    // 결정론적 Fallback: Gemini 실패해도 카드/팩트가 항상 존재하도록 보장
+    const cardSource = cards.length > 0 ? 'gemini' : 'fallback';
+    if (cards.length === 0) {
+      cards = buildFallbackCards(driverMeta, driverScores);
+      console.log(`[geo/start] Using fallback cards (${cards.length}개)`);
+    }
+    if (facts.length === 0) {
+      facts = buildFallbackFacts(driverMeta, driverScores);
     }
 
     // Insert session with hypothesis + strategy + prior_prob + facts + driver_meta
@@ -141,14 +194,12 @@ ${analysisText.slice(0, 3000)}
     const sessionId: number = rows[0].id;
 
     // Insert cards with evidence
-    if (cards.length > 0) {
-      for (const card of cards) {
-        await db.query(
-          `INSERT INTO geo_signal_cards (session_id, label, description, driver_deltas, direction, evidence)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [sessionId, card.label, card.description, JSON.stringify(card.driver_deltas), card.direction, card.evidence || null]
-        );
-      }
+    for (const card of cards) {
+      await db.query(
+        `INSERT INTO geo_signal_cards (session_id, label, description, driver_deltas, direction, evidence)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [sessionId, card.label, card.description, JSON.stringify(card.driver_deltas), card.direction, card.evidence || null]
+      );
     }
 
     // Fetch inserted cards
@@ -157,7 +208,11 @@ ${analysisText.slice(0, 3000)}
       [sessionId]
     );
 
-    return NextResponse.json({ sessionId, token, cards: cardRows, hypothesis, strategyLow, strategyMid, strategyHigh, priorProb: geoProb, facts, driverMeta });
+    return NextResponse.json({
+      sessionId, token, cards: cardRows, hypothesis, strategyLow, strategyMid, strategyHigh,
+      priorProb: geoProb, facts, driverMeta,
+      _debug: { cardSource, geminiError, geminiRawLen },
+    });
   } catch (e) {
     console.error('[geo/start]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
