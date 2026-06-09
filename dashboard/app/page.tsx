@@ -1933,41 +1933,51 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   // ── Step 1: Search ──
   if (step === 1) return (
     <Panel title="분석 주제 입력">
-      <div style={{ display:'flex', flexDirection:'column', gap:'16px', maxWidth:'640px' }}>
-        <input
-          type="text"
-          placeholder="예: 중국-대만, 12월 군사충돌 현실화 가능성은?"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') startAnalysis(); }}
-          style={{
-            width:'100%', padding:'14px 16px', fontSize:'16px',
-            border:'1px solid var(--border)', borderRadius:'2px',
-            background:'var(--surface2)', color:'var(--text)',
-            fontFamily:'inherit', outline:'none', boxSizing:'border-box',
-          }}
-        />
-        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-          {[
-            '이란-이스라엘, 12월 내 종전 가능성은?',
-            '미국, 7월 전 쿠바 침공 가능성은?',
-            '중국-대만, 12월 군사충돌 현실화 가능성은?',
-            '유가 100달러, 2025 Q3 재돌파 가능성은?',
-            '2026년 AI 최강자, OpenAI 수성 가능성은?',
-            '러-우크라이나, 2026년 내 휴전 타결 가능성은?',
-            '연준 금리인하, 2026 Q3 전 단행 가능성은?',
-            '트럼프 2기, 2026년 내 탄핵 소추 가능성은?',
-          ].map(hint => (
-            <button key={hint} onClick={() => setQuery(hint)} style={{
-              ...badgeStyle, cursor:'pointer', background:'var(--surface)',
-              color:'var(--text-mid)', padding:'4px 10px',
-            }}>
-              {hint}
-            </button>
-          ))}
-        </div>
-        <div>
-          <button onClick={startAnalysis} style={actionBtn}>분석 시작</button>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'360px', padding:'20px 0' }}>
+        <div style={{ width:'100%', maxWidth:'720px' }}>
+          {/* 부제목 */}
+          <div style={{ marginBottom:'20px', textAlign:'center' }}>
+            <div style={{ fontSize:'13px', color:'var(--text-mid)', lineHeight:1.6 }}>
+              글로벌 뉴스 RAG 기반 · AI 드라이버 분석 · Bayesian 확률 수렴
+            </div>
+          </div>
+          <input
+            type="text"
+            placeholder="예: 중국-대만, 12월 군사충돌 현실화 가능성은?"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') startAnalysis(); }}
+            style={{
+              width:'100%', padding:'16px 20px', fontSize:'17px',
+              border:'1px solid var(--border)', borderRadius:'4px',
+              background:'var(--surface2)', color:'var(--text)',
+              fontFamily:'inherit', outline:'none', boxSizing:'border-box',
+              marginBottom:'12px',
+            }}
+          />
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'20px' }}>
+            {[
+              '이란-이스라엘, 12월 내 종전 가능성은?',
+              '미국, 7월 전 쿠바 침공 가능성은?',
+              '중국-대만, 12월 군사충돌 현실화 가능성은?',
+              '유가 100달러, 2025 Q3 재돌파 가능성은?',
+              '2026년 AI 최강자, OpenAI 수성 가능성은?',
+              '러-우크라이나, 2026년 내 휴전 타결 가능성은?',
+              '연준 금리인하, 2026 Q3 전 단행 가능성은?',
+              '트럼프 2기, 2026년 내 탄핵 소추 가능성은?',
+            ].map(hint => (
+              <button key={hint} onClick={() => setQuery(hint)} style={{
+                ...badgeStyle, cursor:'pointer', background:'var(--surface)',
+                color:'var(--text-mid)', padding:'6px 12px', textAlign:'left',
+                whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+              }}>
+                {hint}
+              </button>
+            ))}
+          </div>
+          <div style={{ display:'flex', justifyContent:'center' }}>
+            <button onClick={startAnalysis} style={{ ...actionBtn, padding:'10px 40px', fontSize:'13px' }}>분석 시작</button>
+          </div>
         </div>
       </div>
     </Panel>
