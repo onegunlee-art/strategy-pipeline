@@ -1726,6 +1726,10 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [liveMeta, setLiveMeta] = useState<GeoDriver[] | null>(null);
   const [liveProb, setLiveProb] = useState<number | null>(null);
   const [startingSession, setStartingSession] = useState(false);
+  // Win Factors 애니메이션용 표시 스코어 (0 → 실제값으로 수렴)
+  const [displayScores, setDisplayScores] = useState<Record<string, number>>(
+    Object.fromEntries(Object.keys(FALLBACK_DRIVER_SCORES).map(k => [k, 0]))
+  );
   const [geoHypothesis, setGeoHypothesis] = useState('');
   const [geoStrategy, setGeoStrategy] = useState('');
   const [geoStrategyLow, setGeoStrategyLow] = useState('');
@@ -1737,7 +1741,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [gistInsight, setGistInsight] = useState('');
   const [gistAnalysis, setGistAnalysis] = useState('');
   const [gistClusters, setGistClusters] = useState<GistCluster[]>([]);
-  const [calibration, setCalibration] = useState<{ entries: Array<{ topic: string; predictedProb: number; actualOutcome: string; resolvedAt: string; correct: boolean; note: string }>; totalCount: number; correctCount: number; brierScore: number | null } | null>(null);
+  const [, setCalibration] = useState<{ entries: Array<{ topic: string; predictedProb: number; actualOutcome: string; resolvedAt: string; correct: boolean; note: string }>; totalCount: number; correctCount: number; brierScore: number | null } | null>(null);
 
   const activeDrivers = liveDrivers ?? drivers;
   const activeMeta = liveMeta ?? driverMeta;
@@ -1792,6 +1796,55 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     if (step !== 3) return;
     fetch('/api/geo/calibration').then(r => r.json()).then(d => setCalibration(d)).catch(() => {});
   }, [step]);
+
+  // Win Factors 애니메이션: step2 진입 시 0 리셋, 분석 완료 후 실제값으로 수렴
+  useEffect(() => {
+    if (step !== 2) return;
+    setDisplayScores(Object.fromEntries(Object.keys(FALLBACK_DRIVER_SCORES).map(k => [k, 0])));
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== 2) return;
+    if (analyzing) {
+      // 분석 중: 0~5 사이를 천천히 흔들림 (계산 중인 느낌)
+      let frame = 0;
+      const id = setInterval(() => {
+        frame++;
+        setDisplayScores(prev => {
+          const next: Record<string, number> = {};
+          for (const k of Object.keys(prev)) {
+            const noise = Math.sin(frame * 0.4 + k.charCodeAt(1)) * 1.5 + 2.5;
+            next[k] = Math.max(0.1, Math.min(4.9, noise));
+          }
+          return next;
+        });
+      }, 200);
+      return () => clearInterval(id);
+    } else {
+      // 분석 완료: 실제 값으로 ease-out 수렴 (800ms)
+      const target = driverScores;
+      const start = Date.now();
+      const duration = 800;
+      const startVals = { ...displayScores };
+      let rafId: number;
+      const animate = () => {
+        const t = Math.min(1, (Date.now() - start) / duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+        setDisplayScores(() => {
+          const next: Record<string, number> = {};
+          for (const k of Object.keys(target)) {
+            const from = startVals[k] ?? 0;
+            next[k] = from + (target[k] - from) * ease;
+          }
+          return next;
+        });
+        if (t < 1) rafId = requestAnimationFrame(animate);
+      };
+      rafId = requestAnimationFrame(animate);
+      return () => cancelAnimationFrame(rafId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyzing, step]);
 
   // Step2 진입 시 Gist 기사 + AI 드라이버 점수 수집
   useEffect(() => {
@@ -2031,7 +2084,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'12px' }}>
             {DRIVER_META.map(m => {
-              const v = contrib(m.key, drivers[m.key]);
+              const v = contrib(m.key, displayScores[m.key] ?? 0);
               return (
                 <div key={m.key}>
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
@@ -2039,7 +2092,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                     <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color: m.color }}>{v.toFixed(1)}/10</span>
                   </div>
                   <div style={{ height:'5px', background:'var(--surface2)', borderRadius:'2px' }}>
-                    <div style={{ width:`${Math.max(4, v * 10)}%`, height:'100%', background: m.color, borderRadius:'2px', transition:'width 0.3s' }} />
+                    <div style={{ width:`${Math.max(0, v * 10)}%`, height:'100%', background: m.color, borderRadius:'2px', transition:'width 0.15s ease-out' }} />
                   </div>
                 </div>
               );
