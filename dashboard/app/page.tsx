@@ -15,6 +15,7 @@ import { ACTION_CATALOG } from '@/lib/actionCatalog';
 import { ROLE_LABEL, ROLE_WEIGHTS, VoterRole } from '@/lib/voteWeights';
 import { GeoDriver, contribution, computeGeoProb, normalizeDriverMeta, FALLBACK_DRIVER_META, FALLBACK_DRIVER_SCORES, DRIVER_COLORS } from '@/lib/geoDrivers';
 import type { GistArticle, GistCluster } from '@/lib/gistRag';
+import { gistArticleUrl } from '@/lib/gistRag';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1553,7 +1554,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     setStartingSession(true);
     // geo/start Gemini용: analysis.full_text를 주 컨텍스트로, 없으면 기사 목록으로 대체
     const articleLines = gistArticles.map(a =>
-      `[${a.published_at?.slice(0, 10) ?? ''} ${a.source ?? ''}] ${a.title}${a.summary ? ': ' + a.summary : ''}`
+      `[${a.published_at?.slice(0, 10) ?? ''} ${a.topic_category ?? ''}] ${a.title}${a.description ? ': ' + a.description : ''}`
     );
     const analysisText = gistAnalysis || [gistInsight, ...articleLines].filter(Boolean).join('\n\n');
     try {
@@ -1705,23 +1706,20 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                             {a.published_at.slice(0, 10)}
                           </span>
                         )}
-                        {a.source && (
+                        {a.topic_category && (
                           <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--brand)',
                             background:'rgba(34,211,238,0.08)', padding:'1px 5px', borderRadius:'2px', whiteSpace:'nowrap' }}>
-                            {a.source}
+                            {a.topic_category}
                           </span>
                         )}
                       </div>
                       <div style={{ fontSize:'12px', color:'var(--text)', lineHeight:1.4, flex:1 }}>
-                        {a.url
-                          ? <a href={a.url} target="_blank" rel="noopener noreferrer"
-                              style={{ color:'var(--text)', textDecoration:'none' }}
-                              onMouseEnter={e => (e.currentTarget.style.textDecoration='underline')}
-                              onMouseLeave={e => (e.currentTarget.style.textDecoration='none')}>
-                              {a.title}
-                            </a>
-                          : a.title
-                        }
+                        <a href={gistArticleUrl(a)} target="_blank" rel="noopener noreferrer"
+                            style={{ color:'var(--text)', textDecoration:'none' }}
+                            onMouseEnter={e => (e.currentTarget.style.textDecoration='underline')}
+                            onMouseLeave={e => (e.currentTarget.style.textDecoration='none')}>
+                          {a.title}
+                        </a>
                       </div>
                     </div>
                   ))}
