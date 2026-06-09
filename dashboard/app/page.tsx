@@ -1956,7 +1956,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             '2026년 AI 최강자, OpenAI 수성 가능성은?',
             '러-우크라이나, 2026년 내 휴전 타결 가능성은?',
             '연준 금리인하, 2026 Q3 전 단행 가능성은?',
-            '한국 경기침체, 2026년 공식 선언 가능성은?',
             '트럼프 2기, 2026년 내 탄핵 소추 가능성은?',
           ].map(hint => (
             <button key={hint} onClick={() => setQuery(hint)} style={{
