@@ -2296,28 +2296,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           </Panel>
         )}
 
-        {/* Calibration panel — Judgment DB */}
-        {calibration && calibration.totalCount > 0 && (
-          <Panel title="과거 판단 정확도 (Judgment DB)">
-            <div style={{ display:'flex', alignItems:'center', gap:'16px', marginBottom:'12px', flexWrap:'wrap' }}>
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 16px', background:'var(--surface2)', borderRadius:'4px' }}>
-                <span style={{ fontSize:'22px', fontWeight:700, fontFamily:'IBM Plex Mono', color:'var(--text)' }}>{calibration.correctCount}/{calibration.totalCount}</span>
-                <span style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>예측 정확도</span>
-              </div>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-              {calibration.entries.map((e, i) => (
-                <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', background:'var(--surface2)', borderRadius:'3px', flexWrap:'wrap' }}>
-                  <span style={{ fontFamily:'IBM Plex Mono', fontWeight:700, fontSize:'13px', color: probColor(e.predictedProb), minWidth:'38px' }}>{e.predictedProb}%</span>
-                  <span style={{ fontSize:'10px', color:'var(--text-dim)', flex:1 }}>{e.topic}</span>
-                  <span style={{ fontSize:'10px', fontFamily:'IBM Plex Mono', color: e.correct ? 'var(--green)' : 'var(--red)' }}>{e.actualOutcome}</span>
-                  <span style={{ fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>{e.resolvedAt}</span>
-                  <span style={{ fontSize:'11px' }}>{e.correct ? '✓' : '✗'}</span>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        )}
+        {/* Calibration panel hidden — reserved for sports surprise reveal */}
 
         <div style={{ display:'flex', gap:'12px', justifyContent:'flex-end' }}>
           <button onClick={() => { setStep(5); if (geoSessionId) window.open(`/report/geo/${geoSessionId}`, '_blank'); }} style={actionBtn}>리포트 발행 →</button>
