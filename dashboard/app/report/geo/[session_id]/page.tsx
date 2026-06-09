@@ -92,18 +92,6 @@ function BadgeLegend() {
   );
 }
 
-function ItemRow({ item }: { item: ReportItem }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
-      <span style={{ fontSize: 12, color: '#1F4E9C', fontWeight: 700, whiteSpace: 'nowrap' as const, marginRight: 8, marginTop: 1 }}>
-        [{item.tag}]
-      </span>
-      <span style={{ flex: 1, fontSize: 13, lineHeight: 1.6, color: '#1f2937' }}>{item.content}</span>
-      {item.badge && <span style={{ ...badgeStyle(item.badge), marginLeft: 8 }}>{item.badge}</span>}
-    </div>
-  );
-}
-
 export default function GeoReportPage({ params }: Props) {
   const { session_id } = params;
   const [data, setData] = useState<GeoReportData | null>(null);
