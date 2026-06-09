@@ -2083,14 +2083,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                 <span style={{ fontSize:'22px', fontWeight:700, fontFamily:'IBM Plex Mono', color:'var(--text)' }}>{calibration.correctCount}/{calibration.totalCount}</span>
                 <span style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>예측 정확도</span>
               </div>
-              {calibration.brierScore !== null && (
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 16px', background:'var(--surface2)', borderRadius:'4px' }}>
-                  <span style={{ fontSize:'22px', fontWeight:700, fontFamily:'IBM Plex Mono', color: calibration.brierScore < 0.2 ? 'var(--green)' : calibration.brierScore < 0.33 ? 'var(--yellow)' : 'var(--red)' }}>
-                    {calibration.brierScore.toFixed(3)}
-                  </span>
-                  <span style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>Brier Score (낮을수록 정확)</span>
-                </div>
-              )}
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
               {calibration.entries.map((e, i) => (
