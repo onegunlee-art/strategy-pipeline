@@ -128,6 +128,71 @@ function Panel({ title, children, style }: { title: string; children: React.Reac
   );
 }
 
+const MEDIA_SOURCES = [
+  { name: 'FINANCIAL TIMES', color: '#FFF1E0', bg: '#C41E3A' },
+  { name: 'THE ECONOMIST', color: '#FFFFFF', bg: '#D0021B' },
+  { name: 'FOREIGN AFFAIRS', color: '#FFFFFF', bg: '#1B3A6B' },
+  { name: 'THE GUARDIAN', color: '#FFFFFF', bg: '#005689' },
+  { name: 'REUTERS', color: '#FFFFFF', bg: '#FF8000' },
+  { name: 'BLOOMBERG', color: '#FFFFFF', bg: '#1A1A1A' },
+  { name: 'WALL STREET JOURNAL', color: '#FFFFFF', bg: '#0050A0' },
+  { name: 'POLITICO', color: '#FFFFFF', bg: '#003151' },
+  { name: 'AP NEWS', color: '#FFFFFF', bg: '#BF0000' },
+  { name: 'NIKKEI ASIA', color: '#FFFFFF', bg: '#EC0000' },
+];
+
+function MediaScanLoader() {
+  const [active, setActive] = useState(0);
+  const [dots, setDots] = useState('');
+  useEffect(() => {
+    const t1 = setInterval(() => setActive(i => (i + 1) % MEDIA_SOURCES.length), 600);
+    const t2 = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 400);
+    return () => { clearInterval(t1); clearInterval(t2); };
+  }, []);
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'16px', padding:'12px 0' }}>
+      <div style={{ fontSize:'10px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)' }}>
+        SCANNING GLOBAL MEDIA{dots}
+      </div>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+        {MEDIA_SOURCES.map((m, i) => (
+          <div key={m.name} style={{
+            padding:'5px 10px', borderRadius:'2px', fontSize:'10px',
+            fontFamily:'IBM Plex Mono', fontWeight:700, letterSpacing:'0.5px',
+            background: i === active ? m.bg : 'var(--surface2)',
+            color: i === active ? m.color : 'var(--text-dim)',
+            border: `1px solid ${i === active ? m.bg : 'var(--border)'}`,
+            transition:'all 0.3s ease',
+            opacity: i === active ? 1 : 0.5,
+          }}>
+            {m.name}
+          </div>
+        ))}
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginTop:'4px' }}>
+        {[1,2,3].map(i => (
+          <div key={i} style={{
+            height:'40px', background:'var(--surface2)', borderRadius:'3px',
+            overflow:'hidden', position:'relative',
+          }}>
+            <div style={{
+              position:'absolute', top:0, left:0, height:'100%', width:'30%',
+              background:'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)',
+              animation:`shimmer ${1 + i * 0.3}s infinite`,
+            }} />
+          </div>
+        ))}
+      </div>
+      <style>{`
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function EmptyPanel({ label }: { label: string }) {
   return (
     <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px' }}>
@@ -1605,11 +1670,11 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
   // ── Step 1: Search ──
   if (step === 1) return (
-    <Panel title="지정학 주제 입력">
+    <Panel title="분석 주제 입력">
       <div style={{ display:'flex', flexDirection:'column', gap:'16px', maxWidth:'640px' }}>
         <input
           type="text"
-          placeholder="예: 이란 전쟼 종전 가능성"
+          placeholder="예: 이란-이스라엘 전면전 가능성"
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') startAnalysis(); }}
@@ -1621,7 +1686,13 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           }}
         />
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-          {['이란 전쟼 종전 가능성', '중동 호르무즈 리스크', '러우 전쟼 종료 가능성'].map(hint => (
+          {[
+            '이란-이스라엘 전면전 가능성',
+            '트럼프 관세 90일 유예 연장 여부',
+            '러시아 휴전 협상 타결 시점',
+            '중국 대만 봉쇄 시나리오',
+            '유가 100달러 재돌파 가능성',
+          ].map(hint => (
             <button key={hint} onClick={() => setQuery(hint)} style={{
               ...badgeStyle, cursor:'pointer', background:'var(--surface)',
               color:'var(--text-mid)', padding:'4px 10px',
@@ -1644,14 +1715,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         <Panel title="관련 뉴스">
           <div style={{ minHeight:'320px' }}>
             {analyzing && !gistAnalysis && gistArticles.length === 0 && (
-              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                {[1,2,3,4].map(i => (
-                  <div key={i} style={{ height:'60px', background:'var(--surface2)', borderRadius:'4px', opacity: 0.5 + i * 0.1 }} />
-                ))}
-                <div style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginTop:'4px' }}>
-                  뉴스 수집 · 분석 도출 중...
-                </div>
-              </div>
+              <MediaScanLoader />
             )}
             {!analyzing && !gistAnalysis && gistArticles.length === 0 && (
               <div style={{ fontSize:'12px', color:'var(--text-dim)', padding:'20px 0', fontFamily:'IBM Plex Mono' }}>
@@ -1923,33 +1987,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
               })}
             </div>
 
-            {/* Signal cards */}
-            <div style={{ fontSize:'10px', color:'var(--text-dim)', marginBottom:'8px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px' }}>시그널 카드</div>
-            {geoCards.length === 0
-              ? <div style={{ fontSize:'11px', color:'var(--text-dim)', padding:'8px 0' }}>카드 생성 중...</div>
-              : geoCards.map(card => (
-                <div key={card.id} style={{
-                  padding:'8px 10px', marginBottom:'6px',
-                  border:`1px solid ${card.direction === 'agree' ? 'var(--green)' : 'var(--red)'}`,
-                  borderRadius:'2px', fontSize:'11px',
-                }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontWeight:600, color:'var(--text)', marginBottom:'2px' }}>{card.label}</div>
-                      <div style={{ color:'var(--text-dim)', fontSize:'10px' }}>{card.description}</div>
-                    </div>
-                    <div style={{ fontFamily:'IBM Plex Mono', fontWeight:700, fontSize:'13px', color:'var(--text-mid)', minWidth:'24px', textAlign:'right', marginLeft:'8px' }}>
-                      {geoVoteCounts[card.id] ?? 0}
-                    </div>
-                  </div>
-                  {card.evidence && (
-                    <div style={{ marginTop:'5px', paddingTop:'5px', borderTop:'1px solid var(--border)', fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', lineHeight:1.4 }}>
-                      ↗ {card.evidence}
-                    </div>
-                  )}
-                </div>
-              ))
-            }
             <div style={{ fontSize:'10px', color:'var(--text-dim)', lineHeight:1.5, marginTop:'8px' }}>
               역할 가중치가 반영된 응답으로 드라이버가 실시간 업데이트됩니다.
             </div>
