@@ -75,13 +75,17 @@ export async function aggregate(pool: Pool, sessionId: number): Promise<GeoAggre
     }
   }
 
+  // 1표(w=1)가 드라이버 5개 모두에 ±1 적용해도 확률 최대 2% 이내로 제한.
+  // 공식: 최악 이동 = 5drivers * |delta|=1 * DAMP / 5drivers * 10 = DAMP * 10 ≤ 2% → DAMP = 0.2
+  const VOTE_DAMP = 0.2;
+
   // accumulated deltas (가중합 기반)
   const accumulated: Record<string, number> = { ...base };
   for (const [cardIdStr, deltas] of Object.entries(deltasByCard)) {
     const w = weightedCounts[Number(cardIdStr)] ?? 0;
     for (const [key, delta] of Object.entries(deltas)) {
       if (key in accumulated) {
-        accumulated[key] = clamp(0, 10, accumulated[key] + (delta as number) * w);
+        accumulated[key] = clamp(0, 10, accumulated[key] + (delta as number) * w * VOTE_DAMP);
       }
     }
   }
