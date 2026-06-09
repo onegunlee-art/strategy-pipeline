@@ -1,42 +1,35 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
+import OpenAI from 'openai';
 import { getDb } from '@/lib/db';
 
-// 환경·Gemini·DB 상태를 즉시 진단하는 읽기 전용 엔드포인트.
+// 환경·OpenAI·DB 상태를 즉시 진단하는 읽기 전용 엔드포인트.
 // 배포 후 /api/geo/debug 를 브라우저에서 열어 키/모델/DB를 확인.
 export const maxDuration = 30;
 
-const GEMINI_KEY_NAMES = [
-  'GEMINI_API_KEY', 'GEMINI_KEY', 'Gemini_Api_Key', 'Gemini_API_Key',
-  'GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_GEMINI_API_KEY',
-];
-
-function resolveKeySource(): string | null {
-  for (const name of GEMINI_KEY_NAMES) {
-    if ((process.env[name] ?? '').trim().length > 0) return name;
-  }
-  return null;
-}
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'o4-mini';
+const OPENAI_KEY = process.env.OPENAI_API_KEY?.trim() || undefined;
 
 export async function GET() {
-  const geminiKeySource = resolveKeySource();
-  const geminiModel = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash (default)';
+  const openaiModel = OPENAI_MODEL;
+  const openaiKeyPresent = !!OPENAI_KEY;
 
-  // Gemini ping
-  let geminiPing: { ok: boolean; rawLen?: number; error?: string } = { ok: false };
-  if (GEMINI_KEY) {
+  // OpenAI ping
+  let openaiPing: { ok: boolean; rawLen?: number; error?: string } = { ok: false };
+  if (OPENAI_KEY) {
     try {
-      const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-      const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-      const result = await model.generateContent('Reply with exactly: {"ok":true}');
-      const raw = result.response.text();
-      geminiPing = { ok: true, rawLen: raw.length };
+      const client = new OpenAI({ apiKey: OPENAI_KEY });
+      const response = await client.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [{ role: 'user', content: 'Reply with exactly: {"ok":true}' }],
+        response_format: { type: 'json_object' },
+      });
+      const raw = response.choices[0]?.message?.content ?? '';
+      openaiPing = { ok: true, rawLen: raw.length };
     } catch (e) {
-      geminiPing = { ok: false, error: String(e) };
+      openaiPing = { ok: false, error: String(e) };
     }
   } else {
-    geminiPing = { ok: false, error: 'GEMINI_KEY not set' };
+    openaiPing = { ok: false, error: 'OPENAI_API_KEY not set' };
   }
 
   // DB column check
@@ -54,9 +47,9 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    geminiKeySource,
-    geminiModel,
-    geminiPing,
+    openaiKeyPresent,
+    openaiModel,
+    openaiPing,
     dbColumns,
     dbError,
   });
