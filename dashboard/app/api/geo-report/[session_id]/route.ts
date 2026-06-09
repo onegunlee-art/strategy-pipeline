@@ -1,24 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
+import OpenAI from 'openai';
 import { getDb } from '@/lib/db';
 import { aggregate } from '@/lib/geoAggregate';
 import { contribution } from '@/lib/geoDrivers';
 
-// Vercel 함수 타임아웃 — 기존 60초에서 대폭 상향 (플랫폼 상한까지).
-// Gemini 응답 지연 시 504로 잘려 클라이언트 JSON 파싱이 폭발하던 문제 완화.
 export const maxDuration = 300;
 
-// Gemini 단일 호출에 자체 타임아웃을 둬서 함수가 무한 대기하지 않게 한다.
-// 시간 초과/실패해도 보고서 골격은 반환하도록 race로 감싼다.
-const GEMINI_TIMEOUT_MS = 240_000;
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'o4-mini';
+const OPENAI_KEY = process.env.OPENAI_API_KEY?.trim() || undefined;
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`gemini timeout after ${ms}ms`)), ms)),
-  ]);
-}
+type ReportItem = { tag: string; content: string; badge: string };
+
+const ITEM_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    tag:     { type: 'string' as const },
+    content: { type: 'string' as const },
+    badge:   { type: 'string' as const },
+  },
+  required: ['tag', 'content', 'badge'] as string[],
+  additionalProperties: false,
+};
 
 export async function POST(_req: NextRequest, ctx: { params: { session_id: string } }) {
   try {
@@ -54,78 +56,96 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
       return session.strategy_high ?? '';
     };
     const currentStrategy = pickStrategy(agg.geoProb);
+    const strategyLabel = agg.geoProb < 40 ? 'ACTION REQUIRED' : agg.geoProb < 65 ? 'PUSH — MOMENTUM' : 'LOCK IT IN';
+    const targetProb = agg.geoProb < 40 ? 65 : agg.geoProb < 65 ? 80 : 90;
 
-    if (!GEMINI_KEY) {
-      return NextResponse.json({
-        topic: session.topic,
-        geo_prob: agg.geoProb,
-        driver_scores: agg.drivers,
-        driver_meta: agg.driverMeta,
-        total_votes: agg.totalVotes,
-        cards: cardRows,
-        hypothesis: session.hypothesis ?? '',
-        strategy: currentStrategy,
-        executive_summary: '(GEMINI_API_KEY 미설정 — 텍스트 생성 불가)',
-        driver_analysis: '',
-        signal_summary: '',
-        risk_scenarios: '',
-        recommendation: '',
-      });
-    }
-
-    const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-
-    const cardSummary = cardRows.map((c: { label: string; direction: string; vote_count: number }) =>
-      `- [${c.direction === 'agree' ? '종전↑' : '긴장↑'}] ${c.label}: ${c.vote_count}표`
-    ).join('\n');
-
-    // 라벨 + 종전 기여도(invert 반영) 기준으로 요약
     const driverSummary = agg.driverMeta
       .map(m => `${m.labelKo}: ${contribution(m, agg.drivers[m.key] ?? 0).toFixed(1)}/10`)
       .join(', ');
 
-    const strategyLabel = agg.geoProb < 40 ? '확률 상승 전략' : agg.geoProb < 65 ? '모멘텀 유지 전략' : '리스크 관리 전략';
+    const cardSummary = cardRows.map((c: { label: string; direction: string; vote_count: number }) =>
+      `- [${c.direction === 'agree' ? '가능성↑' : '가능성↓'}] ${c.label}: ${c.vote_count}표`
+    ).join('\n');
 
-    const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 데이터를 바탕으로 간결하고 전문적인 지정학 분석 보고서를 작성하세요.
+    let reportData: {
+      overview: string;
+      analysis_items: ReportItem[];
+      resistance_items: ReportItem[];
+      strategy_items: ReportItem[];
+    } = {
+      overview: `${session.topic} — 현재 달성 가능성 ${agg.geoProb}%. (AI 보고서 생성 실패 — 기본 데이터 표시)`,
+      analysis_items: [],
+      resistance_items: [],
+      strategy_items: [],
+    };
 
-분석 주제: ${session.topic}
-종전 가능성: ${agg.geoProb}%
-전략 가설: ${session.hypothesis ?? '(없음)'}
-${strategyLabel}: ${currentStrategy || '(없음)'}
-총 참여 시그널: ${agg.totalVotes}건
-드라이버 현황: ${driverSummary}
+    if (OPENAI_KEY) {
+      try {
+        const client = new OpenAI({ apiKey: OPENAI_KEY });
 
-시그널 카드 투표 결과:
+        const prompt = `당신은 FA(Foreign Affairs)·이코노미스트·FT 등 글로벌 매체를 분석하는 수석 전략 컨설턴트입니다.
+모든 출력은 반드시 한국어로 작성하세요.
+
+## 분석 주제
+${session.topic}
+
+## 현재 달성 가능성
+${agg.geoProb}% → 목표: ${targetProb}%
+
+## 전략 가설
+${session.hypothesis ?? '(없음)'}
+
+## 드라이버 현황
+${driverSummary}
+
+## 시그널 투표 결과 (총 ${agg.totalVotes}건)
 ${cardSummary || '(투표 없음)'}
 
-원본 분석 텍스트:
-${session.analysis_text ?? ''}
+## 수집된 글로벌 기사 (FA·이코노미스트 중심)
+${(session.analysis_text ?? '').slice(0, 5000)}
 
-다음 JSON 형식으로만 출력하세요 (마크다운 코드블록 없이):
-{
-  "executive_summary": "3~5문장의 핵심 요약",
-  "driver_analysis": "각 드라이버별 현황과 시사점 (200자 이내)",
-  "signal_summary": "시그널 투표 결과 해석 (100자 이내)",
-  "risk_scenarios": "낙관/기준/비관 3개 시나리오 (각 1문장)",
-  "recommendation": "가설과 전략을 반영한 최종 정책/전략 권고사항 (2~3문장)"
-}`;
+## 출력 규칙 (반드시 준수)
+- badge 값: "우위"(가능성 상승 요인), "열위"(가능성 저하 요인), "리스크"(위험 요소), "추가발굴"(전략 보강 필요), ""(중립 사실)
+- content 종결 어미: ~원함/~필요/~인식/~예상/~가능/~보유 중 하나 사용 (다짐형·주관형 금지)
+- 정량 수치 최소 5개 이상 포함 (%, 날짜, 횟수, 규모 등)
+- FA·이코노미스트 기사 실명 인용 최소 3건 (예: "FA 2026년 5월호에 따르면", "이코노미스트 최신호 분석")
 
-    let reportData: Record<string, string> = {};
-    try {
-      const result = await withTimeout(model.generateContent(prompt), GEMINI_TIMEOUT_MS);
-      const text = result.response.text();
-      const start = text.indexOf('{');
-      const end = text.lastIndexOf('}');
-      if (start !== -1 && end !== -1) {
-        reportData = JSON.parse(text.slice(start, end + 1));
+## 섹션별 생성 지침
+1. overview: 주제 + 현재 달성가능성 + 핵심 변수를 담은 1~2문장 사업 개요
+2. analysis_items: 현재 가능성에 영향을 미치는 핵심 현황 사실 7~9개 (badge: 우위/열위/리스크/"")
+3. resistance_items: 확률을 떨어뜨리는 저항·경쟁·리스크 요인 5~7개 (badge: 열위/리스크/추가발굴 위주)
+4. strategy_items: 달성 확률을 ${targetProb}%+ 로 끌어올리기 위한 구체적 실행 전략 7~9개 (badge: 우위/"" 위주, FA·이코노미스트 기사 근거 포함)`;
+
+        const response = await client.chat.completions.create({
+          model: OPENAI_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'geo_report',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  overview:          { type: 'string' },
+                  analysis_items:    { type: 'array', items: ITEM_SCHEMA },
+                  resistance_items:  { type: 'array', items: ITEM_SCHEMA },
+                  strategy_items:    { type: 'array', items: ITEM_SCHEMA },
+                },
+                required: ['overview', 'analysis_items', 'resistance_items', 'strategy_items'],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+
+        const rawText = response.choices[0]?.message?.content ?? '';
+        console.log(`[geo-report] OpenAI response length=${rawText.length}`);
+        reportData = JSON.parse(rawText);
+      } catch (e) {
+        console.error('[geo-report] OpenAI generation failed:', e);
+        reportData.overview = `${session.topic} — 달성 가능성 ${agg.geoProb}%. (AI 요약 생성 일시 실패 — 드라이버·시그널 데이터 기반 보고서)`;
       }
-    } catch (genErr) {
-      // Gemini 실패/타임아웃이어도 500을 내지 않고 골격 보고서를 반환한다.
-      console.error('[geo-report] gemini generation failed:', genErr);
-      reportData = {
-        executive_summary: `종전 가능성 ${agg.geoProb}%. (AI 요약 생성 일시 실패 — 드라이버·시그널 데이터 기반 보고서)`,
-      };
     }
 
     return NextResponse.json({
@@ -138,11 +158,11 @@ ${session.analysis_text ?? ''}
       hypothesis: session.hypothesis ?? '',
       strategy: currentStrategy,
       strategy_label: strategyLabel,
-      executive_summary: reportData.executive_summary ?? '',
-      driver_analysis: reportData.driver_analysis ?? '',
-      signal_summary: reportData.signal_summary ?? '',
-      risk_scenarios: reportData.risk_scenarios ?? '',
-      recommendation: reportData.recommendation ?? '',
+      target_prob: targetProb,
+      overview: reportData.overview,
+      analysis_items: reportData.analysis_items,
+      resistance_items: reportData.resistance_items,
+      strategy_items: reportData.strategy_items,
     });
   } catch (e) {
     console.error('[geo-report]', e);
