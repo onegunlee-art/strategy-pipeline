@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
+import OpenAI from 'openai';
 import { queryGistRag, formatGistContextForPrompt, GistArticle, GistCluster } from '@/lib/gistRag';
 import {
   GeoDriver, computeGeoProb, normalizeDriverMeta,
@@ -9,26 +8,8 @@ import {
 
 export const maxDuration = 300;
 
-function extractJsonObject(text: string): Record<string, unknown> | null {
-  const start = text.indexOf('{');
-  if (start === -1) return null;
-  let depth = 0; let inString = false; let escaped = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (escaped) { escaped = false; continue; }
-    if (ch === '\\' && inString) { escaped = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === '{') depth++;
-    if (ch === '}') {
-      depth--;
-      if (depth === 0) {
-        try { return JSON.parse(text.slice(start, i + 1)) as Record<string, unknown>; } catch { return null; }
-      }
-    }
-  }
-  return null;
-}
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'o4-mini';
+const OPENAI_KEY = process.env.OPENAI_API_KEY?.trim() || undefined;
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,7 +24,7 @@ export async function POST(req: NextRequest) {
     let gistAnalysis = '';
     let gistClusters: GistCluster[] = [];
 
-    // Gist RAG: 기사 수집 (Gemini와 독립적으로 항상 시도)
+    // Gist RAG: 기사 수집
     try {
       const gistRag = await queryGistRag({
         query: topic, limit: 10, include_analysis: true, analysis_cluster_name: topic,
@@ -60,62 +41,88 @@ export async function POST(req: NextRequest) {
       console.error(`[geo/analyze] Gist ${isTimeout ? 'TIMEOUT' : 'ERROR'} for topic="${topic}":`, gistErr);
     }
 
-    if (GEMINI_KEY) {
+    if (OPENAI_KEY) {
       try {
-        // Gemini: 드라이버 5축 + 점수만 계산. analysis.full_text를 주 컨텍스트로 사용.
         const gistContext = formatGistContextForPrompt({
           search: { results: gistArticles, insight: gistInsight, clusters: gistClusters },
           analysis: gistAnalysis ? { full_text: gistAnalysis } : undefined,
         });
 
-        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-        const model = genAI.getGenerativeModel({
-          model: GEMINI_MODEL,
-          generationConfig: { maxOutputTokens: 2048 },
-        });
-        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 주제 "${topic}"에 대해 JSON을 출력하세요.
-${gistContext ? `\n최신 뉴스 컨텍스트 (지스트 검색 — 아래를 드라이버 점수 산정에 적극 반영):\n${gistContext}\n` : ''}
-이 주제에 가장 적합한 **5개의 평가 드라이버(축)를 직접 정의**하세요. 이란 전용 축(호르무즈 등)을 그대로 쓰지 말고 주제 맥락에 맞게 새로 만드세요.
+        const client = new OpenAI({ apiKey: OPENAI_KEY });
 
-출력 규칙 (마크다운 코드블록 없이 JSON만):
-{
-  "drivers": [
-    { "key": "d1", "labelKo": "한글 축이름(8자 이내)", "labelEn": "Short English(12자 이내)", "invert": false, "score": 0 },
-    { "key": "d2", "labelKo": "...", "labelEn": "...", "invert": true, "score": 0 },
-    { "key": "d3", "labelKo": "...", "labelEn": "...", "invert": true, "score": 0 },
-    { "key": "d4", "labelKo": "...", "labelEn": "...", "invert": false, "score": 0 },
-    { "key": "d5", "labelKo": "...", "labelEn": "...", "invert": true, "score": 0 }
-  ]
-}
+        const prompt = `당신은 FA(Foreign Affairs)·이코노미스트·FT 등 글로벌 미디어를 분석하는 수석 전략 컨설턴트입니다. 모든 출력은 반드시 한국어로 작성하세요.
+
+분석 주제: "${topic}"
+${gistContext ? `\n최신 뉴스 컨텍스트 (아래 기사를 드라이버 점수 산정에 적극 반영):\n${gistContext}\n` : ''}
+
+이 주제에 가장 적합한 5개의 평가 드라이버를 정의하고, 위 기사 내용을 기반으로 각 드라이버의 현재 점수를 산정하세요.
 
 규칙:
-- key는 반드시 d1,d2,d3,d4,d5 정확히 이 5개.
-- invert=true 는 "값이 높을수록 종전/완화 가능성이 낮아지는" 축(예: 군사 강도, 외부 개입). invert=false 는 높을수록 가능성이 높아지는 축(예: 외교 채널, 협상 의지).
-- score: 현재 뉴스 기사 기반 0~10 평가값(원점수). 뉴스가 없으면 중립값 5 사용.
-- 최소 2개는 invert=false, 최소 2개는 invert=true 로 균형.`;
+- key는 반드시 d1, d2, d3, d4, d5 (이 순서대로)
+- labelKo: 한글 축이름 8자 이내
+- labelEn: 영문 12자 이내
+- invert: true면 "값이 높을수록 달성 가능성↓" (예: 군사 강도, 외부 개입), false면 "높을수록↑" (예: 외교 채널, 협상 의지)
+- score: 기사 분석 기반 0~10 정수. 기사가 없으면 5 사용. 주제 맥락에 맞게 신중하게 차별화하여 점수 부여
+- 최소 2개 invert=false, 최소 2개 invert=true
+- 이란 전용 축(호르무즈 등)처럼 특정 주제에 편향된 드라이버 사용 금지 — 주제 맥락에 맞게 새로 정의`;
 
-        const result = await model.generateContent(prompt);
-        const parsed = extractJsonObject(result.response.text());
-        if (parsed && Array.isArray(parsed.drivers)) {
+        const response = await client.chat.completions.create({
+          model: OPENAI_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'geo_drivers',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  drivers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        key:     { type: 'string' },
+                        labelKo: { type: 'string' },
+                        labelEn: { type: 'string' },
+                        invert:  { type: 'boolean' },
+                        score:   { type: 'number' },
+                      },
+                      required: ['key', 'labelKo', 'labelEn', 'invert', 'score'],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ['drivers'],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+
+        const rawText = response.choices[0]?.message?.content ?? '';
+        console.log(`[geo/analyze] OpenAI response length=${rawText.length}`);
+        const parsed = JSON.parse(rawText) as { drivers: Array<{ key: string; labelKo: string; labelEn: string; invert: boolean; score: number }> };
+
+        if (Array.isArray(parsed.drivers) && parsed.drivers.length > 0) {
           const meta: GeoDriver[] = [];
           const scores: Record<string, number> = {};
-          (parsed.drivers as unknown[]).forEach((d: unknown, i: number) => {
-            const dd = d as Record<string, unknown>;
-            const key = typeof dd.key === 'string' && dd.key ? dd.key : `d${i + 1}`;
+          parsed.drivers.forEach((d, i) => {
+            const key = d.key || `d${i + 1}`;
             meta.push({
               key,
-              labelKo: typeof dd.labelKo === 'string' ? dd.labelKo : `드라이버 ${i + 1}`,
-              labelEn: typeof dd.labelEn === 'string' ? dd.labelEn : `Driver ${i + 1}`,
-              invert: dd.invert === true,
+              labelKo: d.labelKo || `드라이버 ${i + 1}`,
+              labelEn: d.labelEn || `Driver ${i + 1}`,
+              invert: d.invert === true,
             });
-            const s = typeof dd.score === 'number' ? dd.score : 5;
-            scores[key] = Math.max(0, Math.min(10, s));
+            scores[key] = Math.max(0, Math.min(10, Math.round(d.score ?? 5)));
           });
           driverMeta = normalizeDriverMeta(meta);
           driverScores = scores;
+          console.log(`[geo/analyze] drivers OK — scores=${JSON.stringify(scores)}`);
         }
       } catch (e) {
-        console.error('[geo/analyze] Gemini generation failed:', e);
+        console.error('[geo/analyze] OpenAI generation failed:', e);
       }
     }
 
@@ -123,12 +130,14 @@ ${gistContext ? `\n최신 뉴스 컨텍스트 (지스트 검색 — 아래를 �
     if (driverMeta.length === 0) {
       driverMeta = FALLBACK_DRIVER_META;
       driverScores = { ...FALLBACK_DRIVER_SCORES };
+      console.warn('[geo/analyze] Using fallback drivers (no OpenAI key or generation failed)');
     }
     for (const m of driverMeta) {
       if (typeof driverScores[m.key] !== 'number') driverScores[m.key] = 5;
     }
 
     const geoProb = computeGeoProb(driverMeta, driverScores);
+    console.log(`[geo/analyze] geoProb=${geoProb}%`);
 
     return NextResponse.json({ gistArticles, gistInsight, gistAnalysis, gistClusters, driverMeta, driverScores, geoProb });
   } catch (e) {
