@@ -15,7 +15,6 @@ import { ACTION_CATALOG } from '@/lib/actionCatalog';
 import { ROLE_LABEL, ROLE_WEIGHTS, VoterRole } from '@/lib/voteWeights';
 import { GeoDriver, contribution, computeGeoProb, normalizeDriverMeta, FALLBACK_DRIVER_META, FALLBACK_DRIVER_SCORES, DRIVER_COLORS } from '@/lib/geoDrivers';
 import type { GistArticle, GistCluster } from '@/lib/gistRag';
-import { gistArticleUrl } from '@/lib/gistRag';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2049,15 +2048,30 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                         )}
                       </div>
                       <div style={{ fontSize:'12px', color:'var(--text)', lineHeight:1.4, flex:1 }}>
-                        <a href={gistArticleUrl(a)} target="_blank" rel="noopener noreferrer"
-                            style={{ color:'var(--text)', textDecoration:'none' }}
-                            onMouseEnter={e => (e.currentTarget.style.textDecoration='underline')}
-                            onMouseLeave={e => (e.currentTarget.style.textDecoration='none')}>
-                          {a.title}
-                        </a>
+                        {a.title}
                       </div>
                     </div>
                   ))}
+                </div>
+                {/* 출처 미디어 로고 */}
+                <div style={{ marginTop:'14px', paddingTop:'12px', borderTop:'1px solid var(--border)', display:'flex', gap:'16px', alignItems:'center', justifyContent:'space-around' }}>
+                  {/* Foreign Affairs */}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', opacity:0.55 }}>
+                    <div style={{ fontSize:'13px', fontWeight:700, letterSpacing:'1.5px', fontFamily:'Georgia, serif', color:'var(--text)', lineHeight:1 }}>FOREIGN</div>
+                    <div style={{ fontSize:'13px', fontWeight:700, letterSpacing:'1.5px', fontFamily:'Georgia, serif', color:'var(--text)', lineHeight:1 }}>AFFAIRS</div>
+                  </div>
+                  <div style={{ width:'1px', height:'28px', background:'var(--border)' }} />
+                  {/* The Economist */}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'2px', opacity:0.55 }}>
+                    <div style={{ fontSize:'8px', letterSpacing:'2px', fontFamily:'Georgia, serif', color:'var(--text-dim)', lineHeight:1 }}>THE</div>
+                    <div style={{ fontSize:'14px', fontWeight:700, letterSpacing:'1px', fontFamily:'Georgia, serif', color:'#e03a3a', lineHeight:1 }}>Economist</div>
+                  </div>
+                  <div style={{ width:'1px', height:'28px', background:'var(--border)' }} />
+                  {/* Financial Times */}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'2px', opacity:0.55 }}>
+                    <div style={{ fontSize:'13px', fontWeight:700, letterSpacing:'0.5px', fontFamily:'Georgia, serif', color:'#f7c948', lineHeight:1 }}>Financial</div>
+                    <div style={{ fontSize:'13px', fontWeight:700, letterSpacing:'0.5px', fontFamily:'Georgia, serif', color:'#f7c948', lineHeight:1 }}>Times</div>
+                  </div>
                 </div>
               </div>
             )}
