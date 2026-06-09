@@ -84,7 +84,7 @@ ${(analysisText ?? '').slice(0, 6000)}
 - strategy_mid: 가능성이 중간(40~65%)일 때, 80%+ 달성을 위한 핵심 레버 아이디어. FA·이코노미스트 기사에서 움직임이 큰 드라이버를 근거로 **반드시 번호 매긴 3~5개 항목**으로 작성. 각 항목은 제안·권고 어조로 작성. 선동적·명령형 표현 금지.
 - strategy_high: 가능성이 높을 때(>65%), 90%+ 확보를 위한 모멘텀 유지 아이디어. 식별된 리스크 대응 방안을 **반드시 번호 매긴 3~5개 항목**으로 작성. 각 항목은 제안·권고 어조로 작성. 선동적·명령형 표현 금지.
 - facts: 6~7개. driver 5개(type="driver")는 기사 근거 포함, event 1~2개(type="event")는 최신 기사의 실제 사건.
-- cards: 반드시 4개. driver_deltas 키는 반드시 이 5개만: ${driverKeyList}. direction은 "agree" 또는 "conflict".
+- cards: 4~7개 (기사 내용이 풍부하면 7개, 빈약하면 4개). driver_deltas 키는 반드시 이 5개만: ${driverKeyList}. direction은 "agree" 또는 "conflict".
   예시: {"${d1}": 1, "${d2}": -1, "${d3}": 0, "${d4}": 1, "${d5}": -1}`;
 
         const response = await client.chat.completions.create({
