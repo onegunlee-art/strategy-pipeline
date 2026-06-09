@@ -1837,7 +1837,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           </div>
         </Panel>
 
-        <Panel title="드라이버 현황">
+        <Panel title="Win Factors">
           {/* FACTS 배지 */}
           <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono',
             background:'var(--surface2)', padding:'2px 8px', borderRadius:'2px', display:'inline-block', marginBottom:'10px' }}>
@@ -1915,7 +1915,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 260px', gap:'16px' }}>
 
           {/* Left: drivers + radar */}
-          <Panel title="드라이버 분석">
+          <Panel title="Win Factors">
             <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'16px' }}>
               {DRIVER_META.map(m => {
                 const v = contrib(m.key, activeDrivers[m.key]);
@@ -2026,7 +2026,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             </div>
 
             <div style={{ fontSize:'10px', color:'var(--text-dim)', lineHeight:1.5, marginTop:'8px' }}>
-              역할 가중치가 반영된 응답으로 드라이버가 실시간 업데이트됩니다.
+              역할 가중치가 반영된 응답으로 Win Factors가 실시간 업데이트됩니다.
             </div>
           </Panel>
         </div>
@@ -2083,14 +2083,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                 <span style={{ fontSize:'22px', fontWeight:700, fontFamily:'IBM Plex Mono', color:'var(--text)' }}>{calibration.correctCount}/{calibration.totalCount}</span>
                 <span style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>예측 정확도</span>
               </div>
-              {calibration.brierScore !== null && (
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'8px 16px', background:'var(--surface2)', borderRadius:'4px' }}>
-                  <span style={{ fontSize:'22px', fontWeight:700, fontFamily:'IBM Plex Mono', color: calibration.brierScore < 0.2 ? 'var(--green)' : calibration.brierScore < 0.33 ? 'var(--yellow)' : 'var(--red)' }}>
-                    {calibration.brierScore.toFixed(3)}
-                  </span>
-                  <span style={{ fontSize:'10px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>Brier Score (낮을수록 정확)</span>
-                </div>
-              )}
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
               {calibration.entries.map((e, i) => (

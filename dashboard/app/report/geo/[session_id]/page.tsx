@@ -179,7 +179,7 @@ export default function GeoReportPage({ params }: Props) {
           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>→ 목표 {data.target_prob}%</div>
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 8 }}>드라이버 기여도 (0~10)</div>
+          <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 8 }}>Win Factors (0~10)</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px' }}>
             {normalizeDriverMeta(data.driver_meta).map(m => {
               const val = contribution(m, data.driver_scores[m.key] ?? 0);
