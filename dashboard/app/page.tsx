@@ -1936,7 +1936,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
       <div style={{ display:'flex', flexDirection:'column', gap:'16px', maxWidth:'640px' }}>
         <input
           type="text"
-          placeholder="예: 유가 100달러, 2025 Q3 재돌파 가능성은?"
+          placeholder="예: 중국-대만, 12월 군사충돌 현실화 가능성은?"
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') startAnalysis(); }}
@@ -1949,11 +1949,15 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         />
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
           {[
-            '이란-이스라엘, 6월 내 종전 가능성은?',
-            '트럼프 관세, 7월 전 완전 철회 가능성은?',
-            '유가 100달러, 2026 Q3 재돌파 가능성은?',
-            '러-우, 2026년 내 평화협정 타결 가능성은?',
-            '중국-대만, 올해 봉쇄 현실화 가능성은?',
+            '이란-이스라엘, 12월 내 종전 가능성은?',
+            '미국, 7월 전 쿠바 침공 가능성은?',
+            '중국-대만, 12월 군사충돌 현실화 가능성은?',
+            '유가 100달러, 2025 Q3 재돌파 가능성은?',
+            '2026년 AI 최강자, OpenAI 수성 가능성은?',
+            '러-우크라이나, 2026년 내 휴전 타결 가능성은?',
+            '연준 금리인하, 2026 Q3 전 단행 가능성은?',
+            '한국 경기침체, 2026년 공식 선언 가능성은?',
+            '트럼프 2기, 2026년 내 탄핵 소추 가능성은?',
           ].map(hint => (
             <button key={hint} onClick={() => setQuery(hint)} style={{
               ...badgeStyle, cursor:'pointer', background:'var(--surface)',
