@@ -1,37 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
-import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
+import OpenAI from 'openai';
 import { getDb } from '@/lib/db';
 // Gist RAG not called here — analysisText from geo/analyze already contains gistAnalysis
 import { GeoDriver, normalizeDriverMeta, buildFallbackCards, buildFallbackFacts } from '@/lib/geoDrivers';
 
-// Gist RAG(최대 60s) + Gemini 호출이 직렬로 이어지므로 함수 타임아웃을 상향 (Vercel Pro).
 export const maxDuration = 300;
+
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'o4-mini';
+const OPENAI_KEY = process.env.OPENAI_API_KEY?.trim() || undefined;
 
 type Card = { label: string; description: string; evidence: string; driver_deltas: Record<string, number>; direction: string };
 type Fact = { type: string; key: string; value: string; source: string };
-
-function extractJsonObject(text: string): Record<string, unknown> | null {
-  const start = text.indexOf('{');
-  if (start === -1) return null;
-  let depth = 0; let inString = false; let escaped = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (escaped) { escaped = false; continue; }
-    if (ch === '\\' && inString) { escaped = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === '{') depth++;
-    if (ch === '}') {
-      depth--;
-      if (depth === 0) {
-        try { return JSON.parse(text.slice(start, i + 1)) as Record<string, unknown>; } catch { return null; }
-      }
-    }
-  }
-  return null;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,18 +30,17 @@ export async function POST(req: NextRequest) {
     const db = await getDb();
     const token = randomBytes(10).toString('hex');
 
-    // Gemini: 카드 + 가설 + 전략 + 팩트 + 에비던스 한 번에 생성
     let cards: Card[] = [];
     let hypothesis = '';
     let strategyLow = '';
     let strategyMid = '';
     let strategyHigh = '';
     let facts: Fact[] = [];
-    let geminiError: string | null = null;
-    let geminiRawLen = 0;
+    let aiError: string | null = null;
+    let aiRawLen = 0;
 
-    if (GEMINI_KEY) {
-      console.log(`[geo/start] GEMINI_KEY present, analysisText length=${analysisText?.length ?? 0}, driverMeta keys=${driverMeta.map(m=>m.key).join(',')}`);
+    if (OPENAI_KEY) {
+      console.log(`[geo/start] OPENAI_KEY present, model=${OPENAI_MODEL}, analysisText length=${analysisText?.length ?? 0}`);
       try {
         const driverKeyList = driverMeta.map(m => m.key).join(', ');
         const driverLegend = driverMeta.map(m => `${m.key}=${m.labelKo}(${m.invert ? '높을수록 가능성↓' : '높을수록 가능성↑'})`).join(', ');
@@ -71,53 +50,12 @@ export async function POST(req: NextRequest) {
         const d4 = driverMeta[3]?.key ?? 'd4';
         const d5 = driverMeta[4]?.key ?? 'd5';
 
-        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-        const model = genAI.getGenerativeModel({
-          model: GEMINI_MODEL,
-          generationConfig: {
-            responseMimeType: 'application/json',
-            maxOutputTokens: 8192,
-            responseSchema: {
-              type: SchemaType.OBJECT,
-              properties: {
-                hypothesis:    { type: SchemaType.STRING },
-                strategy_low:  { type: SchemaType.STRING },
-                strategy_mid:  { type: SchemaType.STRING },
-                strategy_high: { type: SchemaType.STRING },
-                facts: {
-                  type: SchemaType.ARRAY,
-                  items: {
-                    type: SchemaType.OBJECT,
-                    properties: {
-                      type:   { type: SchemaType.STRING },
-                      key:    { type: SchemaType.STRING },
-                      value:  { type: SchemaType.STRING },
-                      source: { type: SchemaType.STRING },
-                    },
-                  },
-                },
-                cards: {
-                  type: SchemaType.ARRAY,
-                  items: {
-                    type: SchemaType.OBJECT,
-                    properties: {
-                      label:         { type: SchemaType.STRING },
-                      description:   { type: SchemaType.STRING },
-                      evidence:      { type: SchemaType.STRING },
-                      direction:     { type: SchemaType.STRING },
-                      driver_deltas: {
-                        type: SchemaType.OBJECT,
-                        properties: Object.fromEntries(
-                          driverMeta.map(m => [m.key, { type: SchemaType.NUMBER }])
-                        ),
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        });
+        const driverDeltasProperties: Record<string, { type: 'number' }> = {};
+        for (const m of driverMeta) {
+          driverDeltasProperties[m.key] = { type: 'number' };
+        }
+
+        const client = new OpenAI({ apiKey: OPENAI_KEY });
 
         const prompt = `당신은 지정학 리스크 분석 전문가입니다.
 
@@ -137,17 +75,73 @@ ${(analysisText ?? '').slice(0, 3000)}
 - cards: 반드시 4개. driver_deltas 키는 반드시 이 5개만: ${driverKeyList}. direction은 "agree" 또는 "conflict".
   예시: {"${d1}": 1, "${d2}": -1, "${d3}": 0, "${d4}": 1, "${d5}": -1}`;
 
-        const result = await model.generateContent(prompt);
-        const rawText = result.response.text();
-        geminiRawLen = rawText.length;
-        console.log(`[geo/start] Gemini response length=${rawText.length}, preview="${rawText.slice(0, 200)}"`);
+        const response = await client.chat.completions.create({
+          model: OPENAI_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'geo_analysis',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  hypothesis:    { type: 'string' },
+                  strategy_low:  { type: 'string' },
+                  strategy_mid:  { type: 'string' },
+                  strategy_high: { type: 'string' },
+                  facts: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        type:   { type: 'string' },
+                        key:    { type: 'string' },
+                        value:  { type: 'string' },
+                        source: { type: 'string' },
+                      },
+                      required: ['type', 'key', 'value', 'source'],
+                      additionalProperties: false,
+                    },
+                  },
+                  cards: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        label:         { type: 'string' },
+                        description:   { type: 'string' },
+                        evidence:      { type: 'string' },
+                        direction:     { type: 'string' },
+                        driver_deltas: {
+                          type: 'object',
+                          properties: driverDeltasProperties,
+                          required: driverMeta.map(m => m.key),
+                          additionalProperties: false,
+                        },
+                      },
+                      required: ['label', 'description', 'evidence', 'direction', 'driver_deltas'],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ['hypothesis', 'strategy_low', 'strategy_mid', 'strategy_high', 'facts', 'cards'],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
 
-        // responseSchema 모드에서는 순수 JSON이 보장됨. 파서는 안전망으로만 사용.
+        const rawText = response.choices[0]?.message?.content ?? '';
+        aiRawLen = rawText.length;
+        console.log(`[geo/start] OpenAI response length=${rawText.length}, preview="${rawText.slice(0, 200)}"`);
+
         let parsed: Record<string, unknown> | null = null;
         try {
           parsed = JSON.parse(rawText) as Record<string, unknown>;
         } catch {
-          parsed = extractJsonObject(rawText);
+          aiError = `parse failed — raw: ${rawText.slice(0, 300)}`;
+          console.error(`[geo/start] JSON parse FAILED — raw: "${rawText.slice(0, 500)}"`);
         }
 
         if (parsed) {
@@ -160,21 +154,18 @@ ${(analysisText ?? '').slice(0, 3000)}
           strategyLow = (parsed.strategy_low as string) ?? '';
           strategyMid = (parsed.strategy_mid as string) ?? '';
           strategyHigh = (parsed.strategy_high as string) ?? '';
-        } else {
-          geminiError = `parse failed — raw: ${rawText.slice(0, 300)}`;
-          console.error(`[geo/start] JSON parse FAILED — raw response: "${rawText.slice(0, 500)}"`);
         }
       } catch (e) {
-        geminiError = String(e);
-        console.error('[geo/start] Gemini generation failed:', e);
+        aiError = String(e);
+        console.error('[geo/start] OpenAI generation failed:', e);
       }
     } else {
-      geminiError = 'GEMINI_KEY missing';
-      console.error('[geo/start] GEMINI_KEY missing — skipping card/fact/hypothesis generation');
+      aiError = 'OPENAI_API_KEY missing';
+      console.error('[geo/start] OPENAI_API_KEY missing — skipping card/fact/hypothesis generation');
     }
 
-    // 결정론적 Fallback: Gemini 실패해도 카드/팩트가 항상 존재하도록 보장
-    const cardSource = cards.length > 0 ? 'gemini' : 'fallback';
+    // 결정론적 Fallback: AI 실패해도 카드/팩트가 항상 존재하도록 보장
+    const cardSource = cards.length > 0 ? 'openai' : 'fallback';
     if (cards.length === 0) {
       cards = buildFallbackCards(driverMeta, driverScores);
       console.log(`[geo/start] Using fallback cards (${cards.length}개)`);
@@ -211,7 +202,7 @@ ${(analysisText ?? '').slice(0, 3000)}
     return NextResponse.json({
       sessionId, token, cards: cardRows, hypothesis, strategyLow, strategyMid, strategyHigh,
       priorProb: geoProb, facts, driverMeta,
-      _debug: { cardSource, geminiError, geminiRawLen },
+      _debug: { cardSource, aiError, aiRawLen },
     });
   } catch (e) {
     console.error('[geo/start]', e);
