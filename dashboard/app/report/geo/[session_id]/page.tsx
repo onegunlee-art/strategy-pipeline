@@ -33,30 +33,61 @@ interface GeoReportData {
 
 function probColor(p: number) { return p >= 65 ? '#16a34a' : p >= 45 ? '#d97706' : '#dc2626'; }
 
-function BadgeChip({ badge }: { badge: string }) {
-  if (!badge) return null;
+function badgeStyle(badge: string): React.CSSProperties {
   const isRed = badge === '열위' || badge === '리스크' || badge === '추가발굴';
   const isBlue = badge === '우위';
-  const bg = isRed ? '#C01B2E' : isBlue ? '#1F4E9C' : '#6b7280';
+  const bg = isRed ? '#C01B2E' : isBlue ? '#1F4E9C' : 'transparent';
+  const color = (isRed || isBlue) ? '#fff' : 'transparent';
+  return {
+    display: 'inline-block', fontSize: 9, padding: '2px 7px', borderRadius: 2,
+    background: bg, color, fontWeight: 700, letterSpacing: 0.5,
+    fontFamily: 'IBM Plex Mono, monospace', whiteSpace: 'nowrap' as const,
+  };
+}
+
+const BADGE_LEGEND = [
+  { badge: '우위', desc: '가능성 상승 요인', bg: '#1F4E9C' },
+  { badge: '열위', desc: '가능성 저하 요인', bg: '#C01B2E' },
+  { badge: '리스크', desc: '위험 요소', bg: '#C01B2E' },
+  { badge: '추가발굴', desc: '전략 보강 필요', bg: '#C01B2E' },
+];
+
+function SectionTable({ items }: { items: ReportItem[] }) {
   return (
-    <span style={{
-      display: 'inline-block', fontSize: 9, padding: '1px 6px', borderRadius: 2,
-      background: bg, color: '#fff', fontWeight: 700, letterSpacing: 0.5,
-      fontFamily: 'IBM Plex Mono, monospace', flexShrink: 0, marginLeft: 8,
-    }}>
-      {badge}
-    </span>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <thead>
+        <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
+          <th style={{ width: 130, textAlign: 'left', padding: '8px 12px', color: '#475569', fontWeight: 700, fontSize: 11 }}>항목</th>
+          <th style={{ textAlign: 'left', padding: '8px 12px', color: '#475569', fontWeight: 700, fontSize: 11 }}>내용</th>
+          <th style={{ width: 72, textAlign: 'center', padding: '8px 12px', color: '#475569', fontWeight: 700, fontSize: 11 }}>평가</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((item, i) => (
+          <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+            <td style={{ padding: '10px 12px', fontWeight: 700, color: '#1F4E9C', fontSize: 12, verticalAlign: 'top' }}>
+              [{item.tag}]
+            </td>
+            <td style={{ padding: '10px 12px', lineHeight: 1.7, color: '#1f2937', verticalAlign: 'top' }}>{item.content}</td>
+            <td style={{ padding: '10px 12px', textAlign: 'center', verticalAlign: 'top' }}>
+              {item.badge && <span style={badgeStyle(item.badge)}>{item.badge}</span>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
-function ItemRow({ item }: { item: ReportItem }) {
+function BadgeLegend() {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
-      <span style={{ fontSize: 12, color: '#1F4E9C', fontWeight: 700, whiteSpace: 'nowrap', marginRight: 8, marginTop: 1 }}>
-        [{item.tag}]
-      </span>
-      <span style={{ flex: 1, fontSize: 13, lineHeight: 1.6, color: '#1f2937' }}>{item.content}</span>
-      <BadgeChip badge={item.badge} />
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' as const, marginBottom: 12 }}>
+      {BADGE_LEGEND.map(({ badge, desc, bg }) => (
+        <span key={badge} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6b7280' }}>
+          <span style={{ display: 'inline-block', fontSize: 9, padding: '2px 6px', borderRadius: 2, background: bg, color: '#fff', fontWeight: 700, fontFamily: 'IBM Plex Mono, monospace' }}>{badge}</span>
+          {desc}
+        </span>
+      ))}
     </div>
   );
 }
@@ -200,18 +231,8 @@ export default function GeoReportPage({ params }: Props) {
       {data.analysis_items.length > 0 && (
         <div style={S}>
           <div style={H}>1. 현황 분석</div>
-          <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>
-            <span style={{ display: 'inline-block', marginRight: 12 }}>
-              <span style={{ background: '#1F4E9C', color: '#fff', padding: '1px 5px', borderRadius: 2, fontSize: 9, fontWeight: 700, marginRight: 4 }}>우위</span>가능성 상승 요인
-            </span>
-            <span style={{ display: 'inline-block', marginRight: 12 }}>
-              <span style={{ background: '#C01B2E', color: '#fff', padding: '1px 5px', borderRadius: 2, fontSize: 9, fontWeight: 700, marginRight: 4 }}>열위</span>가능성 저하 요인
-            </span>
-            <span style={{ display: 'inline-block' }}>
-              <span style={{ background: '#C01B2E', color: '#fff', padding: '1px 5px', borderRadius: 2, fontSize: 9, fontWeight: 700, marginRight: 4 }}>리스크</span>위험 요소
-            </span>
-          </div>
-          {data.analysis_items.map((item, i) => <ItemRow key={i} item={item} />)}
+          <BadgeLegend />
+          <SectionTable items={data.analysis_items} />
         </div>
       )}
 
@@ -219,7 +240,7 @@ export default function GeoReportPage({ params }: Props) {
       {data.resistance_items.length > 0 && (
         <div style={S}>
           <div style={H}>2. 저항 · 리스크 분석</div>
-          {data.resistance_items.map((item, i) => <ItemRow key={i} item={item} />)}
+          <SectionTable items={data.resistance_items} />
         </div>
       )}
 
@@ -227,7 +248,7 @@ export default function GeoReportPage({ params }: Props) {
       {data.strategy_items.length > 0 && (
         <div style={{ ...S, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
           <div style={{ ...H, color: '#0369a1' }}>3. 확률 제고 전략 ({data.target_prob}% 달성)</div>
-          {data.strategy_items.map((item, i) => <ItemRow key={i} item={item} />)}
+          <SectionTable items={data.strategy_items} />
         </div>
       )}
 
