@@ -141,7 +141,7 @@ const MEDIA_SOURCES = [
   { name: 'NIKKEI ASIA', color: '#FFFFFF', bg: '#EC0000' },
 ];
 
-function MediaScanLoader() {
+function MediaScanLogos() {
   const [active, setActive] = useState(0);
   const [dots, setDots] = useState('');
   useEffect(() => {
@@ -150,7 +150,7 @@ function MediaScanLoader() {
     return () => { clearInterval(t1); clearInterval(t2); };
   }, []);
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:'16px', padding:'12px 0' }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:'12px', padding:'12px 0 8px' }}>
       <div style={{ fontSize:'10px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)' }}>
         SCANNING GLOBAL MEDIA{dots}
       </div>
@@ -169,26 +169,84 @@ function MediaScanLoader() {
           </div>
         ))}
       </div>
-      <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginTop:'4px' }}>
-        {[1,2,3].map(i => (
-          <div key={i} style={{
-            height:'40px', background:'var(--surface2)', borderRadius:'3px',
-            overflow:'hidden', position:'relative',
-          }}>
-            <div style={{
-              position:'absolute', top:0, left:0, height:'100%', width:'30%',
-              background:'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)',
-              animation:`shimmer ${1 + i * 0.3}s infinite`,
-            }} />
-          </div>
-        ))}
+    </div>
+  );
+}
+
+function RagChatPanel({ text, loading }: { text: string; loading: boolean }) {
+  const [displayed, setDisplayed] = useState('');
+  const [blink, setBlink] = useState(true);
+  const indexRef = useRef(0);
+
+  useEffect(() => {
+    if (!text) { setDisplayed(''); indexRef.current = 0; return; }
+    indexRef.current = 0;
+    setDisplayed('');
+    const id = setInterval(() => {
+      indexRef.current += 4;
+      if (indexRef.current >= text.length) {
+        setDisplayed(text);
+        clearInterval(id);
+      } else {
+        setDisplayed(text.slice(0, indexRef.current));
+      }
+    }, 16);
+    return () => clearInterval(id);
+  }, [text]);
+
+  useEffect(() => {
+    const id = setInterval(() => setBlink(b => !b), 500);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div style={{
+      background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'6px',
+      padding:'14px 16px', minHeight:'120px', marginTop:'4px',
+      fontFamily:'inherit', fontSize:'13px', color:'var(--text)', lineHeight:1.8,
+      position:'relative',
+    }}>
+      <div style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono',
+        color:'var(--brand)', marginBottom:'10px' }}>
+        AI ANALYSIS
       </div>
+      {!text && loading && (
+        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'4px' }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{
+                width:'6px', height:'6px', borderRadius:'50%',
+                background:'var(--text-dim)',
+                animation:`bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+              }} />
+            ))}
+          </div>
+          <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>분석 중...</span>
+        </div>
+      )}
+      {text && (
+        <span style={{ whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+          {displayed}
+          {displayed.length < text.length && (
+            <span style={{ opacity: blink ? 1 : 0, color:'var(--brand)' }}>▋</span>
+          )}
+        </span>
+      )}
       <style>{`
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(400%); }
+        @keyframes bounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+          40% { transform: translateY(-6px); opacity: 1; }
         }
       `}</style>
+    </div>
+  );
+}
+
+function MediaScanLoader({ analysisText, loading }: { analysisText: string; loading: boolean }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+      <MediaScanLogos />
+      <RagChatPanel text={analysisText} loading={loading} />
     </div>
   );
 }
@@ -1256,10 +1314,6 @@ function GeoProcessSidebar({ step, onStepClick }: { step: number; onStepClick: (
     { n: 4, label: '시장 비교' },
     { n: 5, label: '리포트 발행' },
   ];
-  const recentItems = [
-    { topic: '이란 전쟼 종전 가능성', prob: 24, date: '06.06' },
-    { topic: '중동 호르무즈 리스크', prob: 41, date: '06.04' },
-  ];
   return (
     <div style={{
       width: '200px', flexShrink: 0, borderRight: '1px solid var(--border)',
@@ -1307,21 +1361,6 @@ function GeoProcessSidebar({ step, onStepClick }: { step: number; onStepClick: (
         );
       })}
 
-      <div style={{ marginTop: '28px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: '9px', letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginBottom: '10px' }}>
-          최근 분석
-        </div>
-        {recentItems.map((item, i) => (
-          <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text)', lineHeight: 1.4, marginBottom: '4px' }}>{item.topic}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ ...badgeStyle, fontSize: '10px' }}>지정학</span>
-              <span style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: probColor(item.prob), fontWeight: 700 }}>{item.prob}%</span>
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>{item.date}</span>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1714,8 +1753,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
       <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:'16px' }}>
         <Panel title="관련 뉴스">
           <div style={{ minHeight:'320px' }}>
-            {analyzing && !gistAnalysis && gistArticles.length === 0 && (
-              <MediaScanLoader />
+            {analyzing && gistArticles.length === 0 && (
+              <MediaScanLoader analysisText={gistInsight || gistAnalysis} loading={analyzing} />
             )}
             {!analyzing && !gistAnalysis && gistArticles.length === 0 && (
               <div style={{ fontSize:'12px', color:'var(--text-dim)', padding:'20px 0', fontFamily:'IBM Plex Mono' }}>
