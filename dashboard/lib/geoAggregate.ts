@@ -75,19 +75,32 @@ export async function aggregate(pool: Pool, sessionId: number): Promise<GeoAggre
     }
   }
 
-  // 1표(w=1)가 드라이버 5개 모두에 ±1 적용해도 확률 최대 2% 이내로 제한.
-  // 공식: 최악 이동 = 5drivers * |delta|=1 * DAMP / 5drivers * 10 = DAMP * 10 ≤ 2% → DAMP = 0.2
-  const VOTE_DAMP = 0.2;
+  // Bayesian updating: AI prior = PRIOR_STRENGTH표짜리 가중치로 취급.
+  // posterior[key] = prior[key] + Σ(delta×w) / (PRIOR_STRENGTH + totalVoteWeight)
+  // 효과: 초기엔 AI 판단이 지배 → 투표 누적될수록 집단 신호 반영.
+  // 1표(w=1) 최대 확률 이동 ≈ 10/(PRIOR_STRENGTH+1) % = ~0.9% (< 2%)
+  const PRIOR_STRENGTH = 10;
 
-  // accumulated deltas (가중합 기반)
-  const accumulated: Record<string, number> = { ...base };
+  const totalVoteWeight = Object.values(weightedCounts).reduce((a, b) => a + b, 0);
+
+  // 드라이버별 투표 가중합 델타 계산
+  const voteWeightedDelta: Record<string, number> = Object.fromEntries(
+    Object.keys(base).map(key => [key, 0])
+  );
   for (const [cardIdStr, deltas] of Object.entries(deltasByCard)) {
     const w = weightedCounts[Number(cardIdStr)] ?? 0;
     for (const [key, delta] of Object.entries(deltas)) {
-      if (key in accumulated) {
-        accumulated[key] = clamp(0, 10, accumulated[key] + (delta as number) * w * VOTE_DAMP);
+      if (key in voteWeightedDelta) {
+        voteWeightedDelta[key] += (delta as number) * w;
       }
     }
+  }
+
+  // Bayesian posterior
+  const accumulated: Record<string, number> = {};
+  for (const key of Object.keys(base)) {
+    const posterior = base[key] + voteWeightedDelta[key] / (PRIOR_STRENGTH + totalVoteWeight);
+    accumulated[key] = clamp(0, 10, posterior);
   }
 
   const geoProb = computeGeoProb(driverMeta, accumulated);
