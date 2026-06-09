@@ -1837,7 +1837,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           </div>
         </Panel>
 
-        <Panel title="드라이버 현황">
+        <Panel title="Win Factors">
           {/* FACTS 배지 */}
           <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono',
             background:'var(--surface2)', padding:'2px 8px', borderRadius:'2px', display:'inline-block', marginBottom:'10px' }}>
@@ -1915,7 +1915,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 260px', gap:'16px' }}>
 
           {/* Left: drivers + radar */}
-          <Panel title="드라이버 분석">
+          <Panel title="Win Factors">
             <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'16px' }}>
               {DRIVER_META.map(m => {
                 const v = contrib(m.key, activeDrivers[m.key]);
@@ -2026,7 +2026,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             </div>
 
             <div style={{ fontSize:'10px', color:'var(--text-dim)', lineHeight:1.5, marginTop:'8px' }}>
-              역할 가중치가 반영된 응답으로 드라이버가 실시간 업데이트됩니다.
+              역할 가중치가 반영된 응답으로 Win Factors가 실시간 업데이트됩니다.
             </div>
           </Panel>
         </div>
