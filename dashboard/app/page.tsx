@@ -132,7 +132,7 @@ const ALGO_STEPS = [
   { label: '글로벌 뉴스 RAG 인덱스 연결',     done: 'FA · Economist · FT 외 7개 소스 연결' },
   { label: '기사 수집 및 유사도 필터링',         done: '관련도 ≥ 0.35 검증 완료' },
   { label: 'Alignment / Conflict 신호 추출',  done: '구조적 대립 신호 분류 완료' },
-  { label: 'OpenAI o4-mini 드라이버 최적화',   done: '5축 점수 벡터 계산 완료' },
+  { label: 'GPT OSS 드라이버 최적화',           done: '5축 점수 벡터 계산 완료' },
   { label: 'Bayesian 사후확률 수렴',           done: 'P(θ|D) ∝ P(D|θ) × P(θ) 수렴' },
 ];
 
@@ -1792,7 +1792,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             </div>
             <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono',
               background:'var(--surface2)', padding:'2px 8px', borderRadius:'2px' }}>
-              o4-mini SCORED
+              GPT OSS SCORED
             </div>
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'12px' }}>
