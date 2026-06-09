@@ -1311,7 +1311,6 @@ function GeoProcessSidebar({ step, onStepClick }: { step: number; onStepClick: (
     { n: 1, label: '주제 입력' },
     { n: 2, label: '자동 분석' },
     { n: 3, label: '확률 진단' },
-    { n: 4, label: '시장 비교' },
     { n: 5, label: '리포트 발행' },
   ];
   return (
@@ -2108,7 +2107,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         )}
 
         <div style={{ display:'flex', gap:'12px', justifyContent:'flex-end' }}>
-          <button onClick={() => setStep(4)} style={actionBtn}>시장 비교 →</button>
+          <button onClick={() => { setStep(5); if (geoSessionId) window.open(`/report/geo/${geoSessionId}`, '_blank'); }} style={actionBtn}>리포트 발행 →</button>
         </div>
       </div>
     );
