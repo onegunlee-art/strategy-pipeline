@@ -69,8 +69,11 @@ export async function POST(req: NextRequest) {
         });
 
         const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-        const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 주제 "${topic}"에 대해 JSON 하나만 출력하세요.
+        const model = genAI.getGenerativeModel({
+          model: GEMINI_MODEL,
+          generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1024 },
+        });
+        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 주제 "${topic}"에 대해 JSON을 출력하세요.
 ${gistContext ? `\n최신 뉴스 컨텍스트 (지스트 검색 — 아래를 드라이버 점수 산정에 적극 반영):\n${gistContext}\n` : ''}
 이 주제에 가장 적합한 **5개의 평가 드라이버(축)를 직접 정의**하세요. 이란 전용 축(호르무즈 등)을 그대로 쓰지 말고 주제 맥락에 맞게 새로 만드세요.
 
