@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
     let gistInsight = '';
     let gistAnalysis = '';
     let gistClusters: GistCluster[] = [];
+    let gistAlignment: string[] = [];
+    let gistConflict: string[] = [];
 
     // Gist RAG: 기사 수집
     try {
@@ -33,6 +35,9 @@ export async function POST(req: NextRequest) {
       if (gistRag?.search?.insight) gistInsight = gistRag.search.insight;
       if (gistRag?.analysis?.full_text) gistAnalysis = gistRag.analysis.full_text;
       if (Array.isArray(gistRag?.search?.clusters)) gistClusters = gistRag.search.clusters;
+      if (Array.isArray(gistRag?.analysis?.alignment_points)) gistAlignment = gistRag.analysis.alignment_points;
+      if (Array.isArray(gistRag?.analysis?.conflict_points)) gistConflict = gistRag.analysis.conflict_points;
+      console.log(`[geo/analyze] Gist alignment=${gistAlignment.length} conflict=${gistConflict.length}`);
       if (!gistArticles.length && !gistInsight && !gistAnalysis) {
         console.warn(`[geo/analyze] Gist returned no usable content for topic="${topic}"`);
       }
@@ -50,12 +55,22 @@ export async function POST(req: NextRequest) {
 
         const client = new OpenAI({ apiKey: OPENAI_KEY });
 
+        const alignmentSection = gistAlignment.length > 0
+          ? `\n[가능성 상승 근거 — 아래 각 항목이 지지하는 드라이버 score를 +0.5~1 높여서 반영]\n` +
+            gistAlignment.map((p, i) => `  ${i + 1}. ${p}`).join('\n')
+          : '';
+        const conflictSection = gistConflict.length > 0
+          ? `\n[가능성 저하 근거 — 아래 각 항목이 관련된 드라이버 score를 -0.5~1 낮춰서 반영]\n` +
+            gistConflict.map((p, i) => `  ${i + 1}. ${p}`).join('\n')
+          : '';
+
         const prompt = `당신은 FA(Foreign Affairs)·이코노미스트·FT 등 글로벌 미디어를 분석하는 수석 전략 컨설턴트입니다. 모든 출력은 반드시 한국어로 작성하세요.
 
 분석 주제: "${topic}"
-${gistContext ? `\n최신 뉴스 컨텍스트 (아래 기사를 드라이버 점수 산정에 적극 반영):\n${gistContext}\n` : ''}
+${gistContext ? `\n최신 뉴스 컨텍스트 (아래 기사를 드라이버 점수 산정에 적극 반영):\n${gistContext}\n` : ''}${alignmentSection}${conflictSection}
 
 이 주제에 가장 적합한 5개의 평가 드라이버를 정의하고, 위 기사 내용을 기반으로 각 드라이버의 현재 점수를 산정하세요.
+위의 [가능성 상승 근거]와 [가능성 저하 근거]를 반드시 드라이버 score에 반영하세요.
 
 규칙:
 - key는 반드시 d1, d2, d3, d4, d5 (이 순서대로)
