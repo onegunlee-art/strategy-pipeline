@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
     let facts: Array<{ type: string; key: string; value: string; source: string }> = [];
 
     if (GEMINI_KEY) {
+      console.log(`[geo/start] GEMINI_KEY present, analysisText length=${analysisText.length}, driverMeta keys=${driverMeta.map(m=>m.key).join(',')}`);
       try {
         // Gist RAG: 실제 뉴스 컨텍스트 수집. 호출/포맷 어느 단계가 실패해도
         // Gemini 생성은 반드시 진행되도록 별도 try로 격리한다.
@@ -121,8 +122,10 @@ cards 규칙:
 
         const result = await model.generateContent(prompt);
         const text = result.response.text();
+        console.log(`[geo/start] Gemini response length=${text.length}, preview="${text.slice(0, 200)}"`);
         const parsed = extractJsonObject(text);
         if (parsed) {
+          console.log(`[geo/start] Parsed OK — cards=${Array.isArray(parsed.cards) ? (parsed.cards as unknown[]).length : 'none'} facts=${Array.isArray(parsed.facts) ? (parsed.facts as unknown[]).length : 'none'}`);
           if (Array.isArray(parsed.cards)) {
             cards = parsed.cards as typeof cards;
           }
@@ -133,10 +136,14 @@ cards 규칙:
           strategyLow = (parsed.strategy_low as string) ?? '';
           strategyMid = (parsed.strategy_mid as string) ?? '';
           strategyHigh = (parsed.strategy_high as string) ?? '';
+        } else {
+          console.error(`[geo/start] extractJsonObject FAILED — raw response: "${text.slice(0, 500)}"`);
         }
       } catch (e) {
         console.error('[geo/start] Gemini generation failed:', e);
       }
+    } else {
+      console.error('[geo/start] GEMINI_KEY missing — skipping card/fact/hypothesis generation');
     }
 
     // Insert session with hypothesis + strategy + prior_prob + facts + driver_meta
