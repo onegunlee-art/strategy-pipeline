@@ -54,6 +54,30 @@ const BADGE_LEGEND = [
   { badge: '추가발굴', desc: '전략 보강 필요', bg: '#C01B2E' },
 ];
 
+function StrategyText({ text }: { text: string }) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const numbered = lines.filter(l => /^\d+\./.test(l));
+  if (numbered.length > 0) {
+    return (
+      <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {numbered.map((line, i) => {
+          const body = line.replace(/^\d+\.\s*/, '');
+          return (
+            <li key={i} style={{ fontSize: 14, lineHeight: 1.8, color: '#1f2937', fontFamily: FONT, wordBreak: 'keep-all', overflowWrap: 'break-word' }}>
+              {body}
+            </li>
+          );
+        })}
+      </ol>
+    );
+  }
+  return (
+    <p style={{ margin: 0, lineHeight: 1.8, fontSize: 14, whiteSpace: 'pre-wrap', color: '#1f2937', fontFamily: FONT, wordBreak: 'keep-all' }}>
+      {text}
+    </p>
+  );
+}
+
 function SectionTable({ items }: { items: ReportItem[] }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: FONT }}>
@@ -234,7 +258,7 @@ export default function GeoReportPage({ params }: Props) {
               현재 {data.geo_prob}% → 목표 {data.target_prob}%
             </span>
           </div>
-          <p style={{ margin: 0, lineHeight: 1.8, fontSize: 14, whiteSpace: 'pre-wrap', color: '#1f2937', fontFamily: FONT, wordBreak: 'keep-all' }}>{data.strategy}</p>
+          <StrategyText text={data.strategy} />
         </div>
       )}
 
