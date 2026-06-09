@@ -1707,8 +1707,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                           </span>
                         )}
                         {a.topic_category && (
-                          <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--brand)',
-                            background:'rgba(34,211,238,0.08)', padding:'1px 5px', borderRadius:'2px', whiteSpace:'nowrap' }}>
+                          <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)',
+                            background:'var(--surface2)', border:'1px solid var(--border)', padding:'1px 5px', borderRadius:'2px', whiteSpace:'nowrap' }}>
                             {a.topic_category}
                           </span>
                         )}
