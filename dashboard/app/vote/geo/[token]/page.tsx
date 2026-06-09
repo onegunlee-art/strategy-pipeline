@@ -40,6 +40,9 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
   const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set());
   const [suggestions, setSuggestions] = useState<{ name: string; voter_role: string }[]>([]);
   const [autoMatched, setAutoMatched] = useState(false);
+  const [userOpinion, setUserOpinion] = useState('');
+  const [signalSubmitting, setSignalSubmitting] = useState(false);
+  const [signalDone, setSignalDone] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -370,6 +373,58 @@ export default function GeoVotePage({ params }: { params: { token: string } }) {
               </button>
             );
           })}
+        </div>
+
+        {/* [옵션] 내 의견 직접 입력 */}
+        <div style={{ marginTop: 24, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 3, background: '#2a2a2a', color: '#9ca3af', fontFamily: 'IBM Plex Mono, monospace', letterSpacing: '0.5px' }}>
+              옵션
+            </span>
+            <span style={{ fontSize: 12, color: '#9ca3af' }}>내 의견을 직접 입력하면 AI가 새 시그널로 변환합니다</span>
+          </div>
+          <textarea
+            value={userOpinion}
+            onChange={e => setUserOpinion(e.target.value)}
+            disabled={signalSubmitting || signalDone}
+            placeholder="예: 이란 내 반정부 시위가 확산되고 있어 정권 불안정이 커질 것 같습니다"
+            rows={3}
+            style={{
+              width: '100%', background: '#111', border: '1px solid #333', borderRadius: 6,
+              padding: '10px 12px', color: '#f4f4f5', fontSize: 13, fontFamily: 'inherit',
+              resize: 'none', boxSizing: 'border-box', lineHeight: 1.5,
+              opacity: signalDone ? 0.5 : 1,
+            }}
+          />
+          {signalDone ? (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#22d3ee', fontFamily: 'IBM Plex Mono, monospace' }}>
+              ✓ 의견이 시그널로 변환되어 반영되었습니다
+            </div>
+          ) : (
+            <button
+              onClick={async () => {
+                if (!userOpinion.trim() || signalSubmitting) return;
+                setSignalSubmitting(true);
+                try {
+                  await fetch('/api/geo/user-signal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, userText: userOpinion }),
+                  });
+                  setSignalDone(true);
+                } catch { /* ignore */ }
+                setSignalSubmitting(false);
+              }}
+              disabled={!userOpinion.trim() || signalSubmitting}
+              style={{
+                marginTop: 8, padding: '8px 16px', borderRadius: 6, border: 'none',
+                background: userOpinion.trim() && !signalSubmitting ? '#374151' : '#1a1a1a',
+                color: userOpinion.trim() && !signalSubmitting ? '#f4f4f5' : '#4b5563',
+                fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, cursor: userOpinion.trim() ? 'pointer' : 'default',
+              }}>
+              {signalSubmitting ? '분석 중...' : '의견 제출 →'}
+            </button>
+          )}
         </div>
 
         {/* Submit */}
