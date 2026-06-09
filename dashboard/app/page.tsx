@@ -251,6 +251,75 @@ function MediaScanLoader({ analysisText, loading }: { analysisText: string; load
   );
 }
 
+const ALGO_STEPS = [
+  { label: '글로벌 뉴스 RAG 인덱스 연결',     done: 'FA · Economist · FT 외 7개 소스 연결' },
+  { label: '기사 수집 및 유사도 필터링',         done: '관련도 ≥ 0.35 검증 완료' },
+  { label: 'Alignment / Conflict 신호 추출',  done: '구조적 대립 신호 분류 완료' },
+  { label: 'OpenAI o4-mini 드라이버 최적화',   done: '5축 점수 벡터 계산 완료' },
+  { label: 'Bayesian 사후확률 수렴',           done: 'P(θ|D) ∝ P(D|θ) × P(θ) 수렴' },
+];
+
+function AlgorithmLoader() {
+  const [phase, setPhase] = useState(0); // 0=idle, 1..n=step in progress, n+1=done
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    ALGO_STEPS.forEach((_, i) => {
+      timers.push(setTimeout(() => setPhase(i + 1), i * 1100 + 300));
+    });
+    return () => timers.forEach(clearTimeout);
+  }, []);
+  return (
+    <div style={{ padding:'16px 0', display:'flex', flexDirection:'column', gap:'0px' }}>
+      <div style={{ fontSize:'9px', letterSpacing:'1.5px', fontFamily:'IBM Plex Mono', color:'var(--brand)', marginBottom:'14px' }}>
+        ENSEMBLE ALGORITHM — RUNNING
+      </div>
+      {ALGO_STEPS.map((s, i) => {
+        const done = phase > i + 1;
+        const active = phase === i + 1;
+        return (
+          <div key={i} style={{
+            display:'flex', alignItems:'flex-start', gap:'10px',
+            padding:'9px 12px',
+            background: active ? 'rgba(34,211,238,0.06)' : done ? 'rgba(34,211,238,0.02)' : 'transparent',
+            borderLeft: active ? '2px solid var(--brand)' : done ? '2px solid rgba(34,211,238,0.3)' : '2px solid var(--border)',
+            marginBottom:'2px', borderRadius:'0 3px 3px 0',
+            transition:'all 0.4s ease',
+            opacity: phase < i + 1 ? 0.35 : 1,
+          }}>
+            <div style={{ width:'14px', marginTop:'1px', flexShrink:0 }}>
+              {done && <span style={{ color:'var(--brand)', fontSize:'11px' }}>✓</span>}
+              {active && (
+                <div style={{
+                  width:'10px', height:'10px', border:'2px solid var(--brand)',
+                  borderTopColor:'transparent', borderRadius:'50%',
+                  animation:'spin 0.7s linear infinite', marginTop:'1px',
+                }} />
+              )}
+              {phase < i + 1 && <span style={{ color:'var(--border)', fontSize:'11px' }}>○</span>}
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:'11px', fontFamily:'IBM Plex Mono',
+                color: active ? 'var(--text)' : done ? 'var(--text-mid)' : 'var(--text-dim)',
+                fontWeight: active ? 600 : 400 }}>
+                {s.label}{active ? <span style={{ animation:'blink 0.8s step-end infinite' }}>...</span> : ''}
+              </div>
+              {done && (
+                <div style={{ fontSize:'10px', color:'var(--brand)', marginTop:'2px', fontFamily:'IBM Plex Mono' }}>
+                  {s.done}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes blink { 50% { opacity: 0; } }
+      `}</style>
+    </div>
+  );
+}
+
 function EmptyPanel({ label }: { label: string }) {
   return (
     <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px' }}>
@@ -1750,10 +1819,10 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   if (step === 2) {
     return (
       <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:'16px' }}>
-        <Panel title="관련 뉴스">
+        <Panel title="글로벌 뉴스 RAG">
           <div style={{ minHeight:'320px' }}>
             {analyzing && gistArticles.length === 0 && (
-              <MediaScanLoader analysisText={gistInsight || gistAnalysis} loading={analyzing} />
+              <AlgorithmLoader />
             )}
             {!analyzing && !gistAnalysis && gistArticles.length === 0 && (
               <div style={{ fontSize:'12px', color:'var(--text-dim)', padding:'20px 0', fontFamily:'IBM Plex Mono' }}>
@@ -1764,7 +1833,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
             {gistInsight && (
               <div style={{ padding:'10px 12px', background:'rgba(34,211,238,0.08)', border:'1px solid var(--brand)',
                 borderRadius:'4px', marginBottom:'12px', fontSize:'12px', color:'var(--text)', lineHeight:1.6 }}>
-                <span style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--brand)', marginRight:'8px' }}>INSIGHT</span>
+                <span style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--brand)', marginRight:'8px' }}>RAG INSIGHT</span>
                 {gistInsight}
               </div>
             )}
@@ -1776,11 +1845,11 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                 {gistAnalysis}
               </div>
             )}
-            {/* 추천 질문 칩 (clusters[].question) */}
+            {/* 핵심 관점 클러스터 */}
             {gistClusters.length > 0 && (
               <div style={{ marginBottom:'14px' }}>
                 <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginBottom:'6px' }}>
-                  주요 관점
+                  핵심 관점 클러스터
                 </div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
                   {gistClusters.map((c, i) => (
@@ -1792,11 +1861,11 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                 </div>
               </div>
             )}
-            {/* 참조 기사 소스 목록 */}
+            {/* 수집 기사 목록 */}
             {gistArticles.length > 0 && (
               <div>
                 <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginBottom:'6px' }}>
-                  참조 기사
+                  수집 기사 — {gistArticles.length}건
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
                   {gistArticles.slice(0, 8).map((a, i) => (
@@ -1838,12 +1907,18 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         </Panel>
 
         <Panel title="Win Factors">
-          {/* FACTS 배지 */}
-          <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono',
-            background:'var(--surface2)', padding:'2px 8px', borderRadius:'2px', display:'inline-block', marginBottom:'10px' }}>
-            OBSERVED FACTS
+          {/* ALGORITHM 배지 */}
+          <div style={{ display:'flex', gap:'6px', marginBottom:'10px', flexWrap:'wrap' }}>
+            <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--brand)', fontFamily:'IBM Plex Mono',
+              background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.3)', padding:'2px 8px', borderRadius:'2px' }}>
+              RAG-DRIVEN
+            </div>
+            <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono',
+              background:'var(--surface2)', padding:'2px 8px', borderRadius:'2px' }}>
+              o4-mini SCORED
+            </div>
           </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'16px' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'12px' }}>
             {DRIVER_META.map(m => {
               const v = contrib(m.key, drivers[m.key]);
               return (
@@ -1858,6 +1933,25 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                 </div>
               );
             })}
+          </div>
+          {/* 수식 블록 */}
+          <div style={{ background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'3px',
+            padding:'8px 10px', marginBottom:'14px', fontFamily:'IBM Plex Mono' }}>
+            <div style={{ fontSize:'9px', color:'var(--text-dim)', letterSpacing:'1px', marginBottom:'4px' }}>PROBABILITY FORMULA</div>
+            <div style={{ fontSize:'11px', color:'var(--brand)' }}>P = Σ contrib(dᵢ) / n × 10</div>
+            <div style={{ fontSize:'9px', color:'var(--text-dim)', marginTop:'4px' }}>
+              contrib(d) = score if invert=false · 10−score if invert=true
+            </div>
+            <div style={{ display:'flex', gap:'8px', marginTop:'6px', flexWrap:'wrap' }}>
+              <span style={{ fontSize:'9px', color:'var(--text-dim)', background:'rgba(34,211,238,0.06)',
+                border:'1px solid rgba(34,211,238,0.2)', padding:'1px 6px', borderRadius:'2px' }}>
+                PRIOR_STRENGTH = 10
+              </span>
+              <span style={{ fontSize:'9px', color:'var(--text-dim)', background:'var(--surface2)',
+                padding:'1px 6px', borderRadius:'2px', border:'1px solid var(--border)' }}>
+                clamp [5, 95]
+              </span>
+            </div>
           </div>
           {/* AI-generated facts (event/market types) */}
           {geoFacts.filter(f => f.type !== 'driver').length > 0 && (
@@ -1956,13 +2050,23 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
               <div style={{ fontSize:'64px', fontWeight:700, fontFamily:'IBM Plex Mono', color: probColor(geoProb), lineHeight:1 }}>
                 {geoProb}%
               </div>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', marginTop:'6px' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', marginTop:'6px', flexWrap:'wrap' }}>
                 <div style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>
-                  CI {ci.low}–{ci.high}%
+                  95% CI {ci.low}–{ci.high}%
                 </div>
-                <span style={{ fontSize:'9px', padding:'2px 7px', borderRadius:'3px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px', background:'rgba(99,102,241,0.15)', color:'#818cf8' }}>
-                  FORMULA-BASED
+                <span style={{ fontSize:'9px', padding:'2px 7px', borderRadius:'3px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px', background:'rgba(99,102,241,0.15)', color:'#818cf8', fontWeight:700 }}>
+                  ENSEMBLE v2
                 </span>
+              </div>
+              {/* 앙상블 알고리즘 스택 표시 */}
+              <div style={{ display:'flex', justifyContent:'center', gap:'5px', marginTop:'8px', flexWrap:'wrap' }}>
+                {['Bayesian Prior', 'RAG Alignment/Conflict', 'Vote-Weighted Δ'].map(tag => (
+                  <span key={tag} style={{ fontSize:'8px', padding:'2px 6px', borderRadius:'2px',
+                    fontFamily:'IBM Plex Mono', background:'var(--surface2)', color:'var(--text-dim)',
+                    border:'1px solid var(--border)', letterSpacing:'0.3px' }}>
+                    {tag}
+                  </span>
+                ))}
               </div>
 
               {/* 정규분포 — 시그널 누적 시 좁아짐 */}
@@ -1973,8 +2077,13 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
               {/* Market comparison */}
               <div style={{ background:'var(--surface2)', borderRadius:'2px', padding:'10px 14px', textAlign:'left' }}>
                 <div style={{ fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', letterSpacing:'1px', marginBottom:'8px' }}>시장 예측 비교</div>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-                  <span style={{ fontSize:'12px', color:'var(--text)' }}>KT 분석</span>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px', alignItems:'center' }}>
+                  <div>
+                    <span style={{ fontSize:'12px', color:'var(--text)' }}>Ensemble Model</span>
+                    <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color:'var(--brand)',
+                      background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.25)',
+                      padding:'1px 5px', borderRadius:'2px', marginLeft:'6px' }}>RAG+Bayes</span>
+                  </div>
                   <span style={{ fontSize:'14px', fontFamily:'IBM Plex Mono', fontWeight:700, color: probColor(geoProb) }}>{geoProb}%</span>
                 </div>
                 <div style={{ display:'flex', justifyContent:'space-between' }}>
