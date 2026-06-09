@@ -2053,7 +2053,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                       </div>
                       <div style={{ fontSize:'12px', color:'var(--text)', lineHeight:1.4, flex:1, display:'flex', gap:'6px', alignItems:'baseline', flexWrap:'wrap' }}>
                         <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color:'var(--brand)', opacity:0.7, whiteSpace:'nowrap', flexShrink:0 }}>
-                          {['FA','Economist','FT'][i % 3]}
+                          {['FA','FA','Economist','FA','FT','FA','Economist','FA'][i % 8]}
                         </span>
                         {a.title}
                       </div>
