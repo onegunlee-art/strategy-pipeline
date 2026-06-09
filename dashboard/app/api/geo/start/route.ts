@@ -57,23 +57,33 @@ export async function POST(req: NextRequest) {
 
         const client = new OpenAI({ apiKey: OPENAI_KEY });
 
-        const prompt = `당신은 글로벌 전략 컨설턴트입니다. 모든 출력(label, description, evidence, hypothesis, strategy, facts의 key/value/source 포함)은 반드시 한국어로 작성하세요.
+        const prompt = `당신은 FA(Foreign Affairs)·이코노미스트·FT 등 글로벌 미디어를 실시간 분석하는 수석 전략 컨설턴트입니다. 모든 출력은 반드시 한국어로 작성하세요.
 
-분석 주제: ${topic}
+## 분석 주제
+${topic}
 
-분석 내용:
-${(analysisText ?? '').slice(0, 3000)}
+## 수집된 글로벌 뉴스 기사 (FA·Economist·FT·Reuters·Bloomberg 등)
+${(analysisText ?? '').slice(0, 6000)}
 
-드라이버 정의: ${driverLegend}
-드라이버 현황 (원점수 0~10): ${JSON.stringify(driverScores)}
+## 드라이버 현황
+정의: ${driverLegend}
+현재 점수(0~10): ${JSON.stringify(driverScores)}
 현재 달성 가능성: ${geoProb}%
 
-다음을 생성하세요:
-- hypothesis: 현재 가능성을 결정짓는 핵심 가설 1~2문장 (확률 관점에서 서술)
-- strategy_low: 가능성이 낮을 때(<40%), 확률을 65% 이상으로 끌어올리기 위한 즉각 실행 전략 2문장. 반드시 행동 지향·긍정 어조("~를 선점하라", "~를 즉시 실행하라" 등)로 작성.
-- strategy_mid: 가능성이 중간(40~65%)일 때, 확률을 80% 이상으로 높이기 위한 핵심 레버 2문장. 반드시 행동 지향·긍정 어조로 작성.
-- strategy_high: 가능성이 높을 때(>65%), 이 모멘텀을 굳혀 90% 이상 확보하기 위한 전략 2문장. 반드시 행동 지향·긍정 어조로 작성.
-- facts: 6~7개 (driver 5개는 type="driver", event 1~2개는 type="event")
+## 분석 지시
+
+먼저 위 기사들에서 다음 3가지를 추출하세요:
+1. 가능성을 높이는 핵심 신호 (매체·날짜 명시)
+2. 가능성을 낮추는 핵심 저항 요인 (매체·날짜 명시)
+3. 판세를 바꿀 와일드카드 이벤트
+
+이 분석을 바탕으로 다음을 생성하세요:
+
+- hypothesis: 기사 분석에서 도출된 확률 결정 가설. "~에 따르면" 등 기사 근거를 직접 인용하며 1~2문장으로.
+- strategy_low: 가능성이 낮을 때(<40%), 확률을 65%+ 로 끌어올릴 즉각 실행 전략. 기사에서 발견한 미활용 기회를 구체적으로 명시하여 2문장. 행동 지향 어조 필수.
+- strategy_mid: 가능성이 중간(40~65%)일 때, 80%+ 달성을 위한 핵심 레버. 기사에서 가장 움직임이 큰 드라이버를 특정하여 2문장. 행동 지향 어조 필수.
+- strategy_high: 가능성이 높을 때(>65%), 90%+ 확보를 위한 모멘텀 잠금 전략. 기사에서 식별된 리스크를 사전 차단하는 구체적 액션 2문장. 행동 지향 어조 필수.
+- facts: 6~7개. driver 5개(type="driver")는 기사 근거 포함, event 1~2개(type="event")는 최신 기사의 실제 사건.
 - cards: 반드시 4개. driver_deltas 키는 반드시 이 5개만: ${driverKeyList}. direction은 "agree" 또는 "conflict".
   예시: {"${d1}": 1, "${d2}": -1, "${d3}": 0, "${d4}": 1, "${d5}": -1}`;
 

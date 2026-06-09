@@ -1728,8 +1728,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           {[
             '이란-이스라엘, 6월 내 종전 가능성은?',
             '트럼프 관세, 7월 전 완전 철회 가능성은?',
-            '유가 100달러, 2025 Q3 재돌파 가능성은?',
-            '러-우, 2025년 내 평화협정 타결 가능성은?',
+            '유가 100달러, 2026 Q3 재돌파 가능성은?',
+            '러-우, 2026년 내 평화협정 타결 가능성은?',
             '중국-대만, 올해 봉쇄 현실화 가능성은?',
           ].map(hint => (
             <button key={hint} onClick={() => setQuery(hint)} style={{
