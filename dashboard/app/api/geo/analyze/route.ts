@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
         const genAI = new GoogleGenerativeAI(GEMINI_KEY);
         const model = genAI.getGenerativeModel({
           model: GEMINI_MODEL,
-          generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1024 },
+          generationConfig: { maxOutputTokens: 2048 },
         });
         const prompt = `당신은 지정학 리스크 분석 전문가입니다. 주제 "${topic}"에 대해 JSON을 출력하세요.
 ${gistContext ? `\n최신 뉴스 컨텍스트 (지스트 검색 — 아래를 드라이버 점수 산정에 적극 반영):\n${gistContext}\n` : ''}

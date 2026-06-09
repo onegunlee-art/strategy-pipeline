@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL, GEMINI_KEY } from '@/lib/geminiModel';
 import { getDb } from '@/lib/db';
-import { queryGistRag, formatGistContextForPrompt } from '@/lib/gistRag';
+// Gist RAG not called here — analysisText from geo/analyze already contains gistAnalysis
 import { GeoDriver, normalizeDriverMeta } from '@/lib/geoDrivers';
 
 // Gist RAG(최대 60s) + Gemini 호출이 직렬로 이어지므로 함수 타임아웃을 상향 (Vercel Pro).
@@ -58,65 +58,51 @@ export async function POST(req: NextRequest) {
     if (GEMINI_KEY) {
       console.log(`[geo/start] GEMINI_KEY present, analysisText length=${analysisText.length}, driverMeta keys=${driverMeta.map(m=>m.key).join(',')}`);
       try {
-        // Gist RAG: 실제 뉴스 컨텍스트 수집. 호출/포맷 어느 단계가 실패해도
-        // Gemini 생성은 반드시 진행되도록 별도 try로 격리한다.
-        let gistContext = '';
-        try {
-          const gistRag = await queryGistRag({
-            query: topic,
-            limit: 10,
-            include_analysis: true,
-            analysis_cluster_name: topic,
-          });
-          gistContext = formatGistContextForPrompt(gistRag);
-          if (!gistContext) console.warn(`[geo/start] Gist returned no usable content for topic="${topic}"`);
-        } catch (gistErr) {
-          const isTimeout = gistErr instanceof Error && gistErr.name === 'AbortError';
-          console.error(`[geo/start] Gist ${isTimeout ? 'TIMEOUT' : 'ERROR'} for topic="${topic}":`, gistErr);
-        }
-
-        // 동적 드라이버 키/라벨 — 카드 driver_deltas가 정확히 같은 키를 쓰게 한다.
+        // analysisText already contains gistAnalysis from geo/analyze — no second Gist call needed.
         const driverKeyList = driverMeta.map(m => m.key).join(', ');
         const driverLegend = driverMeta.map(m => `${m.key}=${m.labelKo}(${m.invert ? '높을수록 가능성↓' : '높을수록 가능성↑'})`).join(', ');
-        const deltaExample = `{${driverMeta.map(m => `"${m.key}": 숫자`).join(', ')}}`;
+        const d1 = driverMeta[0]?.key ?? 'd1';
+        const d2 = driverMeta[1]?.key ?? 'd2';
+        const d3 = driverMeta[2]?.key ?? 'd3';
+        const d4 = driverMeta[3]?.key ?? 'd4';
+        const d5 = driverMeta[4]?.key ?? 'd5';
 
         const genAI = new GoogleGenerativeAI(GEMINI_KEY);
         const model = genAI.getGenerativeModel({
           model: GEMINI_MODEL,
-          generationConfig: {
-            responseMimeType: 'application/json',
-            maxOutputTokens: 4096,
-          },
+          generationConfig: { maxOutputTokens: 4096 },
         });
-        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 분석 텍스트와 드라이버 현황을 바탕으로 JSON을 출력하세요.
+        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 분석 내용을 읽고 JSON 하나만 출력하세요. 마크다운 코드블록 없이 JSON만 출력하세요.
 
-분석 텍스트:
+분석 내용:
 ${analysisText.slice(0, 3000)}
-${gistContext ? `\n최신 뉴스 컨텍스트:\n${gistContext.slice(0, 2000)}\n` : ''}
+
 드라이버 정의: ${driverLegend}
 드라이버 현황 (원점수 0~10): ${JSON.stringify(driverScores)}
 현재 종전/완화 가능성: ${geoProb}%
 
-출력 JSON 형식:
+출력 형식 (이 구조 그대로):
 {
+  "hypothesis": "분석 기반 핵심 가설 1~2문장",
+  "strategy_low": "가능성 낮을 때(<40%) 전략 2문장",
+  "strategy_mid": "가능성 중간(40~65%) 전략 2문장",
+  "strategy_high": "가능성 높을 때(>65%) 전략 2문장",
   "facts": [
-    { "type": "driver", "key": "드라이버 한글 라벨", "value": "수치 또는 상태", "source": "근거 출처" },
-    { "type": "event", "key": "사건명", "value": "긍정/부정/중립", "source": "날짜 + 출처" }
+    { "type": "driver", "key": "드라이버 한글명", "value": "현재값", "source": "출처" },
+    { "type": "event", "key": "사건명", "value": "긍정/부정/중립", "source": "날짜+출처" }
   ],
   "cards": [
-    { "label": "짧은 제목(10자 이내)", "description": "설명(30자 이내)", "evidence": "출처 1문장", "driver_deltas": ${deltaExample}, "direction": "agree 또는 conflict" }
-  ],
-  "hypothesis": "핵심 전략 가설 1~2문장",
-  "strategy_low": "가능성 낮을 때 전략 2문장",
-  "strategy_mid": "가능성 중간일 때 전략 2문장",
-  "strategy_high": "가능성 높을 때 전략 2문장"
+    { "label": "제목(10자이내)", "description": "설명(30자이내)", "evidence": "근거1문장", "driver_deltas": {"${d1}": 1, "${d2}": -1, "${d3}": 0, "${d4}": 1, "${d5}": -1}, "direction": "agree" },
+    { "label": "제목(10자이내)", "description": "설명(30자이내)", "evidence": "근거1문장", "driver_deltas": {"${d1}": -1, "${d2}": 2, "${d3}": -1, "${d4}": 0, "${d5}": 1}, "direction": "conflict" },
+    { "label": "제목(10자이내)", "description": "설명(30자이내)", "evidence": "근거1문장", "driver_deltas": {"${d1}": 0, "${d2}": -2, "${d3}": 1, "${d4}": 1, "${d5}": 0}, "direction": "agree" },
+    { "label": "제목(10자이내)", "description": "설명(30자이내)", "evidence": "근거1문장", "driver_deltas": {"${d1}": 1, "${d2}": 0, "${d3}": -1, "${d4}": -1, "${d5}": 2}, "direction": "conflict" }
+  ]
 }
 
 규칙:
-- facts: driver 5개 + event 1~2개 (총 6~7개)
-- cards: 정확히 4개
-- driver_deltas 키는 반드시 이 5개만: ${driverKeyList}
-- direction: "agree" 또는 "conflict" 중 하나만`;
+- cards는 반드시 4개. driver_deltas 키는 반드시 이 5개만: ${driverKeyList}
+- direction: "agree" 또는 "conflict" 중 하나
+- facts: 총 6~7개 (driver 5개 + event 1~2개)`;
 
         const result = await model.generateContent(prompt);
         const text = result.response.text();
