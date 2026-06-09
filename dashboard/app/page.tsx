@@ -14,7 +14,8 @@ import type { SubScores } from '@/lib/pillars';
 import { ACTION_CATALOG } from '@/lib/actionCatalog';
 import { ROLE_LABEL, ROLE_WEIGHTS, VoterRole } from '@/lib/voteWeights';
 import { GeoDriver, contribution, computeGeoProb, normalizeDriverMeta, FALLBACK_DRIVER_META, FALLBACK_DRIVER_SCORES, DRIVER_COLORS } from '@/lib/geoDrivers';
-import type { GistArticle } from '@/lib/gistRag';
+import type { GistArticle, GistCluster } from '@/lib/gistRag';
+import { gistArticleUrl } from '@/lib/gistRag';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1459,6 +1460,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   const [geoFacts, setGeoFacts] = useState<Array<{ type: string; key: string; value: string; source: string }>>([]);
   const [gistArticles, setGistArticles] = useState<GistArticle[]>([]);
   const [gistInsight, setGistInsight] = useState('');
+  const [gistAnalysis, setGistAnalysis] = useState('');
+  const [gistClusters, setGistClusters] = useState<GistCluster[]>([]);
   const [calibration, setCalibration] = useState<{ entries: Array<{ topic: string; predictedProb: number; actualOutcome: string; resolvedAt: string; correct: boolean; note: string }>; totalCount: number; correctCount: number; brierScore: number | null } | null>(null);
 
   const activeDrivers = liveDrivers ?? drivers;
@@ -1522,6 +1525,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     setAnalyzing(true);
     setGistArticles([]);
     setGistInsight('');
+    setGistAnalysis('');
+    setGistClusters([]);
     (async () => {
       try {
         const res = await fetch('/api/geo/analyze', {
@@ -1534,6 +1539,8 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         if (cancelled) return;
         if (Array.isArray(json.gistArticles)) setGistArticles(json.gistArticles);
         if (typeof json.gistInsight === 'string') setGistInsight(json.gistInsight);
+        if (typeof json.gistAnalysis === 'string') setGistAnalysis(json.gistAnalysis);
+        if (Array.isArray(json.gistClusters)) setGistClusters(json.gistClusters);
         if (Array.isArray(json.driverMeta) && json.driverMeta.length > 0) setDriverMeta(normalizeDriverMeta(json.driverMeta));
         if (json.driverScores && typeof json.driverScores === 'object') setDriverScores(json.driverScores);
       } catch { /* fallback 드라이버 유지 */ }
@@ -1545,13 +1552,11 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
   const handleEnterStep3 = async () => {
     setStartingSession(true);
-    // geo/start Gemini용: Gist 기사 원문을 이어붙여 분석 컨텍스트로 전달
-    const analysisText = [
-      gistInsight,
-      ...gistArticles.map(a =>
-        `[${a.published_at?.slice(0, 10) ?? ''} ${a.source ?? ''}] ${a.title}${a.summary ? ': ' + a.summary : ''}`
-      ),
-    ].filter(Boolean).join('\n\n');
+    // geo/start Gemini용: analysis.full_text를 주 컨텍스트로, 없으면 기사 목록으로 대체
+    const articleLines = gistArticles.map(a =>
+      `[${a.published_at?.slice(0, 10) ?? ''} ${a.topic_category ?? ''}] ${a.title}${a.description ? ': ' + a.description : ''}`
+    );
+    const analysisText = gistAnalysis || [gistInsight, ...articleLines].filter(Boolean).join('\n\n');
     try {
       const res = await fetch('/api/geo/start', {
         method: 'POST',
@@ -1638,21 +1643,22 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
       <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:'16px' }}>
         <Panel title="관련 뉴스">
           <div style={{ minHeight:'320px' }}>
-            {analyzing && gistArticles.length === 0 && (
+            {analyzing && !gistAnalysis && gistArticles.length === 0 && (
               <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                 {[1,2,3,4].map(i => (
                   <div key={i} style={{ height:'60px', background:'var(--surface2)', borderRadius:'4px', opacity: 0.5 + i * 0.1 }} />
                 ))}
                 <div style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginTop:'4px' }}>
-                  뉴스 수집 · 드라이버 도출 중...
+                  뉴스 수집 · 분석 도출 중...
                 </div>
               </div>
             )}
-            {!analyzing && gistArticles.length === 0 && (
+            {!analyzing && !gistAnalysis && gistArticles.length === 0 && (
               <div style={{ fontSize:'12px', color:'var(--text-dim)', padding:'20px 0', fontFamily:'IBM Plex Mono' }}>
                 뉴스 데이터를 불러오지 못했습니다. 확인을 눌러 계속할 수 있습니다.
               </div>
             )}
+            {/* 핵심 인사이트 배너 */}
             {gistInsight && (
               <div style={{ padding:'10px 12px', background:'rgba(34,211,238,0.08)', border:'1px solid var(--brand)',
                 borderRadius:'4px', marginBottom:'12px', fontSize:'12px', color:'var(--text)', lineHeight:1.6 }}>
@@ -1660,40 +1666,66 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                 {gistInsight}
               </div>
             )}
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              {gistArticles.slice(0, 8).map((a, i) => (
-                <div key={i} style={{ padding:'10px 12px', background:'var(--surface2)', borderRadius:'4px',
-                  border:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:'4px' }}>
-                  <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-                    {a.published_at && (
-                      <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', whiteSpace:'nowrap' }}>
-                        {a.published_at.slice(0, 10)}
-                      </span>
-                    )}
-                    {a.source && (
-                      <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--brand)',
-                        background:'rgba(34,211,238,0.08)', padding:'1px 6px', borderRadius:'2px', whiteSpace:'nowrap' }}>
-                        {a.source}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize:'13px', fontWeight:600, color:'var(--text)', lineHeight:1.4 }}>
-                    {a.url
-                      ? <a href={a.url} target="_blank" rel="noopener noreferrer"
-                          style={{ color:'var(--text)', textDecoration:'none' }}
-                          onMouseEnter={e => (e.currentTarget.style.textDecoration='underline')}
-                          onMouseLeave={e => (e.currentTarget.style.textDecoration='none')}>
+            {/* 종합 분석 본문 (analysis.full_text) */}
+            {gistAnalysis && (
+              <div style={{ padding:'14px 16px', background:'var(--surface2)', border:'1px solid var(--border)',
+                borderRadius:'6px', marginBottom:'14px', fontSize:'13px', color:'var(--text)', lineHeight:1.8,
+                whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                {gistAnalysis}
+              </div>
+            )}
+            {/* 추천 질문 칩 (clusters[].question) */}
+            {gistClusters.length > 0 && (
+              <div style={{ marginBottom:'14px' }}>
+                <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginBottom:'6px' }}>
+                  주요 관점
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                  {gistClusters.map((c, i) => (
+                    <span key={i} style={{ fontSize:'11px', color:'var(--text-mid)', background:'var(--surface2)',
+                      border:'1px solid var(--border)', borderRadius:'12px', padding:'3px 10px', lineHeight:1.5 }}>
+                      {c.question || c.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* 참조 기사 소스 목록 */}
+            {gistArticles.length > 0 && (
+              <div>
+                <div style={{ fontSize:'9px', letterSpacing:'1px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', marginBottom:'6px' }}>
+                  참조 기사
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                  {gistArticles.slice(0, 8).map((a, i) => (
+                    <div key={i} style={{ display:'flex', gap:'8px', alignItems:'flex-start', padding:'7px 10px',
+                      background:'var(--surface2)', borderRadius:'4px', border:'1px solid var(--border)' }}>
+                      <div style={{ display:'flex', gap:'6px', alignItems:'center', flexShrink:0, paddingTop:'1px' }}>
+                        {a.published_at && (
+                          <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', whiteSpace:'nowrap' }}>
+                            {a.published_at.slice(0, 10)}
+                          </span>
+                        )}
+                        {a.topic_category && (
+                          <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--brand)',
+                            background:'rgba(34,211,238,0.08)', padding:'1px 5px', borderRadius:'2px', whiteSpace:'nowrap' }}>
+                            {a.topic_category}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize:'12px', color:'var(--text)', lineHeight:1.4, flex:1 }}>
+                        <a href={gistArticleUrl(a)} target="_blank" rel="noopener noreferrer"
+                            style={{ color:'var(--text)', textDecoration:'none' }}
+                            onMouseEnter={e => (e.currentTarget.style.textDecoration='underline')}
+                            onMouseLeave={e => (e.currentTarget.style.textDecoration='none')}>
                           {a.title}
                         </a>
-                      : a.title
-                    }
-                  </div>
-                  {a.summary && (
-                    <div style={{ fontSize:'11px', color:'var(--text-dim)', lineHeight:1.5 }}>{a.summary}</div>
-                  )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
           <div style={{ marginTop:'16px' }}>
             <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', alignItems:'center' }}>
