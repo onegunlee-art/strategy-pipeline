@@ -1509,7 +1509,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
   // Session state
   const [geoSessionId, setGeoSessionId] = useState<number | null>(null);
   const [geoToken, setGeoToken] = useState<string | null>(null);
-  const [geoCards, setGeoCards] = useState<GeoSignalCard[]>([]);
+  const [, setGeoCards] = useState<GeoSignalCard[]>([]);
   const [geoVoteCounts, setGeoVoteCounts] = useState<Record<number, number>>({});
   const [geoRoleCounts, setGeoRoleCounts] = useState<Record<string, number>>({});
   const [liveDrivers, setLiveDrivers] = useState<Record<string, number> | null>(null);
