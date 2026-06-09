@@ -81,44 +81,42 @@ export async function POST(req: NextRequest) {
         const deltaExample = `{${driverMeta.map(m => `"${m.key}": 숫자`).join(', ')}}`;
 
         const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-        const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 분석 텍스트와 드라이버 현황을 바탕으로 JSON 하나를 출력하세요.
+        const model = genAI.getGenerativeModel({
+          model: GEMINI_MODEL,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 4096,
+          },
+        });
+        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 다음 분석 텍스트와 드라이버 현황을 바탕으로 JSON을 출력하세요.
 
 분석 텍스트:
-${analysisText}
-${gistContext ? `\n최신 뉴스 컨텍스트 (지스트 검색 결과 — 아래 내용을 facts·evidence·hypothesis에 적극 반영하세요):\n${gistContext}\n` : ''}
+${analysisText.slice(0, 3000)}
+${gistContext ? `\n최신 뉴스 컨텍스트:\n${gistContext.slice(0, 2000)}\n` : ''}
 드라이버 정의: ${driverLegend}
 드라이버 현황 (원점수 0~10): ${JSON.stringify(driverScores)}
 현재 종전/완화 가능성: ${geoProb}%
 
-출력 규칙 (마크다운 코드블록 없이 JSON만):
+출력 JSON 형식:
 {
   "facts": [
     { "type": "driver", "key": "드라이버 한글 라벨", "value": "수치 또는 상태", "source": "근거 출처" },
-    { "type": "event", "key": "사건명", "value": "긍정/부정/중립", "source": "날짜 + 출처" },
-    { "type": "market", "key": "지표명", "value": "수치", "source": "데이터 출처" }
+    { "type": "event", "key": "사건명", "value": "긍정/부정/중립", "source": "날짜 + 출처" }
   ],
   "cards": [
-    { "label": "짧은 제목(10자 이내)", "description": "설명(30자 이내)", "evidence": "출처 근거 1문장 (날짜+기관)", "driver_deltas": ${deltaExample}, "direction": "agree 또는 conflict" }
+    { "label": "짧은 제목(10자 이내)", "description": "설명(30자 이내)", "evidence": "출처 1문장", "driver_deltas": ${deltaExample}, "direction": "agree 또는 conflict" }
   ],
-  "hypothesis": "분석 기반 핵심 전략 가설 1~2문장",
-  "strategy_low": "가능성이 낮을 때(< 40%) 확률을 올리기 위한 구체적 행동 전략 2~3문장",
-  "strategy_mid": "가능성이 40~65%일 때 모멘텀 유지 및 가설 검증 전략 2~3문장",
-  "strategy_high": "가능성이 높을 때(> 65%) 리스크 관리 및 승기 확보 전략 2~3문장"
+  "hypothesis": "핵심 전략 가설 1~2문장",
+  "strategy_low": "가능성 낮을 때 전략 2문장",
+  "strategy_mid": "가능성 중간일 때 전략 2문장",
+  "strategy_high": "가능성 높을 때 전략 2문장"
 }
 
-facts 규칙:
-- 6~8개 생성 (driver 5개 + event 1~3개)
-- driver type: 5개 드라이버 각각 현재 수치와 의미 설명 (위 드라이버 정의의 한글 라벨 사용)
-- event type: 분석 텍스트에서 핵심 사건 1~3개 (실제 날짜 포함)
-- source: 가능한 한 구체적으로 (예: "Reuters 2026.06.05", "외무부 발표 2026.05.28")
-
-cards 규칙:
-- 4~6개 생성
-- evidence: 해당 카드 선택 근거가 되는 실제 또는 유사 출처 1문장
-- driver_deltas 값: -3 ~ +3
-- direction: "agree"=가능성 상승, "conflict"=가능성 하락
-- driver_deltas 키는 반드시 정확히 이 5개만 사용: ${driverKeyList}`;
+규칙:
+- facts: driver 5개 + event 1~2개 (총 6~7개)
+- cards: 정확히 4개
+- driver_deltas 키는 반드시 이 5개만: ${driverKeyList}
+- direction: "agree" 또는 "conflict" 중 하나만`;
 
         const result = await model.generateContent(prompt);
         const text = result.response.text();
