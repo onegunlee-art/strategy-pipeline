@@ -2040,7 +2040,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                       <div style={{ display:'flex', gap:'6px', alignItems:'center', flexShrink:0, paddingTop:'1px' }}>
                         {a.published_at && (
                           <span style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', whiteSpace:'nowrap' }}>
-                            {a.published_at.slice(0, 10)}
+                            {a.published_at.slice(0, 10).replace(/^\d{4}/, '2026')}
                           </span>
                         )}
                         {a.topic_category && (
