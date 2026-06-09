@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
         const client = new OpenAI({ apiKey: OPENAI_KEY });
 
-        const prompt = `당신은 지정학 리스크 분석 전문가입니다.
+        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 모든 출력(label, description, evidence, hypothesis, strategy, facts의 key/value/source 포함)은 반드시 한국어로 작성하세요.
 
 분석 내용:
 ${(analysisText ?? '').slice(0, 3000)}
