@@ -52,6 +52,67 @@ export function computeGeoProb(
   return clamp(5, 95, Math.round(mean * 10));
 }
 
+// geo/start에서 Gemini 실패 시 사용할 결정론적 fallback 카드/팩트 생성기.
+// 드라이버 점수 상위 2개(긍정 신호)와 하위 2개(부정 신호)를 골라 4장을 만든다.
+export function buildFallbackCards(
+  meta: GeoDriver[],
+  scores: Record<string, number>,
+): Array<{ label: string; description: string; evidence: string; driver_deltas: Record<string, number>; direction: string }> {
+  const sorted = [...meta].sort((a, b) => {
+    const ca = contribution(a, scores[a.key] ?? 5);
+    const cb = contribution(b, scores[b.key] ?? 5);
+    return cb - ca;
+  });
+  const top = sorted.slice(0, 2);    // 기여도 높은 드라이버 → agree 카드
+  const bot = sorted.slice(-2);      // 기여도 낮은 드라이버 → conflict 카드
+
+  const deltas = (keys: GeoDriver[], sign: number): Record<string, number> =>
+    Object.fromEntries(meta.map(m => [m.key, keys.some(k => k.key === m.key) ? sign : 0]));
+
+  return [
+    {
+      label: top[0]?.labelKo ?? '우호 신호',
+      description: `${top[0]?.labelKo ?? '주요 드라이버'} 지표 강화`,
+      evidence: `드라이버 점수 기반 자동 생성 (${top[0]?.labelKo}: ${scores[top[0]?.key ?? ''] ?? 5}/10)`,
+      driver_deltas: deltas(top, 1),
+      direction: 'agree',
+    },
+    {
+      label: top[1]?.labelKo ?? '안정 요인',
+      description: `${top[1]?.labelKo ?? '보조 드라이버'} 안정적`,
+      evidence: `드라이버 점수 기반 자동 생성 (${top[1]?.labelKo}: ${scores[top[1]?.key ?? ''] ?? 5}/10)`,
+      driver_deltas: deltas([top[1] ?? top[0]], 1),
+      direction: 'agree',
+    },
+    {
+      label: bot[0]?.labelKo ?? '리스크 요인',
+      description: `${bot[0]?.labelKo ?? '제약 드라이버'} 미흡`,
+      evidence: `드라이버 점수 기반 자동 생성 (${bot[0]?.labelKo}: ${scores[bot[0]?.key ?? ''] ?? 5}/10)`,
+      driver_deltas: deltas([bot[0] ?? meta[meta.length - 1]], -1),
+      direction: 'conflict',
+    },
+    {
+      label: bot[1]?.labelKo ?? '장애 요인',
+      description: `${bot[1]?.labelKo ?? '제약 드라이버'} 부정적`,
+      evidence: `드라이버 점수 기반 자동 생성 (${bot[1]?.labelKo}: ${scores[bot[1]?.key ?? ''] ?? 5}/10)`,
+      driver_deltas: deltas(bot, -1),
+      direction: 'conflict',
+    },
+  ];
+}
+
+export function buildFallbackFacts(
+  meta: GeoDriver[],
+  scores: Record<string, number>,
+): Array<{ type: string; key: string; value: string; source: string }> {
+  return meta.map(m => ({
+    type: 'driver',
+    key: m.labelKo,
+    value: `${scores[m.key] ?? 5}/10`,
+    source: '드라이버 점수 자동 산정',
+  }));
+}
+
 // 임의 입력(JSONB 등)을 GeoDriver[]로 정규화. 비정상이면 fallback.
 export function normalizeDriverMeta(raw: unknown): GeoDriver[] {
   if (!Array.isArray(raw) || raw.length === 0) return FALLBACK_DRIVER_META;
