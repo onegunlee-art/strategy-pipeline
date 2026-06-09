@@ -1713,7 +1713,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
       <div style={{ display:'flex', flexDirection:'column', gap:'16px', maxWidth:'640px' }}>
         <input
           type="text"
-          placeholder="예: 이란-이스라엘 전면전 가능성"
+          placeholder="예: 유가 100달러, 2025 Q3 재돌파 가능성은?"
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') startAnalysis(); }}
@@ -1726,11 +1726,11 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         />
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
           {[
-            '이란-이스라엘 전면전 가능성',
-            '트럼프 관세 90일 유예 연장 여부',
-            '러시아 휴전 협상 타결 시점',
-            '중국 대만 봉쇄 시나리오',
-            '유가 100달러 재돌파 가능성',
+            '이란-이스라엘, 6월 내 종전 가능성은?',
+            '트럼프 관세, 7월 전 완전 철회 가능성은?',
+            '유가 100달러, 2025 Q3 재돌파 가능성은?',
+            '러-우, 2025년 내 평화협정 타결 가능성은?',
+            '중국-대만, 올해 봉쇄 현실화 가능성은?',
           ].map(hint => (
             <button key={hint} onClick={() => setQuery(hint)} style={{
               ...badgeStyle, cursor:'pointer', background:'var(--surface)',
@@ -2032,28 +2032,47 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
           </Panel>
         </div>
 
-        {/* 전략 패널 — 확률 구간 조건부 */}
+        {/* 전략 패널 — 항상 확률 제고 방향 */}
         {geoStrategy && (
-          <Panel title={geoProb < 40 ? '확률 상승 전략' : geoProb < 65 ? '모멘텀 유지 전략' : '리스크 관리 전략'}>
-            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+          <Panel title="확률 제고 전략">
+            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px', marginBottom:'16px' }}>
               <span style={{
                 fontSize:'10px', padding:'3px 10px', borderRadius:'3px',
                 fontFamily:'IBM Plex Mono', letterSpacing:'0.5px',
-                background: geoProb < 40 ? 'rgba(220,38,38,0.15)' : geoProb < 65 ? 'rgba(217,119,6,0.15)' : 'rgba(22,163,74,0.15)',
-                color: geoProb < 40 ? 'var(--red)' : geoProb < 65 ? 'var(--yellow)' : 'var(--green)',
+                background: geoProb < 40 ? 'rgba(34,211,238,0.15)' : geoProb < 65 ? 'rgba(34,211,238,0.12)' : 'rgba(22,163,74,0.15)',
+                color: geoProb < 40 ? 'var(--brand)' : geoProb < 65 ? 'var(--brand)' : 'var(--green)',
+                fontWeight: 700,
               }}>
-                {geoProb < 40 ? 'RISK — LOW PROB' : geoProb < 65 ? 'HOLD — MID PROB' : 'SECURE — HIGH PROB'}
+                {geoProb < 40 ? 'ACTION REQUIRED' : geoProb < 65 ? 'PUSH — MOMENTUM' : 'LOCK IT IN'}
               </span>
-              <span style={{ fontSize:'9px', padding:'2px 7px', borderRadius:'3px', fontFamily:'IBM Plex Mono', letterSpacing:'0.5px', background:'rgba(16,185,129,0.15)', color:'#34d399' }}>
-                AI ANALYSIS
+              <span style={{
+                fontSize:'10px', padding:'3px 10px', borderRadius:'3px',
+                fontFamily:'IBM Plex Mono', letterSpacing:'0.5px',
+                background:'rgba(34,211,238,0.08)', color:'var(--brand)',
+              }}>
+                현재 {geoProb}% → 목표 {geoProb < 40 ? '65' : geoProb < 65 ? '80' : '90+'}% 달성 전략
               </span>
-              {geoHypothesis && (
-                <span style={{ fontSize:'11px', color:'var(--text-dim)', fontStyle:'italic' }}>
-                  가설: {geoHypothesis}
-                </span>
-              )}
             </div>
-            <div style={{ fontSize:'13px', color:'var(--text)', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{geoStrategy}</div>
+            {geoHypothesis && (
+              <div style={{
+                margin:'0 0 16px', padding:'12px 16px',
+                background:'rgba(34,211,238,0.06)', borderLeft:'3px solid var(--brand)',
+                borderRadius:'0 4px 4px 0',
+              }}>
+                <div style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--brand)', marginBottom:'6px' }}>CORE HYPOTHESIS</div>
+                <div style={{ fontSize:'13px', color:'var(--text)', lineHeight:1.7, fontStyle:'italic' }}>
+                  ❝ {geoHypothesis} ❞
+                </div>
+              </div>
+            )}
+            <div style={{ fontSize:'13px', color:'var(--text)', lineHeight:2, whiteSpace:'pre-wrap' }}>
+              {geoStrategy.split('\n').filter(Boolean).map((line, i) => (
+                <div key={i} style={{ display:'flex', gap:'10px', marginBottom:'4px' }}>
+                  <span style={{ color:'var(--brand)', fontWeight:700, flexShrink:0, fontFamily:'IBM Plex Mono', fontSize:'12px', marginTop:'2px' }}>→</span>
+                  <span>{line.replace(/^[-→•]\s*/, '')}</span>
+                </div>
+              ))}
+            </div>
           </Panel>
         )}
 

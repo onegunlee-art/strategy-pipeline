@@ -57,20 +57,22 @@ export async function POST(req: NextRequest) {
 
         const client = new OpenAI({ apiKey: OPENAI_KEY });
 
-        const prompt = `당신은 지정학 리스크 분석 전문가입니다. 모든 출력(label, description, evidence, hypothesis, strategy, facts의 key/value/source 포함)은 반드시 한국어로 작성하세요.
+        const prompt = `당신은 글로벌 전략 컨설턴트입니다. 모든 출력(label, description, evidence, hypothesis, strategy, facts의 key/value/source 포함)은 반드시 한국어로 작성하세요.
+
+분석 주제: ${topic}
 
 분석 내용:
 ${(analysisText ?? '').slice(0, 3000)}
 
 드라이버 정의: ${driverLegend}
 드라이버 현황 (원점수 0~10): ${JSON.stringify(driverScores)}
-현재 종전/완화 가능성: ${geoProb}%
+현재 달성 가능성: ${geoProb}%
 
 다음을 생성하세요:
-- hypothesis: 분석 기반 핵심 가설 1~2문장
-- strategy_low: 가능성 낮을 때(<40%) 전략 2문장
-- strategy_mid: 가능성 중간(40~65%) 전략 2문장
-- strategy_high: 가능성 높을 때(>65%) 전략 2문장
+- hypothesis: 현재 가능성을 결정짓는 핵심 가설 1~2문장 (확률 관점에서 서술)
+- strategy_low: 가능성이 낮을 때(<40%), 확률을 65% 이상으로 끌어올리기 위한 즉각 실행 전략 2문장. 반드시 행동 지향·긍정 어조("~를 선점하라", "~를 즉시 실행하라" 등)로 작성.
+- strategy_mid: 가능성이 중간(40~65%)일 때, 확률을 80% 이상으로 높이기 위한 핵심 레버 2문장. 반드시 행동 지향·긍정 어조로 작성.
+- strategy_high: 가능성이 높을 때(>65%), 이 모멘텀을 굳혀 90% 이상 확보하기 위한 전략 2문장. 반드시 행동 지향·긍정 어조로 작성.
 - facts: 6~7개 (driver 5개는 type="driver", event 1~2개는 type="event")
 - cards: 반드시 4개. driver_deltas 키는 반드시 이 5개만: ${driverKeyList}. direction은 "agree" 또는 "conflict".
   예시: {"${d1}": 1, "${d2}": -1, "${d3}": 0, "${d4}": 1, "${d5}": -1}`;
