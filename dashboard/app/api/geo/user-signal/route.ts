@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { getDb } from '@/lib/db';
+import { aggregate } from '@/lib/geoAggregate';
 
 export const maxDuration = 60;
 
@@ -97,14 +98,29 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // DB 저장
+    // 카드 DB 저장
     const { rows: inserted } = await db.query(
       `INSERT INTO geo_signal_cards (session_id, label, description, driver_deltas, direction, evidence)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
       [sessionId, card.label, card.description, JSON.stringify(card.driver_deltas), card.direction, `[현장 의견] ${userText.trim().slice(0, 100)}`]
     );
+    const cardId: number = inserted[0].id;
 
-    return NextResponse.json({ ok: true, cardId: inserted[0].id, card });
+    // 자동 투표 삽입 — 유저 코멘트가 즉시 드라이버 점수에 반영되도록
+    await db.query(
+      `INSERT INTO geo_votes (session_id, card_id, voter_name, voter_role)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, cardId, '[현장의견]', 'reviewer']
+    );
+
+    // aggregate로 새 확률 계산 후 세션 업데이트
+    const agg = await aggregate(db, sessionId);
+    await db.query(
+      `UPDATE geo_sessions SET geo_prob = $1 WHERE id = $2`,
+      [agg.geoProb, sessionId]
+    );
+
+    return NextResponse.json({ ok: true, cardId, card, geoProb: agg.geoProb });
   } catch (e) {
     console.error('[user-signal]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
