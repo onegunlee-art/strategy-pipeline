@@ -38,12 +38,12 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
     const session = rows[0];
 
     const { rows: cardRows } = await db.query(
-      `SELECT c.id, c.label, c.description, c.direction,
+      `SELECT c.id, c.label, c.description, c.direction, c.evidence,
               COUNT(v.id)::integer AS vote_count
        FROM geo_signal_cards c
        LEFT JOIN geo_votes v ON v.card_id = c.id
        WHERE c.session_id = $1
-       GROUP BY c.id, c.label, c.description, c.direction
+       GROUP BY c.id, c.label, c.description, c.direction, c.evidence
        ORDER BY vote_count DESC`,
       [sessionId]
     );
@@ -67,13 +67,38 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
       `- [${c.direction === 'agree' ? '가능성↑' : '가능성↓'}] ${c.label}: ${c.vote_count}표`
     ).join('\n');
 
+    // 현장 의견 (QR 투표 페이지 자유 입력 → 시그널 변환된 카드)
+    const fieldOpinions = cardRows
+      .filter((c: { evidence: string | null }) => c.evidence?.startsWith('[현장 의견]'))
+      .map((c: { label: string; description: string; evidence: string }) =>
+        `- ${c.label}: ${c.description} (원문: ${c.evidence.replace('[현장 의견]', '').trim()})`)
+      .join('\n');
+
+    // 결정론적 개선 레버 계산 — P = mean(contribution) × 10 이므로
+    // 드라이버 1개의 기여도 +Δc는 확률을 (Δc / n) × 10 pp 올린다.
+    const nDrivers = Math.max(1, agg.driverMeta.length);
+    const levers = agg.driverMeta
+      .map(m => {
+        const c = contribution(m, agg.drivers[m.key] ?? 0);
+        const targetC = Math.min(c + 3, 9);
+        const dpp = ((targetC - c) / nDrivers) * 10;
+        return { label: m.labelKo, contrib: c, targetC, dpp };
+      })
+      .sort((a, b) => a.contrib - b.contrib);
+
+    const leverSummary = levers
+      .map(l => `- ${l.label}: 현재 기여도 ${l.contrib.toFixed(1)}/10 → ${l.targetC.toFixed(1)} 달성 시 확률 약 +${l.dpp.toFixed(1)}pp`)
+      .join('\n');
+
     let reportData: {
       overview: string;
+      strategy_summary: string;
       analysis_items: ReportItem[];
       resistance_items: ReportItem[];
       strategy_items: ReportItem[];
     } = {
       overview: `${session.topic} — 현재 달성 가능성 ${agg.geoProb}%. (AI 보고서 생성 실패 — 기본 데이터 표시)`,
+      strategy_summary: '',
       analysis_items: [],
       resistance_items: [],
       strategy_items: [],
@@ -98,8 +123,14 @@ ${session.hypothesis ?? '(없음)'}
 ## 드라이버 현황
 ${driverSummary}
 
-## 시그널 투표 결과 (총 ${agg.totalVotes}건)
+## 시그널 투표 결과 (총 ${agg.totalVotes}건) — 집단 판단이 반영된 최종 데이터
 ${cardSummary || '(투표 없음)'}
+
+## 현장 의견 (참여자 직접 입력 — 전략에 반드시 반영)
+${fieldOpinions || '(없음)'}
+
+## 확률 개선 레버 (엔진 계산값 — 기여도 낮은 순. 이 수치를 그대로 사용할 것)
+${leverSummary}
 
 ## 수집된 글로벌 기사 (FA·이코노미스트 중심)
 ${(session.analysis_text ?? '').slice(0, 5000)}
@@ -109,12 +140,14 @@ ${(session.analysis_text ?? '').slice(0, 5000)}
 - content 종결 어미: ~원함/~필요/~인식/~예상/~가능/~보유 중 하나 사용 (다짐형·주관형 금지)
 - 정량 수치 최소 5개 이상 포함 (%, 날짜, 횟수, 규모 등)
 - FA·이코노미스트 기사 실명 인용 최소 3건 (예: "FA 2026년 5월호에 따르면", "이코노미스트 최신호 분석")
+- "협력 강화", "지속적 모니터링", "적극 대응" 등 어느 주제에나 통하는 무내용 표현 금지
 
 ## 섹션별 생성 지침
 1. overview: 주제 + 현재 달성가능성 + 핵심 변수를 담은 1~2문장 사업 개요
-2. analysis_items: 현재 가능성에 영향을 미치는 핵심 현황 사실 7~9개 (badge: 우위/열위/리스크/"")
-3. resistance_items: 확률을 떨어뜨리는 저항·경쟁·리스크 요인 5~7개 (badge: 열위/리스크/추가발굴 위주)
-4. strategy_items: 달성 확률을 ${targetProb}%+ 로 끌어올리기 위한 구체적 실행 전략 7~9개 (badge: 우위/"" 위주, FA·이코노미스트 기사 근거 포함)`;
+2. strategy_summary: **핵심 전략 요약** — 번호 매긴 3~5개 항목. 각 항목은 반드시 "[드라이버명 기여도 x.x→y.y · 예상 +z.zpp]"로 시작하고, 위 "확률 개선 레버"의 수치를 그대로 인용할 것. 기여도가 가장 낮은 드라이버 2~3개를 우선 공략. 투표에서 가능성↓ 표가 많았던 시그널과 현장 의견의 우려를 직접 다룰 것. 어조는 제안형(~제안, ~권고, ~검토). 예시: "1. [경제 압박 3.2→6.0 · 예상 +5.6pp] FA 5월호가 지적한 제재 완화 신호를 활용해 ○○ 채널 재개를 제안"
+3. analysis_items: 현재 가능성에 영향을 미치는 핵심 현황 사실 7~9개 (badge: 우위/열위/리스크/"")
+4. resistance_items: 확률을 떨어뜨리는 저항·경쟁·리스크 요인 5~7개 (badge: 열위/리스크/추가발굴 위주)
+5. strategy_items: 달성 확률을 ${targetProb}%+ 로 끌어올리기 위한 구체적 실행 전략 7~9개. tag는 개선 대상 드라이버명, content에는 예상 +pp 효과 포함 (badge: 우위/"" 위주, FA·이코노미스트 기사 근거 포함)`;
 
         const response = await client.chat.completions.create({
           model: OPENAI_MODEL,
@@ -128,11 +161,12 @@ ${(session.analysis_text ?? '').slice(0, 5000)}
                 type: 'object',
                 properties: {
                   overview:          { type: 'string' },
+                  strategy_summary:  { type: 'string' },
                   analysis_items:    { type: 'array', items: ITEM_SCHEMA },
                   resistance_items:  { type: 'array', items: ITEM_SCHEMA },
                   strategy_items:    { type: 'array', items: ITEM_SCHEMA },
                 },
-                required: ['overview', 'analysis_items', 'resistance_items', 'strategy_items'],
+                required: ['overview', 'strategy_summary', 'analysis_items', 'resistance_items', 'strategy_items'],
                 additionalProperties: false,
               },
             },
@@ -156,7 +190,8 @@ ${(session.analysis_text ?? '').slice(0, 5000)}
       total_votes: agg.totalVotes,
       cards: cardRows,
       hypothesis: session.hypothesis ?? '',
-      strategy: currentStrategy,
+      // 발행 시점 재생성 전략(Posterior·투표·현장의견 반영) 우선, 실패 시 세션 시작 시점 전략으로 fallback
+      strategy: reportData.strategy_summary?.trim() || currentStrategy,
       strategy_label: strategyLabel,
       target_prob: targetProb,
       overview: reportData.overview,
