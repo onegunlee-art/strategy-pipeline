@@ -2186,7 +2186,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
   // ── Step 3: Probability dashboard ──
   if (step === 3) {
-    const polymarket = 34;
     // 시그널이 누적될수록 표준편차가 줄어 분포가 좁아진다.
     const sigma = 18 / Math.sqrt(1 + totalVotes / 3);
     const ci = {
@@ -2266,29 +2265,9 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
               {/* 정규분포 — 시그널 누적 시 좁아짐 */}
               <div style={{ margin:'16px 0', display:'flex', justifyContent:'center' }}>
-                <ProbabilityDistribution mean={geoProb} sigma={sigma} marketValue={polymarket} width={240} height={150} />
+                <ProbabilityDistribution mean={geoProb} sigma={sigma} width={240} height={150} />
               </div>
 
-              {/* Market comparison */}
-              <div style={{ background:'var(--surface2)', borderRadius:'2px', padding:'10px 14px', textAlign:'left' }}>
-                <div style={{ fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', letterSpacing:'1px', marginBottom:'8px' }}>시장 예측 비교</div>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px', alignItems:'center' }}>
-                  <div>
-                    <span style={{ fontSize:'12px', color:'var(--text)' }}>Ensemble Model</span>
-                    <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color:'var(--brand)',
-                      background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.25)',
-                      padding:'1px 5px', borderRadius:'2px', marginLeft:'6px' }}>RAG+Bayes</span>
-                  </div>
-                  <span style={{ fontSize:'14px', fontFamily:'IBM Plex Mono', fontWeight:700, color: probColor(geoProb) }}>{geoProb}%</span>
-                </div>
-                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                  <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Polymarket</span>
-                  <span style={{ fontSize:'14px', fontFamily:'IBM Plex Mono', fontWeight:700, color:'var(--text-mid)' }}>{polymarket}%</span>
-                </div>
-                <div style={{ marginTop:'6px', fontSize:'10px', color:'var(--text-dim)' }}>
-                  {geoProb < polymarket ? `시장 대비 −${polymarket - geoProb}pp (보수적 판단)` : `시장 대비 +${geoProb - polymarket}pp`}
-                </div>
-              </div>
             </div>
           </Panel>
 
@@ -2388,16 +2367,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     );
   }
 
-  // ── Step 4: Polymarket comparison ──
-  if (step === 4) {
-    return (
-      <PolymarketStep
-        geoProb={geoProb}
-        topic={query || '이란 전쟼 종전 가능성'}
-        onReport={() => { setStep(5); if (geoSessionId) window.open(`/report/geo/${geoSessionId}`, '_blank'); }}
-      />
-    );
-  }
+  // ── Step 4: Polymarket comparison (hidden) ──
 
   // ── Step 5: Report published ──
   return (
