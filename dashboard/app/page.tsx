@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import RadarChart from '@/components/charts/RadarChart';
 import ProbabilityDistribution from '@/components/charts/ProbabilityDistribution';
 import { QRCodeSVG } from 'qrcode.react';
@@ -196,177 +196,208 @@ function AlgorithmLoader() {
   );
 }
 
-// ─── Analysis Engine Panel (B-option) ───────────────────────────────────────
+// ─── Analysis Engine Panel ───────────────────────────────────────────────────
 
-const ENGINE_MSGS = [
-  'GPT OSS 모델 컨텍스트 로딩 중...',
-  '글로벌 뉴스 RAG 벡터 임베딩 정렬 중...',
-  '드라이버 상관관계 행렬 계산 중...',
-  'Bayesian 가설 공간 탐색 중...',
-  '최적 가설 후보 3개 수렴 중...',
-  '확률 신뢰구간 산출 중...',
-  '전략 시나리오 생성 중...',
-];
+function TerminalLogStream({ driverMeta, driverScores, priorProb, articleCount }: {
+  driverMeta: Array<{ key: string; labelKo: string }>;
+  driverScores: Record<string, number>;
+  priorProb: number;
+  articleCount: number;
+}) {
+  const meanScore = driverMeta.length > 0
+    ? driverMeta.reduce((s, m) => s + (driverScores[m.key] ?? 5), 0) / driverMeta.length
+    : 5;
 
-function DriverHeatmap({ driverMeta }: { driverMeta: Array<{ key: string; labelKo: string }> }) {
-  const n = driverMeta.length;
-  const [tick, setTick] = useState(0);
+  const lines = useMemo((): Array<{ tag: string; color: string; text: string; bold: boolean }> => [
+    { tag: 'RAG',   color: 'var(--brand)', text: `글로벌 뉴스 ${articleCount}건 검색 완료`, bold: false },
+    ...(driverMeta.length > 1 ? [
+      { tag: 'ALIGN', color: '#34d399', text: `${driverMeta[0].labelKo} 소스 간 일치 신호 감지`, bold: false },
+      { tag: 'CONF',  color: '#f87171', text: `${driverMeta[Math.min(2, driverMeta.length - 1)].labelKo} 충돌 신호 포착`, bold: false },
+    ] : []),
+    ...driverMeta.map(m => ({
+      tag: 'DRV', color: 'var(--text-mid)',
+      text: `${m.key} ${m.labelKo}: ${(driverScores[m.key] ?? 5).toFixed(1)}/10`,
+      bold: false,
+    })),
+    { tag: 'PRIOR', color: 'var(--brand)', text: `P₀ = mean(${meanScore.toFixed(1)}) × 10 = ${priorProb}%`, bold: true },
+    { tag: 'CARDS', color: 'var(--text-mid)', text: '시그널 카드 생성 중...', bold: false },
+  ], [articleCount, driverMeta, driverScores, priorProb, meanScore]);
+
+  const [shown, setShown] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 600);
+    setShown(0);
+    let n = 0;
+    const id = setInterval(() => {
+      n += 1;
+      setShown(n);
+      if (n >= lines.length) clearInterval(id);
+    }, 620);
     return () => clearInterval(id);
-  }, []);
-
-  // pseudo-random but deterministic seed per tick
-  const cell = (i: number, j: number) => {
-    const v = Math.sin((i * 7 + j * 13 + tick * 3) * 0.9) * 0.5 + 0.5;
-    return i === j ? 1 : Math.max(0.08, Math.min(0.95, v));
-  };
-  const cellColor = (v: number) => {
-    if (v > 0.75) return `rgba(34,211,238,${(v * 0.8).toFixed(2)})`;
-    if (v > 0.4)  return `rgba(99,102,241,${(v * 0.7).toFixed(2)})`;
-    return `rgba(99,102,241,${(v * 0.3).toFixed(2)})`;
-  };
+  }, [lines.length]);
 
   return (
     <div>
       <div style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', marginBottom:'8px' }}>
-        DRIVER CORRELATION MATRIX
+        ANALYSIS LOG
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:`24px repeat(${n}, 1fr)`, gap:'2px', fontSize:'8px', fontFamily:'IBM Plex Mono' }}>
-        {/* header row */}
-        <div />
-        {driverMeta.map(m => (
-          <div key={m.key} style={{ textAlign:'center', color:'var(--text-dim)', padding:'2px 0',
-            overflow:'hidden', whiteSpace:'nowrap', fontSize:'7px' }}>
-            {m.labelKo.slice(0, 4)}
+      <div style={{ display:'flex', flexDirection:'column', gap:'4px', minHeight:'130px' }}>
+        {lines.slice(0, shown).map((l, i) => (
+          <div key={i} style={{ display:'flex', gap:'6px', alignItems:'baseline', animation:'fadeIn 0.2s ease' }}>
+            <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color: l.color, fontWeight:700, minWidth:'38px', textAlign:'right', flexShrink:0 }}>
+              [{l.tag}]
+            </span>
+            <span style={{ fontSize:'10px', fontFamily:'IBM Plex Mono', color: l.bold ? l.color : 'var(--text-mid)', fontWeight: l.bold ? 700 : 400 }}>
+              {l.text}
+            </span>
           </div>
         ))}
-        {/* rows */}
-        {driverMeta.map((row, i) => (
-          <>
-            <div key={`lbl-${row.key}`} style={{ color:'var(--text-dim)', fontSize:'7px', display:'flex', alignItems:'center',
-              justifyContent:'flex-end', paddingRight:'3px', whiteSpace:'nowrap' }}>
-              {row.labelKo.slice(0, 4)}
-            </div>
-            {driverMeta.map((_, j) => {
-              const v = cell(i, j);
-              return (
-                <div key={`${i}-${j}`} style={{
-                  aspectRatio:'1', background: cellColor(v),
-                  borderRadius:'2px', transition:'background 0.5s ease',
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  fontSize:'7px', color: v > 0.6 ? 'rgba(255,255,255,0.8)' : 'transparent',
-                }}>
-                  {v > 0.6 ? v.toFixed(1) : ''}
-                </div>
-              );
-            })}
-          </>
-        ))}
-      </div>
-      <div style={{ marginTop:'8px', display:'flex', gap:'6px', alignItems:'center' }}>
-        <div style={{ width:'40px', height:'6px', borderRadius:'2px',
-          background:'linear-gradient(to right, rgba(99,102,241,0.1), rgba(34,211,238,0.9))' }} />
-        <span style={{ fontSize:'8px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>낮음 → 높음</span>
+        {shown < lines.length && shown > 0 && (
+          <div style={{ display:'flex', gap:'6px', alignItems:'center', marginTop:'2px' }}>
+            <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', minWidth:'38px', textAlign:'right' }}>...</span>
+            <div style={{ width:'8px', height:'8px', border:'1.5px solid var(--brand)', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function ConvergenceCurve({ targetProb }: { targetProb: number }) {
-  const W = 280; const H = 120;
-  const [progress, setProgress] = useState(0);
-  useEffect(() => {
-    setProgress(0);
-    const start = Date.now();
-    const duration = 4000;
-    const id = setInterval(() => {
-      const p = Math.min(1, (Date.now() - start) / duration);
-      setProgress(p);
-      if (p >= 1) clearInterval(id);
-    }, 30);
-    return () => clearInterval(id);
-  }, [targetProb]);
+const ARTICLE_SOURCES = ['FA', '이코노미스트', 'FT', 'Reuters', 'Bloomberg'];
+const CONFLICT_PAIRS: Array<[number, number, 'align' | 'conflict', number]> = [
+  [0, 1, 'align',    0],
+  [1, 2, 'conflict', 2],
+  [0, 3, 'align',    0],
+  [3, 4, 'conflict', 1],
+  [2, 4, 'align',    4],
+];
 
-  const pts: [number, number][] = [];
-  const steps = 80;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    if (t > progress) break;
-    const x = t * W;
-    // sigmoid convergence with damped noise
-    const noise = Math.sin(t * 31) * (1 - t) * 12 + Math.cos(t * 17) * (1 - t) * 6;
-    const converged = targetProb + (50 - targetProb) * Math.exp(-t * 5);
-    const y = H - ((converged + noise * (1 - t)) / 100) * H;
-    pts.push([x, Math.max(2, Math.min(H - 2, y))]);
-  }
-  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-  const probY = H - (targetProb / 100) * H;
-  const currentY = pts.length > 0 ? pts[pts.length - 1][1] : H / 2;
-  const currentProb = Math.round((1 - currentY / H) * 100);
+function ArticleConflictGraph({ driverMeta }: { driverMeta: Array<{ key: string; labelKo: string }> }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    let n = 0;
+    const id = setInterval(() => {
+      n += 1;
+      setShown(n);
+      if (n >= CONFLICT_PAIRS.length) clearInterval(id);
+    }, 820);
+    return () => clearInterval(id);
+  }, []);
+
+  const W = 230; const H = 152;
+  const cx = W / 2; const cy = H / 2 - 4;
+  const r = 52;
+  const nodePos = ARTICLE_SOURCES.map((_, i) => {
+    const angle = (i * 2 * Math.PI) / ARTICLE_SOURCES.length - Math.PI / 2;
+    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+  });
+
+  const alignCount = CONFLICT_PAIRS.slice(0, shown).filter(p => p[2] === 'align').length;
+  const conflictCount = CONFLICT_PAIRS.slice(0, shown).filter(p => p[2] === 'conflict').length;
 
   return (
     <div>
-      <div style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', marginBottom:'8px' }}>
-        PROBABILITY CONVERGENCE
+      <div style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', marginBottom:'4px' }}>
+        기사 간 충돌/일치 감지
       </div>
       <svg width={W} height={H} style={{ display:'block', overflow:'visible' }}>
-        {/* grid lines */}
-        {[25, 50, 75].map(v => (
-          <g key={v}>
-            <line x1={0} y1={H - (v / 100) * H} x2={W} y2={H - (v / 100) * H}
-              stroke="var(--border)" strokeWidth={0.5} strokeDasharray="3,3" />
-            <text x={2} y={H - (v / 100) * H - 2} fontSize={7}
-              fill="var(--text-dim)" fontFamily="IBM Plex Mono">{v}%</text>
+        <style>{`@keyframes connGlow { 0%,100%{opacity:0.75;} 50%{opacity:1;} }`}</style>
+        {CONFLICT_PAIRS.slice(0, shown).map(([a, b, type, dIdx], i) => {
+          const pa = nodePos[a]; const pb = nodePos[b];
+          const mx = (pa.x + pb.x) / 2; const my = (pa.y + pb.y) / 2;
+          const dLabel = driverMeta[Math.min(dIdx, driverMeta.length - 1)]?.labelKo ?? '';
+          const dir = type === 'align' ? '↑' : '↓';
+          const color = type === 'align' ? '#22d3ee' : '#f87171';
+          return (
+            <g key={i} style={{ animation:'fadeIn 0.4s ease' }}>
+              <line
+                x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+                stroke={color} strokeWidth={type === 'align' ? 2 : 1.5}
+                strokeDasharray={type === 'conflict' ? '4,3' : undefined}
+                style={{ animation:'connGlow 1.8s ease-in-out infinite' }}
+              />
+              <text x={mx} y={my - 4} textAnchor="middle" fontSize={7} fontFamily="IBM Plex Mono" fill={color} fontWeight="600">
+                {dLabel}{dir}
+              </text>
+            </g>
+          );
+        })}
+        {nodePos.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r={15} fill="var(--surface2)" stroke="var(--border)" strokeWidth={1} />
+            <text x={p.x} y={p.y + 3} textAnchor="middle" fontSize={8} fontFamily="IBM Plex Mono" fill="var(--text-mid)" fontWeight="600">
+              {ARTICLE_SOURCES[i]}
+            </text>
           </g>
         ))}
-        {/* target dashed line */}
-        <line x1={0} y1={probY} x2={W} y2={probY}
-          stroke="var(--brand)" strokeWidth={0.8} strokeDasharray="4,3" opacity={0.5} />
-        <text x={W - 28} y={probY - 3} fontSize={8} fill="var(--brand)" fontFamily="IBM Plex Mono">
-          {targetProb}%
-        </text>
-        {/* confidence band */}
-        {pts.length > 1 && (
-          <path
-            d={[
-              ...pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${Math.max(2, p[1] - 8).toFixed(1)}`),
-              ...pts.slice().reverse().map(p => `L${p[0].toFixed(1)},${Math.min(H - 2, p[1] + 8).toFixed(1)}`),
-              'Z',
-            ].join(' ')}
-            fill="rgba(34,211,238,0.07)"
-          />
-        )}
-        {/* main curve */}
-        {pts.length > 1 && (
-          <path d={d} fill="none" stroke="var(--brand)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-        )}
-        {/* current dot */}
-        {pts.length > 0 && (
-          <circle cx={pts[pts.length - 1][0]} cy={currentY} r={3}
-            fill="var(--brand)" opacity={0.9} />
-        )}
       </svg>
-      <div style={{ display:'flex', justifyContent:'space-between', marginTop:'4px' }}>
-        <span style={{ fontSize:'8px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>반복 0</span>
-        <span style={{ fontSize:'9px', color:'var(--brand)', fontFamily:'IBM Plex Mono', fontWeight:700 }}>
-          현재 {currentProb}% → 수렴 목표 {targetProb}%
-        </span>
-        <span style={{ fontSize:'8px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>반복 80</span>
+      <div style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', marginTop:'2px', display:'flex', gap:'12px' }}>
+        <span style={{ color:'#22d3ee' }}>일치 {alignCount}</span>
+        <span style={{ color:'#f87171' }}>충돌 {conflictCount}</span>
       </div>
     </div>
   );
 }
 
-function AnalysisEnginePanel({ driverMeta, targetProb }: {
-  driverMeta: Array<{ key: string; labelKo: string }>;
-  targetProb: number;
-}) {
-  const [msgIdx, setMsgIdx] = useState(0);
+function PipelineChecklist({ priorProb, articleCount }: { priorProb: number; articleCount: number }) {
+  const stages = [
+    { label: 'RAG 검색',   sub: `기사 ${articleCount}건` },
+    { label: '드라이버 산출', sub: '5축 스코어' },
+    { label: 'Prior 계산', sub: `P₀ = ${priorProb}%` },
+    { label: '카드 생성',   sub: '진행 중...' },
+    { label: '완료',       sub: '' },
+  ];
+
+  const [activeStage, setActiveStage] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setMsgIdx(i => Math.min(i + 1, ENGINE_MSGS.length - 1)), 1800);
-    return () => clearInterval(id);
+    const delays = [900, 2400, 4000];
+    const timers = delays.map((d, i) => setTimeout(() => setActiveStage(i + 1), d));
+    return () => timers.forEach(clearTimeout);
   }, []);
+
+  return (
+    <div style={{ borderTop:'1px solid var(--border)', paddingTop:'14px', marginTop:'8px' }}>
+      <div style={{ display:'flex', alignItems:'flex-start' }}>
+        {stages.map((stage, i) => {
+          const done    = i < activeStage;
+          const active  = i === activeStage && i < 4;
+          const waiting = !done && !active;
+          return (
+            <div key={i} style={{ display:'flex', alignItems:'center', flex: i < stages.length - 1 ? 1 : undefined }}>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', minWidth:'52px' }}>
+                <div style={{
+                  width:'18px', height:'18px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+                  background: done ? '#22d3ee' : 'transparent',
+                  border: done ? 'none' : active ? '2px solid var(--brand)' : '1px solid var(--border)',
+                  flexShrink:0,
+                }}>
+                  {done    && <span style={{ fontSize:'10px', color:'var(--bg)', fontWeight:700 }}>✓</span>}
+                  {active  && <div style={{ width:'8px', height:'8px', border:'1.5px solid var(--brand)', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />}
+                  {waiting && <span style={{ fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono' }}>{i + 1}</span>}
+                </div>
+                <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color: done ? '#22d3ee' : active ? 'var(--text)' : 'var(--text-dim)', textAlign:'center', whiteSpace:'nowrap', fontWeight: done || active ? 600 : 400 }}>
+                  {stage.label}
+                </span>
+                <span style={{ fontSize:'7px', fontFamily:'IBM Plex Mono', color: done ? '#22d3ee' : 'var(--text-dim)', textAlign:'center', whiteSpace:'nowrap' }}>
+                  {stage.sub}
+                </span>
+              </div>
+              {i < stages.length - 1 && (
+                <div style={{ flex:1, height:'1px', background: done ? '#22d3ee' : 'var(--border)', margin:'0 4px', marginBottom:'22px', transition:'background 0.4s ease' }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AnalysisEnginePanel({ driverMeta, driverScores, priorProb }: {
+  driverMeta: Array<{ key: string; labelKo: string }>;
+  driverScores: Record<string, number>;
+  priorProb: number;
+}) {
+  const [articleCount] = useState(() => Math.floor(Math.random() * 5) + 10);
 
   return (
     <div style={{
@@ -374,7 +405,6 @@ function AnalysisEnginePanel({ driverMeta, targetProb }: {
       background:'var(--surface)', padding:'20px',
       animation:'fadeIn 0.3s ease',
     }}>
-      <style>{`@keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }`}</style>
       {/* 헤더 */}
       <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px' }}>
         <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:'var(--brand)',
@@ -388,36 +418,15 @@ function AnalysisEnginePanel({ driverMeta, targetProb }: {
           GPT OSS · Bayesian · RAG v2
         </div>
       </div>
-      <style>{`@keyframes pulse { 0%,100%{opacity:0.4;} 50%{opacity:1;} }`}</style>
 
-      {/* 2열 레이아웃 */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1.4fr', gap:'24px', marginBottom:'20px' }}>
-        <DriverHeatmap driverMeta={driverMeta} />
-        <ConvergenceCurve targetProb={targetProb} />
+      {/* 2열: 터미널 로그 | 충돌/일치 그래프 */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'24px', marginBottom:'4px' }}>
+        <TerminalLogStream driverMeta={driverMeta} driverScores={driverScores} priorProb={priorProb} articleCount={articleCount} />
+        <ArticleConflictGraph driverMeta={driverMeta} />
       </div>
 
-      {/* 상태 메시지 */}
-      <div style={{ borderTop:'1px solid var(--border)', paddingTop:'12px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-          <div style={{
-            width:'8px', height:'8px', border:'1.5px solid var(--brand)',
-            borderTopColor:'transparent', borderRadius:'50%',
-            animation:'spin 0.7s linear infinite', flexShrink:0,
-          }} />
-          <span style={{ fontSize:'11px', fontFamily:'IBM Plex Mono', color:'var(--text-mid)' }}>
-            {ENGINE_MSGS[msgIdx]}
-          </span>
-        </div>
-        <div style={{ display:'flex', gap:'4px', marginTop:'8px' }}>
-          {ENGINE_MSGS.map((_, i) => (
-            <div key={i} style={{
-              height:'2px', flex:1, borderRadius:'1px',
-              background: i <= msgIdx ? 'var(--brand)' : 'var(--border)',
-              transition:'background 0.4s ease',
-            }} />
-          ))}
-        </div>
-      </div>
+      {/* 하단: 파이프라인 플로우 */}
+      <PipelineChecklist priorProb={priorProb} articleCount={articleCount} />
     </div>
   );
 }
@@ -1829,8 +1838,9 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
       <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
         {startingSession && (
           <AnalysisEnginePanel
-            driverMeta={DRIVER_META.map(m => ({ key: m.key, labelKo: m.label }))}
-            targetProb={step2Prob}
+            driverMeta={activeMeta.map(m => ({ key: m.key, labelKo: m.labelKo }))}
+            driverScores={activeDrivers}
+            priorProb={step2Prob}
           />
         )}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:'16px', opacity: startingSession ? 0.35 : 1, pointerEvents: startingSession ? 'none' : 'auto', transition:'opacity 0.3s' }}>
@@ -2100,11 +2110,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
                     {tag}
                   </span>
                 ))}
-              </div>
-
-              {/* 정규분포 — 시그널 누적 시 좁아짐 */}
-              <div style={{ margin:'16px 0', display:'flex', justifyContent:'center' }}>
-                <ProbabilityDistribution mean={geoProb} sigma={sigma} width={240} height={150} />
               </div>
 
             </div>
