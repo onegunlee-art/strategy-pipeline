@@ -22,6 +22,20 @@ const ITEM_SCHEMA = {
   additionalProperties: false,
 };
 
+// 전략 항목은 토글 시뮬레이션을 위해 구조화 필드(driver_key, delta)를 추가로 요구한다.
+const STRATEGY_ITEM_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    tag:        { type: 'string' as const },
+    content:    { type: 'string' as const },
+    badge:      { type: 'string' as const },
+    driver_key: { type: 'string' as const },
+    delta:      { type: 'number' as const },
+  },
+  required: ['tag', 'content', 'badge', 'driver_key', 'delta'] as string[],
+  additionalProperties: false,
+};
+
 export async function POST(_req: NextRequest, ctx: { params: { session_id: string } }) {
   try {
     const sessionId = parseInt(ctx.params.session_id, 10);
@@ -82,12 +96,12 @@ export async function POST(_req: NextRequest, ctx: { params: { session_id: strin
         const c = contribution(m, agg.drivers[m.key] ?? 0);
         const targetC = Math.min(c + 3, 9);
         const dpp = ((targetC - c) / nDrivers) * 10;
-        return { label: m.labelKo, contrib: c, targetC, dpp };
+        return { key: m.key, label: m.labelKo, contrib: c, targetC, dpp };
       })
       .sort((a, b) => a.contrib - b.contrib);
 
     const leverSummary = levers
-      .map(l => `- ${l.label}: 현재 기여도 ${l.contrib.toFixed(1)}/10 → ${l.targetC.toFixed(1)} 달성 시 확률 약 +${l.dpp.toFixed(1)}pp`)
+      .map(l => `- [key=${l.key}] ${l.label}: 현재 기여도 ${l.contrib.toFixed(1)}/10 → ${l.targetC.toFixed(1)} 달성 시 확률 약 +${l.dpp.toFixed(1)}pp (delta=${(l.targetC - l.contrib).toFixed(1)})`)
       .join('\n');
 
     let reportData: {
@@ -147,7 +161,9 @@ ${(session.analysis_text ?? '').slice(0, 5000)}
 2. strategy_summary: **핵심 전략 요약** — 번호 매긴 3~5개 항목. 각 항목은 반드시 "[드라이버명 기여도 x.x→y.y · 예상 +z.zpp]"로 시작하고, 위 "확률 개선 레버"의 수치를 그대로 인용할 것. 기여도가 가장 낮은 드라이버 2~3개를 우선 공략. 투표에서 가능성↓ 표가 많았던 시그널과 현장 의견의 우려를 직접 다룰 것. 어조는 제안형(~제안, ~권고, ~검토). 예시: "1. [경제 압박 3.2→6.0 · 예상 +5.6pp] FA 5월호가 지적한 제재 완화 신호를 활용해 ○○ 채널 재개를 제안"
 3. analysis_items: 현재 가능성에 영향을 미치는 핵심 현황 사실 7~9개 (badge: 우위/열위/리스크/"")
 4. resistance_items: 확률을 떨어뜨리는 저항·경쟁·리스크 요인 5~7개 (badge: 열위/리스크/추가발굴 위주)
-5. strategy_items: 달성 확률을 ${targetProb}%+ 로 끌어올리기 위한 구체적 실행 전략 7~9개. tag는 개선 대상 드라이버명, content에는 예상 +pp 효과 포함 (badge: 우위/"" 위주, FA·이코노미스트 기사 근거 포함)`;
+5. strategy_items: 달성 확률을 ${targetProb}%+ 로 끌어올리기 위한 구체적 실행 전략 7~9개. tag는 개선 대상 드라이버명, content에는 예상 +pp 효과 포함 (badge: 우위/"" 위주, FA·이코노미스트 기사 근거 포함)
+   - driver_key: 개선 대상 드라이버의 key (위 "확률 개선 레버"의 key= 값 그대로. 예: "d3")
+   - delta: 해당 전략이 그 드라이버 기여도를 올리는 폭 (소수 1자리, 0.5~3.0). 같은 드라이버를 여러 전략이 공략하면 delta를 나눠서 합이 레버의 delta를 넘지 않게 할 것`;
 
         const response = await client.chat.completions.create({
           model: OPENAI_MODEL,
@@ -164,7 +180,7 @@ ${(session.analysis_text ?? '').slice(0, 5000)}
                   strategy_summary:  { type: 'string' },
                   analysis_items:    { type: 'array', items: ITEM_SCHEMA },
                   resistance_items:  { type: 'array', items: ITEM_SCHEMA },
-                  strategy_items:    { type: 'array', items: ITEM_SCHEMA },
+                  strategy_items:    { type: 'array', items: STRATEGY_ITEM_SCHEMA },
                 },
                 required: ['overview', 'strategy_summary', 'analysis_items', 'resistance_items', 'strategy_items'],
                 additionalProperties: false,
