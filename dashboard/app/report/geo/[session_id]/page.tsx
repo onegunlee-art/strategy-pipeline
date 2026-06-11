@@ -12,6 +12,8 @@ interface ReportItem {
   tag: string;
   content: string;
   badge: string;
+  driver_key?: string;
+  delta?: number;
 }
 
 interface GeoReportData {
@@ -104,6 +106,171 @@ function SectionTable({ items }: { items: ReportItem[] }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+// ─── 전략 적용 시뮬레이터 — 토글 + 워터폴 ─────────────────────────────────────
+// P = mean(contribution) × 10 공식 그대로 클라이언트에서 재계산한다.
+// LLM 텍스트가 아니라 구조화 필드(driver_key, delta)로 계산하므로 수치가 항상 정직하다.
+function clampNum(min: number, max: number, v: number) { return Math.max(min, Math.min(max, v)); }
+
+function StrategySimulator({ items, driverMeta, driverScores, baseProb, targetProb }: {
+  items: ReportItem[];
+  driverMeta: GeoDriver[];
+  driverScores: Record<string, number>;
+  baseProb: number;
+  targetProb: number;
+}) {
+  const meta = normalizeDriverMeta(driverMeta);
+  const validKeys = new Set(meta.map(m => m.key));
+  const levers = items.filter(it => it.driver_key && validKeys.has(it.driver_key) && (it.delta ?? 0) > 0);
+  const [enabled, setEnabled] = useState<boolean[]>(() => levers.map(() => false));
+
+  if (levers.length === 0) return null;
+
+  const labelOf = (key: string) => meta.find(m => m.key === key)?.labelKo ?? key;
+  const baseContrib: Record<string, number> = {};
+  for (const m of meta) baseContrib[m.key] = contribution(m, driverScores[m.key] ?? 0);
+
+  // 누적 적용: i번째까지 켜진 레버를 반영한 확률 (기여도 0~10 클램프 → 합산 과대계상 방지)
+  const probWith = (mask: boolean[]) => {
+    const c = { ...baseContrib };
+    levers.forEach((l, i) => {
+      if (mask[i]) c[l.driver_key!] = clampNum(0, 10, c[l.driver_key!] + (l.delta ?? 0));
+    });
+    const mean = meta.reduce((acc, m) => acc + c[m.key], 0) / Math.max(1, meta.length);
+    return clampNum(5, 95, Math.round(mean * 10));
+  };
+
+  const appliedProb = probWith(enabled);
+
+  // 워터폴 스텝: 켜진 레버를 순서대로 하나씩 누적
+  const steps: { label: string; from: number; to: number }[] = [];
+  {
+    const mask = levers.map(() => false);
+    let prev = baseProb;
+    levers.forEach((l, i) => {
+      if (!enabled[i]) return;
+      mask[i] = true;
+      const p = probWith(mask);
+      steps.push({ label: labelOf(l.driver_key!), from: prev, to: p });
+      prev = p;
+    });
+  }
+
+  // SVG 워터폴
+  const cols = steps.length + 2;
+  const colW = 84, gap = 18, padL = 46, padT = 18, padB = 34;
+  const W = padL + cols * (colW + gap) + 10;
+  const H = 230;
+  const allVals = [baseProb, appliedProb, targetProb, ...steps.flatMap(s => [s.from, s.to])];
+  const lo = Math.max(0, Math.min(...allVals) - 8);
+  const hi = Math.min(100, Math.max(...allVals) + 6);
+  const y = (v: number) => padT + (H - padT - padB) * (1 - (v - lo) / Math.max(1, hi - lo));
+  const xOf = (i: number) => padL + i * (colW + gap);
+
+  return (
+    <div className="no-print" style={{
+      background: '#fff', border: '1px solid #bae6fd', borderRadius: 8,
+      padding: '20px 24px', marginBottom: 16, fontFamily: FONT,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', letterSpacing: 1.2, textTransform: 'uppercase' }}>
+          전략 적용 시뮬레이터
+        </div>
+        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 3, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>INTERACTIVE</span>
+      </div>
+      <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 16, wordBreak: 'keep-all', lineHeight: 1.6 }}>
+        전략을 켜고 끄면 확률 엔진(P = mean(contribution) × 10)이 즉시 재계산합니다
+      </div>
+
+      {/* 토글 리스트 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+        {levers.map((l, i) => {
+          const solo = levers.map((_, j) => j === i);
+          const soloDpp = probWith(solo) - baseProb;
+          const on = enabled[i];
+          return (
+            <label key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+              borderRadius: 6, cursor: 'pointer', userSelect: 'none',
+              background: on ? '#f0f9ff' : '#f9fafb',
+              border: `1px solid ${on ? '#7dd3fc' : '#e5e7eb'}`,
+              transition: 'all 0.15s',
+            }}>
+              <input
+                type="checkbox" checked={on}
+                onChange={() => setEnabled(prev => prev.map((v, j) => j === i ? !v : v))}
+                style={{ width: 16, height: 16, accentColor: '#0369a1', flexShrink: 0 }}
+              />
+              <span style={{
+                fontSize: 10, padding: '2px 8px', borderRadius: 3, flexShrink: 0,
+                background: '#1F4E9C', color: '#fff', fontWeight: 700, whiteSpace: 'nowrap',
+              }}>{labelOf(l.driver_key!)}</span>
+              <span style={{ flex: 1, fontSize: 12.5, color: '#374151', lineHeight: 1.6, wordBreak: 'keep-all' }}>
+                {l.content}
+              </span>
+              <span style={{
+                fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 700, flexShrink: 0,
+                color: on ? '#0369a1' : '#9ca3af',
+              }}>+{soloDpp}pp</span>
+            </label>
+          );
+        })}
+      </div>
+
+      {/* 확률 요약 행 */}
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 16, flexWrap: 'wrap',
+        padding: '12px 16px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0',
+      }}>
+        <span style={{ fontSize: 12, color: '#6b7280' }}>현재</span>
+        <span style={{ fontSize: 26, fontWeight: 800, fontFamily: 'IBM Plex Mono, monospace', color: probColor(baseProb) }}>{baseProb}%</span>
+        <span style={{ fontSize: 14, color: '#9ca3af' }}>→</span>
+        <span style={{ fontSize: 12, color: '#6b7280' }}>적용 시</span>
+        <span style={{ fontSize: 26, fontWeight: 800, fontFamily: 'IBM Plex Mono, monospace', color: probColor(appliedProb) }}>{appliedProb}%</span>
+        {appliedProb !== baseProb && (
+          <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 700, color: '#16a34a' }}>
+            (+{appliedProb - baseProb}pp)
+          </span>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>
+          목표 {targetProb}% · 잔여 갭 {Math.max(0, targetProb - appliedProb)}pp
+        </span>
+      </div>
+
+      {/* 워터폴 차트 */}
+      <div style={{ overflowX: 'auto' }}>
+        <svg width={W} height={H} style={{ display: 'block', minWidth: '100%' }}>
+          {/* 목표선 */}
+          <line x1={padL - 8} y1={y(targetProb)} x2={W - 4} y2={y(targetProb)} stroke="#d97706" strokeDasharray="5 4" strokeWidth={1.2} />
+          <text x={W - 6} y={y(targetProb) - 5} textAnchor="end" fontSize={10} fill="#d97706" fontFamily="IBM Plex Mono, monospace">목표 {targetProb}%</text>
+
+          {/* 현재 막대 */}
+          <rect x={xOf(0)} y={y(baseProb)} width={colW} height={Math.max(2, y(lo) - y(baseProb))} fill="#94a3b8" rx={3} />
+          <text x={xOf(0) + colW / 2} y={y(baseProb) - 7} textAnchor="middle" fontSize={12} fontWeight={700} fill="#475569" fontFamily="IBM Plex Mono, monospace">{baseProb}%</text>
+          <text x={xOf(0) + colW / 2} y={H - 12} textAnchor="middle" fontSize={11} fill="#6b7280" fontFamily={FONT}>현재</text>
+
+          {/* 증분 블록 */}
+          {steps.map((s, i) => {
+            const x = xOf(i + 1);
+            return (
+              <g key={i}>
+                <line x1={x - gap} y1={y(s.from)} x2={x} y2={y(s.from)} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="3 3" />
+                <rect x={x} y={y(s.to)} width={colW} height={Math.max(2, y(s.from) - y(s.to))} fill="#0ea5e9" rx={3} opacity={0.85} />
+                <text x={x + colW / 2} y={y(s.to) - 7} textAnchor="middle" fontSize={11} fontWeight={700} fill="#0369a1" fontFamily="IBM Plex Mono, monospace">+{s.to - s.from}</text>
+                <text x={x + colW / 2} y={H - 12} textAnchor="middle" fontSize={10} fill="#6b7280" fontFamily={FONT}>{s.label}</text>
+              </g>
+            );
+          })}
+
+          {/* 적용 후 막대 */}
+          <rect x={xOf(steps.length + 1)} y={y(appliedProb)} width={colW} height={Math.max(2, y(lo) - y(appliedProb))} fill="#16a34a" rx={3} />
+          <text x={xOf(steps.length + 1) + colW / 2} y={y(appliedProb) - 7} textAnchor="middle" fontSize={12} fontWeight={800} fill="#15803d" fontFamily="IBM Plex Mono, monospace">{appliedProb}%</text>
+          <text x={xOf(steps.length + 1) + colW / 2} y={H - 12} textAnchor="middle" fontSize={11} fill="#374151" fontWeight={600} fontFamily={FONT}>적용 후</text>
+        </svg>
+      </div>
+    </div>
   );
 }
 
@@ -286,6 +453,15 @@ export default function GeoReportPage({ params }: Props) {
           <SectionTable items={data.strategy_items} />
         </div>
       )}
+
+      {/* 4. 전략 적용 시뮬레이터 — 토글 + 워터폴 (화면 전용, 인쇄 제외) */}
+      <StrategySimulator
+        items={data.strategy_items}
+        driverMeta={data.driver_meta}
+        driverScores={data.driver_scores}
+        baseProb={data.geo_prob}
+        targetProb={data.target_prob}
+      />
 
       {/* 시그널 투표 결과 */}
       {data.cards.length > 0 && (
