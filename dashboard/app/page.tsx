@@ -1535,167 +1535,6 @@ function GeoProcessSidebar({ step, onStepClick }: { step: number; onStepClick: (
   );
 }
 
-// ─── Polymarket Step ──────────────────────────────────────────────────────────
-
-interface PolyMarketItem {
-  slug: string;
-  label: string;
-  category: '지정학' | 'AI' | '글로벌경제';
-  ourProb: boolean;
-  question: string;
-  yesPrice: number | null;
-  endDate: string | null;
-}
-
-const CATEGORY_ORDER: ('지정학' | 'AI' | '글로벌경제')[] = ['지정학', 'AI', '글로벌경제'];
-
-function PolymarketStep({ geoProb, topic, onReport }: {
-  geoProb: number;
-  topic: string;
-  onReport: () => void;
-}) {
-  const [markets, setMarkets] = useState<PolyMarketItem[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/polymarket')
-      .then(r => r.json())
-      .then((data: PolyMarketItem[]) => {
-        setMarkets(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
-
-  const grouped = CATEGORY_ORDER.map(cat => ({
-    cat,
-    items: markets.filter(m => m.category === cat),
-  }));
-
-  const catColor: Record<string, string> = {
-    '지정학': 'var(--red)',
-    'AI': 'var(--brand)',
-    '글로벌경제': 'var(--yellow)',
-  };
-  const catBg: Record<string, string> = {
-    '지정학': 'rgba(220,38,38,0.12)',
-    'AI': 'rgba(34,211,238,0.12)',
-    '글로벌경제': 'rgba(217,119,6,0.12)',
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Panel title="폴리마켓 vs 우리 분석">
-        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{
-            fontSize: 9, padding: '3px 8px', borderRadius: 3, fontFamily: 'IBM Plex Mono',
-            letterSpacing: '1px', background: 'rgba(34,211,238,0.12)', color: 'var(--brand)',
-          }}>POLYMARKET vs OUR ANALYSIS</span>
-          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-            {topic} — 우리 확률 <strong style={{ color: 'var(--brand)', fontFamily: 'IBM Plex Mono' }}>{geoProb}%</strong>
-          </span>
-        </div>
-
-        {loading && (
-          <div style={{ color: 'var(--text-dim)', fontSize: 12, padding: '24px 0', textAlign: 'center', fontFamily: 'IBM Plex Mono' }}>
-            시장 데이터 로딩 중...
-          </div>
-        )}
-
-        {!loading && grouped.map(({ cat, items }) => (
-          <div key={cat} style={{ marginBottom: 20 }}>
-            <div style={{
-              fontSize: 10, letterSpacing: '1.5px', fontFamily: 'IBM Plex Mono', marginBottom: 8,
-              color: catColor[cat], display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              <span style={{ padding: '2px 7px', borderRadius: 3, background: catBg[cat] }}>{cat}</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {items.map(item => {
-                const poly = item.yesPrice;
-                const ours = item.ourProb ? geoProb : null;
-                const diff = poly != null && ours != null ? poly - ours : null;
-                return (
-                  <div key={item.slug} style={{
-                    display: 'grid', gridTemplateColumns: '1fr 90px 90px 80px',
-                    gap: 8, alignItems: 'center', padding: '8px 10px',
-                    background: 'var(--surface2)', borderRadius: 4,
-                    border: '1px solid var(--border)',
-                  }}>
-                    <div>
-                      <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.3 }}>{item.label}</div>
-                      {item.endDate && (
-                        <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginTop: 2 }}>
-                          {new Date(item.endDate).toLocaleDateString('ko-KR', { year: '2-digit', month: 'short', day: 'numeric' })}
-                        </div>
-                      )}
-                    </div>
-                    {/* Polymarket probability */}
-                    <div style={{ textAlign: 'center' }}>
-                      {poly != null ? (
-                        <>
-                          <div style={{
-                            fontSize: 14, fontWeight: 700, fontFamily: 'IBM Plex Mono',
-                            color: poly >= 65 ? 'var(--green)' : poly >= 40 ? 'var(--yellow)' : 'var(--red)',
-                          }}>{poly}%</div>
-                          <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 1 }}>Polymarket</div>
-                        </>
-                      ) : (
-                        <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>—</div>
-                      )}
-                    </div>
-                    {/* Our analysis probability */}
-                    <div style={{ textAlign: 'center' }}>
-                      {ours != null ? (
-                        <>
-                          <div style={{
-                            fontSize: 14, fontWeight: 700, fontFamily: 'IBM Plex Mono',
-                            color: 'var(--brand)',
-                          }}>{ours}%</div>
-                          <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 1 }}>우리 분석</div>
-                        </>
-                      ) : (
-                        <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>—</div>
-                      )}
-                    </div>
-                    {/* Diff badge */}
-                    <div style={{ textAlign: 'center' }}>
-                      {diff != null ? (
-                        <span style={{
-                          fontSize: 11, fontFamily: 'IBM Plex Mono', fontWeight: 700,
-                          color: Math.abs(diff) <= 5 ? 'var(--green)' : Math.abs(diff) <= 15 ? 'var(--yellow)' : 'var(--red)',
-                        }}>
-                          {diff > 0 ? '+' : ''}{diff}pp
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-
-        {!loading && markets.length === 0 && (
-          <div style={{ color: 'var(--text-dim)', fontSize: 12, padding: '24px 0', textAlign: 'center' }}>
-            시장 데이터를 불러올 수 없습니다. 리포트는 계속 발행할 수 있습니다.
-          </div>
-        )}
-      </Panel>
-
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-        <button onClick={onReport} style={{
-          padding: '9px 18px', fontSize: '12px', fontFamily: 'IBM Plex Mono',
-          background: 'var(--brand)', color: '#06262d', border: 'none',
-          borderRadius: '2px', cursor: 'pointer', fontWeight: 700, letterSpacing: '0.5px',
-        }}>
-          리포트 발행 →
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Geo: Step Content ────────────────────────────────────────────────────────
 
 interface GeoSignalCard {
@@ -2186,7 +2025,6 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
   // ── Step 3: Probability dashboard ──
   if (step === 3) {
-    const polymarket = 34;
     // 시그널이 누적될수록 표준편차가 줄어 분포가 좁아진다.
     const sigma = 18 / Math.sqrt(1 + totalVotes / 3);
     const ci = {
@@ -2266,29 +2104,9 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
 
               {/* 정규분포 — 시그널 누적 시 좁아짐 */}
               <div style={{ margin:'16px 0', display:'flex', justifyContent:'center' }}>
-                <ProbabilityDistribution mean={geoProb} sigma={sigma} marketValue={polymarket} width={240} height={150} />
+                <ProbabilityDistribution mean={geoProb} sigma={sigma} width={240} height={150} />
               </div>
 
-              {/* Market comparison */}
-              <div style={{ background:'var(--surface2)', borderRadius:'2px', padding:'10px 14px', textAlign:'left' }}>
-                <div style={{ fontSize:'9px', color:'var(--text-dim)', fontFamily:'IBM Plex Mono', letterSpacing:'1px', marginBottom:'8px' }}>시장 예측 비교</div>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px', alignItems:'center' }}>
-                  <div>
-                    <span style={{ fontSize:'12px', color:'var(--text)' }}>Ensemble Model</span>
-                    <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color:'var(--brand)',
-                      background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.25)',
-                      padding:'1px 5px', borderRadius:'2px', marginLeft:'6px' }}>RAG+Bayes</span>
-                  </div>
-                  <span style={{ fontSize:'14px', fontFamily:'IBM Plex Mono', fontWeight:700, color: probColor(geoProb) }}>{geoProb}%</span>
-                </div>
-                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                  <span style={{ fontSize:'12px', color:'var(--text-dim)' }}>Polymarket</span>
-                  <span style={{ fontSize:'14px', fontFamily:'IBM Plex Mono', fontWeight:700, color:'var(--text-mid)' }}>{polymarket}%</span>
-                </div>
-                <div style={{ marginTop:'6px', fontSize:'10px', color:'var(--text-dim)' }}>
-                  {geoProb < polymarket ? `시장 대비 −${polymarket - geoProb}pp (보수적 판단)` : `시장 대비 +${geoProb - polymarket}pp`}
-                </div>
-              </div>
             </div>
           </Panel>
 
@@ -2388,16 +2206,7 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
     );
   }
 
-  // ── Step 4: Polymarket comparison ──
-  if (step === 4) {
-    return (
-      <PolymarketStep
-        geoProb={geoProb}
-        topic={query || '이란 전쟼 종전 가능성'}
-        onReport={() => { setStep(5); if (geoSessionId) window.open(`/report/geo/${geoSessionId}`, '_blank'); }}
-      />
-    );
-  }
+  // ── Step 4: Polymarket comparison (hidden) ──
 
   // ── Step 5: Report published ──
   return (
