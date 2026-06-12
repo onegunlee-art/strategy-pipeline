@@ -207,55 +207,68 @@ function TerminalLogStream({ driverMeta, driverScores, priorProb, articleCount }
     ? driverMeta.reduce((s, m) => s + (driverScores[m.key] ?? 5), 0) / driverMeta.length
     : 5;
 
-  const lines = useMemo((): Array<{ tag: string; color: string; text: string; bold: boolean }> => [
-    { tag: 'RAG',   color: 'var(--brand)', text: `글로벌 뉴스 ${articleCount}건 검색 완료`, bold: false },
+  const allLines = useMemo((): Array<{ tag: string; color: string; text: string; bold?: boolean }> => [
+    { tag: 'RAG',   color: 'var(--brand)', text: `글로벌 뉴스 ${articleCount}건 검색 완료` },
     ...(driverMeta.length > 1 ? [
-      { tag: 'ALIGN', color: '#34d399', text: `${driverMeta[0].labelKo} 소스 간 일치 신호 감지`, bold: false },
-      { tag: 'CONF',  color: '#f87171', text: `${driverMeta[Math.min(2, driverMeta.length - 1)].labelKo} 충돌 신호 포착`, bold: false },
+      { tag: 'ALIGN', color: '#34d399', text: `${driverMeta[0].labelKo} 소스 간 일치 신호 감지` },
+      { tag: 'CONF',  color: '#f87171', text: `${driverMeta[Math.min(2, driverMeta.length - 1)].labelKo} 충돌 신호 포착` },
     ] : []),
     ...driverMeta.map(m => ({
       tag: 'DRV', color: 'var(--text-mid)',
       text: `${m.key} ${m.labelKo}: ${(driverScores[m.key] ?? 5).toFixed(1)}/10`,
-      bold: false,
     })),
     { tag: 'PRIOR', color: 'var(--brand)', text: `P₀ = mean(${meanScore.toFixed(1)}) × 10 = ${priorProb}%`, bold: true },
-    { tag: 'CARDS', color: 'var(--text-mid)', text: '시그널 카드 생성 중...', bold: false },
+    { tag: 'CARDS', color: 'var(--text-mid)', text: '시그널 카드 생성 중...' },
+    // 루프 구간 — 지속적 분석 피드
+    { tag: 'SCAN',  color: 'var(--brand)', text: `${driverMeta[0]?.labelKo ?? ''} 재검증 중...` },
+    { tag: 'ALIGN', color: '#34d399', text: '보조 일치 신호 확인 +0.3σ' },
+    { tag: 'CONF',  color: '#f87171', text: `${driverMeta[Math.min(1, driverMeta.length - 1)]?.labelKo ?? ''} 엣지케이스 검토` },
+    { tag: 'DRV',   color: 'var(--text-mid)', text: '가중치 재보정 완료' },
+    { tag: 'SCAN',  color: 'var(--brand)', text: 'Posterior 신뢰구간 산출 중...' },
+    { tag: 'ALIGN', color: '#34d399', text: `${driverMeta[driverMeta.length - 1]?.labelKo ?? ''} 수렴 확인` },
+    { tag: 'UPD',   color: 'var(--text-mid)', text: `확률 업데이트: ${priorProb}% 유지` },
+    { tag: 'READY', color: 'var(--brand)', text: '전략 시나리오 생성 중...', bold: true },
   ], [articleCount, driverMeta, driverScores, priorProb, meanScore]);
 
-  const [shown, setShown] = useState(0);
+  const WINDOW = 7;
+  const [count, setCount] = useState(0);
+  const [cursorOn, setCursorOn] = useState(true);
+
   useEffect(() => {
-    setShown(0);
-    let n = 0;
-    const id = setInterval(() => {
-      n += 1;
-      setShown(n);
-      if (n >= lines.length) clearInterval(id);
-    }, 620);
-    return () => clearInterval(id);
-  }, [lines.length]);
+    const lineId = setInterval(() => setCount(c => c + 1), 650);
+    const cursorId = setInterval(() => setCursorOn(c => !c), 480);
+    return () => { clearInterval(lineId); clearInterval(cursorId); };
+  }, []);
+
+  const visibleLines = useMemo(() => {
+    const start = Math.max(0, count - WINDOW);
+    return Array.from({ length: count - start }, (_, i) => {
+      const absIdx = start + i;
+      const lineIdx = absIdx % allLines.length;
+      return { ...allLines[lineIdx], absIdx };
+    });
+  }, [count, allLines]);
 
   return (
     <div>
       <div style={{ fontSize:'9px', letterSpacing:'1px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', marginBottom:'8px' }}>
         ANALYSIS LOG
       </div>
-      <div style={{ display:'flex', flexDirection:'column', gap:'4px', minHeight:'130px' }}>
-        {lines.slice(0, shown).map((l, i) => (
-          <div key={i} style={{ display:'flex', gap:'6px', alignItems:'baseline', animation:'fadeIn 0.2s ease' }}>
-            <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color: l.color, fontWeight:700, minWidth:'38px', textAlign:'right', flexShrink:0 }}>
-              [{l.tag}]
-            </span>
-            <span style={{ fontSize:'10px', fontFamily:'IBM Plex Mono', color: l.bold ? l.color : 'var(--text-mid)', fontWeight: l.bold ? 700 : 400 }}>
-              {l.text}
-            </span>
-          </div>
-        ))}
-        {shown < lines.length && shown > 0 && (
-          <div style={{ display:'flex', gap:'6px', alignItems:'center', marginTop:'2px' }}>
-            <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', minWidth:'38px', textAlign:'right' }}>...</span>
-            <div style={{ width:'8px', height:'8px', border:'1.5px solid var(--brand)', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />
-          </div>
-        )}
+      <div style={{ display:'flex', flexDirection:'column', gap:'4px', minHeight:'140px', overflow:'hidden' }}>
+        {visibleLines.map((l, i) => {
+          const isMostRecent = i === visibleLines.length - 1;
+          const opacity = Math.max(0.28, (i + 1) / visibleLines.length);
+          return (
+            <div key={l.absIdx} style={{ display:'flex', gap:'6px', alignItems:'baseline', animation: isMostRecent ? 'fadeIn 0.2s ease' : undefined, opacity }}>
+              <span style={{ fontSize:'8px', fontFamily:'IBM Plex Mono', color: l.color, fontWeight:700, minWidth:'44px', textAlign:'right', flexShrink:0 }}>
+                [{l.tag}]
+              </span>
+              <span style={{ fontSize:'10px', fontFamily:'IBM Plex Mono', color: l.bold ? l.color : 'var(--text-mid)', fontWeight: l.bold ? 700 : 400 }}>
+                {l.text}{isMostRecent && <span style={{ opacity: cursorOn ? 1 : 0, marginLeft:'1px' }}>▋</span>}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -272,26 +285,36 @@ const CONFLICT_PAIRS: Array<[number, number, 'align' | 'conflict', number]> = [
 
 function ArticleConflictGraph({ driverMeta }: { driverMeta: Array<{ key: string; labelKo: string }> }) {
   const [shown, setShown] = useState(0);
+  const [tick, setTick] = useState(0);
+
   useEffect(() => {
     let n = 0;
-    const id = setInterval(() => {
+    const showId = setInterval(() => {
       n += 1;
       setShown(n);
-      if (n >= CONFLICT_PAIRS.length) clearInterval(id);
+      if (n >= CONFLICT_PAIRS.length) clearInterval(showId);
     }, 820);
-    return () => clearInterval(id);
+    const tickId = setInterval(() => setTick(t => t + 1), 55);
+    return () => { clearInterval(showId); clearInterval(tickId); };
   }, []);
 
-  const W = 230; const H = 152;
-  const cx = W / 2; const cy = H / 2 - 4;
-  const r = 52;
+  const W = 300; const H = 188;
+  const cx = W / 2; const cy = H / 2;
+  const r = 68;
   const nodePos = ARTICLE_SOURCES.map((_, i) => {
     const angle = (i * 2 * Math.PI) / ARTICLE_SOURCES.length - Math.PI / 2;
     return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
   });
 
-  const alignCount = CONFLICT_PAIRS.slice(0, shown).filter(p => p[2] === 'align').length;
-  const conflictCount = CONFLICT_PAIRS.slice(0, shown).filter(p => p[2] === 'conflict').length;
+  const activePairs = CONFLICT_PAIRS.slice(0, shown);
+  const alignCount = activePairs.filter(p => p[2] === 'align').length;
+  const conflictCount = activePairs.filter(p => p[2] === 'conflict').length;
+
+  // 확장 스캔 링
+  const SCAN_PERIOD = 55;
+  const scanPhase = (tick % SCAN_PERIOD) / SCAN_PERIOD;
+  const scanRadius = 8 + scanPhase * (r + 36);
+  const scanOpacity = 0.35 * (1 - scanPhase);
 
   return (
     <div>
@@ -299,39 +322,50 @@ function ArticleConflictGraph({ driverMeta }: { driverMeta: Array<{ key: string;
         기사 간 충돌/일치 감지
       </div>
       <svg width={W} height={H} style={{ display:'block', overflow:'visible' }}>
-        <style>{`@keyframes connGlow { 0%,100%{opacity:0.75;} 50%{opacity:1;} }`}</style>
-        {CONFLICT_PAIRS.slice(0, shown).map(([a, b, type, dIdx], i) => {
+        {/* 스캔 링 */}
+        {shown > 0 && (
+          <circle cx={cx} cy={cy} r={scanRadius} fill="none"
+            stroke="var(--brand)" strokeWidth={1} opacity={scanOpacity} />
+        )}
+        {/* 연결선 + 파티클 */}
+        {activePairs.map(([a, b, type, dIdx], i) => {
           const pa = nodePos[a]; const pb = nodePos[b];
           const mx = (pa.x + pb.x) / 2; const my = (pa.y + pb.y) / 2;
           const dLabel = driverMeta[Math.min(dIdx, driverMeta.length - 1)]?.labelKo ?? '';
           const dir = type === 'align' ? '↑' : '↓';
           const color = type === 'align' ? '#22d3ee' : '#f87171';
+          const lineOpacity = 0.45 + 0.55 * Math.abs(Math.sin((tick * 0.065) + i * 1.4));
+          const tParticle = ((tick * 0.016) + i * 0.23) % 1;
+          const pxPt = pa.x + (pb.x - pa.x) * tParticle;
+          const pyPt = pa.y + (pb.y - pa.y) * tParticle;
           return (
-            <g key={i} style={{ animation:'fadeIn 0.4s ease' }}>
-              <line
-                x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
-                stroke={color} strokeWidth={type === 'align' ? 2 : 1.5}
-                strokeDasharray={type === 'conflict' ? '4,3' : undefined}
-                style={{ animation:'connGlow 1.8s ease-in-out infinite' }}
-              />
-              <text x={mx} y={my - 4} textAnchor="middle" fontSize={7} fontFamily="IBM Plex Mono" fill={color} fontWeight="600">
+            <g key={i} style={{ animation: i >= shown - 1 ? 'fadeIn 0.4s ease' : undefined }}>
+              <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+                stroke={color} strokeWidth={type === 'align' ? 2.2 : 1.8}
+                strokeDasharray={type === 'conflict' ? '5,3' : undefined}
+                opacity={lineOpacity} />
+              <circle cx={pxPt} cy={pyPt} r={3} fill={color} opacity={lineOpacity * 0.9} />
+              <text x={mx} y={my - 6} textAnchor="middle" fontSize={8}
+                fontFamily="IBM Plex Mono" fill={color} fontWeight="700">
                 {dLabel}{dir}
               </text>
             </g>
           );
         })}
+        {/* 노드 (맨 위) */}
         {nodePos.map((p, i) => (
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r={15} fill="var(--surface2)" stroke="var(--border)" strokeWidth={1} />
-            <text x={p.x} y={p.y + 3} textAnchor="middle" fontSize={8} fontFamily="IBM Plex Mono" fill="var(--text-mid)" fontWeight="600">
+            <circle cx={p.x} cy={p.y} r={18} fill="var(--surface2)" stroke="var(--border)" strokeWidth={1.2} />
+            <text x={p.x} y={p.y + 3} textAnchor="middle" fontSize={9}
+              fontFamily="IBM Plex Mono" fill="var(--text-mid)" fontWeight="600">
               {ARTICLE_SOURCES[i]}
             </text>
           </g>
         ))}
       </svg>
-      <div style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', marginTop:'2px', display:'flex', gap:'12px' }}>
-        <span style={{ color:'#22d3ee' }}>일치 {alignCount}</span>
-        <span style={{ color:'#f87171' }}>충돌 {conflictCount}</span>
+      <div style={{ fontSize:'9px', fontFamily:'IBM Plex Mono', color:'var(--text-dim)', marginTop:'4px', display:'flex', gap:'14px' }}>
+        <span style={{ color:'#22d3ee' }}>● 일치 {alignCount}</span>
+        <span style={{ color:'#f87171' }}>● 충돌 {conflictCount}</span>
       </div>
     </div>
   );
@@ -419,7 +453,7 @@ function AnalysisEnginePanel({ driverMeta, driverScores, priorProb }: {
       </div>
 
       {/* 2열: 터미널 로그 | 충돌/일치 그래프 */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'24px', marginBottom:'4px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1.5fr', gap:'24px', marginBottom:'4px' }}>
         <TerminalLogStream driverMeta={driverMeta} driverScores={driverScores} priorProb={priorProb} articleCount={articleCount} />
         <ArticleConflictGraph driverMeta={driverMeta} />
       </div>
