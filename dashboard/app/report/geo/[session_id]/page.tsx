@@ -109,10 +109,90 @@ function SectionTable({ items }: { items: ReportItem[] }) {
   );
 }
 
-// ─── 전략 적용 시뮬레이터 — 토글 + 워터폴 ─────────────────────────────────────
-// P = mean(contribution) × 10 공식 그대로 클라이언트에서 재계산한다.
-// LLM 텍스트가 아니라 구조화 필드(driver_key, delta)로 계산하므로 수치가 항상 정직하다.
+// ─── 전략 적용 시뮬레이터 — 파워 카드 + 아크 게이지 + 워터폴 ──────────────────
 function clampNum(min: number, max: number, v: number) { return Math.max(min, Math.min(max, v)); }
+
+// 반원 아크 게이지
+function ArcGauge({ base, applied, target }: { base: number; applied: number; target: number }) {
+  const W = 340; const H = 160;
+  const cx = W / 2; const cy = H - 10;
+  const R = 120;
+  const circumference = Math.PI * R; // 반원 둘레
+
+  // 각도: 0% = 왼쪽(-180°), 100% = 오른쪽(0°)
+  const toOffset = (val: number) => circumference * (1 - val / 100);
+  const toCartesian = (val: number) => {
+    const angle = Math.PI * (1 - val / 100); // 0%=π(왼쪽), 100%=0(오른쪽)
+    return { x: cx + R * Math.cos(angle), y: cy - R * Math.sin(angle) };
+  };
+
+  const delta = applied - base;
+  const appliedColor = applied >= 65 ? '#22c55e' : applied >= 45 ? '#f59e0b' : '#ef4444';
+  const basePos = toCartesian(base);
+  const targetPos = toCartesian(target);
+
+  return (
+    <svg width={W} height={H} style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#22d3ee" />
+          <stop offset="100%" stopColor="#22c55e" />
+        </linearGradient>
+      </defs>
+
+      {/* 배경 반원 호 */}
+      <path
+        d={`M ${cx - R} ${cy} A ${R} ${R} 0 0 1 ${cx + R} ${cy}`}
+        fill="none" stroke="#1e293b" strokeWidth={14} strokeLinecap="round"
+      />
+
+      {/* 적용 확률 호 (base → applied) */}
+      <path
+        d={`M ${cx - R} ${cy} A ${R} ${R} 0 0 1 ${cx + R} ${cy}`}
+        fill="none" stroke="url(#arcGrad)" strokeWidth={14} strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={toOffset(applied)}
+        style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+      />
+
+      {/* base 마커 */}
+      <circle cx={basePos.x} cy={basePos.y} r={5} fill="#94a3b8" stroke="#0f172a" strokeWidth={2} />
+
+      {/* target 마커 */}
+      <circle cx={targetPos.x} cy={targetPos.y} r={4} fill="none" stroke="#f59e0b" strokeWidth={2} strokeDasharray="3 2" />
+
+      {/* base % 라벨 */}
+      <text x={cx - R - 14} y={cy + 20} textAnchor="middle" fontSize={11} fontFamily="IBM Plex Mono, monospace" fill="#64748b">
+        0%
+      </text>
+      <text x={cx + R + 14} y={cy + 20} textAnchor="middle" fontSize={11} fontFamily="IBM Plex Mono, monospace" fill="#64748b">
+        100%
+      </text>
+
+      {/* 중앙 적용 확률 */}
+      <text x={cx} y={cy - 34} textAnchor="middle" fontSize={46} fontWeight={800} fontFamily="IBM Plex Mono, monospace" fill={appliedColor}
+        style={{ transition: 'all 0.4s ease' }}>
+        {applied}%
+      </text>
+      <text x={cx} y={cy - 10} textAnchor="middle" fontSize={11} fontFamily="IBM Plex Mono, monospace" fill="#64748b">
+        적용 시
+      </text>
+
+      {/* 현재 / delta / 목표 */}
+      <text x={cx - 90} y={cy + 22} textAnchor="middle" fontSize={12} fontFamily="IBM Plex Mono, monospace" fill="#94a3b8">
+        현재 {base}%
+      </text>
+      {delta !== 0 && (
+        <text x={cx} y={cy + 22} textAnchor="middle" fontSize={13} fontWeight={700} fontFamily="IBM Plex Mono, monospace" fill="#22c55e">
+          +{delta}pp
+        </text>
+      )}
+      <text x={cx + 90} y={cy + 22} textAnchor="middle" fontSize={11} fontFamily="IBM Plex Mono, monospace" fill="#f59e0b">
+        목표 {target}%
+      </text>
+    </svg>
+  );
+}
 
 function StrategySimulator({ items, driverMeta, driverScores, baseProb, targetProb }: {
   items: ReportItem[];
@@ -132,7 +212,6 @@ function StrategySimulator({ items, driverMeta, driverScores, baseProb, targetPr
   const baseContrib: Record<string, number> = {};
   for (const m of meta) baseContrib[m.key] = contribution(m, driverScores[m.key] ?? 0);
 
-  // 누적 적용: i번째까지 켜진 레버를 반영한 확률 (기여도 0~10 클램프 → 합산 과대계상 방지)
   const probWith = (mask: boolean[]) => {
     const c = { ...baseContrib };
     levers.forEach((l, i) => {
@@ -144,7 +223,7 @@ function StrategySimulator({ items, driverMeta, driverScores, baseProb, targetPr
 
   const appliedProb = probWith(enabled);
 
-  // 워터폴 스텝: 켜진 레버를 순서대로 하나씩 누적
+  // 워터폴 스텝
   const steps: { label: string; from: number; to: number }[] = [];
   {
     const mask = levers.map(() => false);
@@ -158,7 +237,7 @@ function StrategySimulator({ items, driverMeta, driverScores, baseProb, targetPr
     });
   }
 
-  // SVG 워터폴
+  // 워터폴 SVG
   const cols = steps.length + 2;
   const colW = 84, gap = 18, padL = 46, padT = 18, padB = 34;
   const W = padL + cols * (colW + gap) + 10;
@@ -171,105 +250,127 @@ function StrategySimulator({ items, driverMeta, driverScores, baseProb, targetPr
 
   return (
     <div className="no-print" style={{
-      background: '#fff', border: '1px solid #bae6fd', borderRadius: 8,
-      padding: '20px 24px', marginBottom: 16, fontFamily: FONT,
+      background: 'rgba(2,6,23,0.96)', border: '1px solid #22d3ee', borderRadius: 10,
+      padding: '22px 26px', marginBottom: 16, fontFamily: FONT,
+      boxShadow: '0 0 32px rgba(34,211,238,0.08)',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', letterSpacing: 1.2, textTransform: 'uppercase' }}>
+      {/* 헤더 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' as const }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#22d3ee', letterSpacing: 1.6, textTransform: 'uppercase' as const }}>
           전략 적용 시뮬레이터
         </div>
-        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 3, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>INTERACTIVE</span>
+        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 3, background: 'rgba(34,211,238,0.12)', color: '#22d3ee', fontWeight: 700, border: '1px solid rgba(34,211,238,0.3)' }}>
+          INTERACTIVE
+        </span>
       </div>
-      <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 16, wordBreak: 'keep-all', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11, color: '#475569', marginBottom: 20, lineHeight: 1.6 }}>
         전략을 켜고 끄면 확률 엔진(P = mean(contribution) × 10)이 즉시 재계산합니다
       </div>
 
-      {/* 토글 리스트 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+      {/* 아크 게이지 */}
+      <div style={{ marginBottom: 24, borderBottom: '1px solid #1e293b', paddingBottom: 20 }}>
+        <ArcGauge base={baseProb} applied={appliedProb} target={targetProb} />
+        <div style={{ textAlign: 'center', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: '#334155', marginTop: 4 }}>
+          잔여 갭 {Math.max(0, targetProb - appliedProb)}pp
+        </div>
+      </div>
+
+      {/* 파워 카드 리스트 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
         {levers.map((l, i) => {
           const solo = levers.map((_, j) => j === i);
           const soloDpp = probWith(solo) - baseProb;
           const on = enabled[i];
           return (
-            <label key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-              borderRadius: 6, cursor: 'pointer', userSelect: 'none',
-              background: on ? '#f0f9ff' : '#f9fafb',
-              border: `1px solid ${on ? '#7dd3fc' : '#e5e7eb'}`,
-              transition: 'all 0.15s',
-            }}>
-              <input
-                type="checkbox" checked={on}
-                onChange={() => setEnabled(prev => prev.map((v, j) => j === i ? !v : v))}
-                style={{ width: 16, height: 16, accentColor: '#0369a1', flexShrink: 0 }}
-              />
+            <div
+              key={i}
+              onClick={() => setEnabled(prev => prev.map((v, j) => j === i ? !v : v))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px',
+                borderRadius: 8, cursor: 'pointer', userSelect: 'none' as const,
+                background: on ? 'rgba(8,47,73,0.8)' : 'rgba(15,23,42,0.7)',
+                border: on ? '1px solid #22d3ee' : '1px solid #1e293b',
+                boxShadow: on ? '0 0 16px rgba(34,211,238,0.18), inset 0 0 24px rgba(34,211,238,0.04)' : 'none',
+                transition: 'all 0.22s ease',
+              }}
+            >
+              {/* 드라이버 칩 */}
               <span style={{
-                fontSize: 10, padding: '2px 8px', borderRadius: 3, flexShrink: 0,
-                background: '#1F4E9C', color: '#fff', fontWeight: 700, whiteSpace: 'nowrap',
-              }}>{labelOf(l.driver_key!)}</span>
-              <span style={{ flex: 1, fontSize: 12.5, color: '#374151', lineHeight: 1.6, wordBreak: 'keep-all' }}>
+                fontSize: 10, padding: '3px 9px', borderRadius: 4, flexShrink: 0,
+                background: on ? '#1d4ed8' : '#1e293b',
+                color: on ? '#bfdbfe' : '#64748b',
+                fontWeight: 700, whiteSpace: 'nowrap' as const,
+                border: on ? '1px solid rgba(59,130,246,0.4)' : '1px solid #334155',
+                transition: 'all 0.22s ease',
+              }}>
+                {labelOf(l.driver_key!)}
+              </span>
+
+              {/* 전략 텍스트 */}
+              <span style={{
+                flex: 1, fontSize: 12.5, lineHeight: 1.65, wordBreak: 'keep-all' as const,
+                color: on ? '#e2e8f0' : '#475569',
+                transition: 'color 0.22s ease',
+              }}>
                 {l.content}
               </span>
+
+              {/* +pp 배지 */}
               <span style={{
                 fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 700, flexShrink: 0,
-                color: on ? '#0369a1' : '#9ca3af',
-              }}>+{soloDpp}pp</span>
-            </label>
+                color: on ? '#22d3ee' : '#334155',
+                opacity: on ? 1 : 0.5,
+                transition: 'all 0.22s ease',
+                minWidth: 44, textAlign: 'right' as const,
+              }}>
+                +{soloDpp}pp
+              </span>
+
+              {/* 전원 버튼 */}
+              <div style={{
+                width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: on ? '1.5px solid #22d3ee' : '1.5px solid #334155',
+                boxShadow: on ? '0 0 10px rgba(34,211,238,0.6)' : 'none',
+                transition: 'all 0.22s ease',
+              }}>
+                <svg width={14} height={14} viewBox="0 0 14 14" fill="none">
+                  <path d="M7 1.5v4" stroke={on ? '#22d3ee' : '#475569'} strokeWidth={1.8} strokeLinecap="round" />
+                  <path d="M4 3.2A5 5 0 1 0 10 3.2" stroke={on ? '#22d3ee' : '#475569'} strokeWidth={1.8} strokeLinecap="round" fill="none" />
+                </svg>
+              </div>
+            </div>
           );
         })}
       </div>
 
-      {/* 확률 요약 행 */}
-      <div style={{
-        display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 16, flexWrap: 'wrap',
-        padding: '12px 16px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0',
-      }}>
-        <span style={{ fontSize: 12, color: '#6b7280' }}>현재</span>
-        <span style={{ fontSize: 26, fontWeight: 800, fontFamily: 'IBM Plex Mono, monospace', color: probColor(baseProb) }}>{baseProb}%</span>
-        <span style={{ fontSize: 14, color: '#9ca3af' }}>→</span>
-        <span style={{ fontSize: 12, color: '#6b7280' }}>적용 시</span>
-        <span style={{ fontSize: 26, fontWeight: 800, fontFamily: 'IBM Plex Mono, monospace', color: probColor(appliedProb) }}>{appliedProb}%</span>
-        {appliedProb !== baseProb && (
-          <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', fontWeight: 700, color: '#16a34a' }}>
-            (+{appliedProb - baseProb}pp)
-          </span>
-        )}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>
-          목표 {targetProb}% · 잔여 갭 {Math.max(0, targetProb - appliedProb)}pp
-        </span>
-      </div>
-
       {/* 워터폴 차트 */}
-      <div style={{ overflowX: 'auto' }}>
-        <svg width={W} height={H} style={{ display: 'block', minWidth: '100%' }}>
-          {/* 목표선 */}
-          <line x1={padL - 8} y1={y(targetProb)} x2={W - 4} y2={y(targetProb)} stroke="#d97706" strokeDasharray="5 4" strokeWidth={1.2} />
-          <text x={W - 6} y={y(targetProb) - 5} textAnchor="end" fontSize={10} fill="#d97706" fontFamily="IBM Plex Mono, monospace">목표 {targetProb}%</text>
-
-          {/* 현재 막대 */}
-          <rect x={xOf(0)} y={y(baseProb)} width={colW} height={Math.max(2, y(lo) - y(baseProb))} fill="#94a3b8" rx={3} />
-          <text x={xOf(0) + colW / 2} y={y(baseProb) - 7} textAnchor="middle" fontSize={12} fontWeight={700} fill="#475569" fontFamily="IBM Plex Mono, monospace">{baseProb}%</text>
-          <text x={xOf(0) + colW / 2} y={H - 12} textAnchor="middle" fontSize={11} fill="#6b7280" fontFamily={FONT}>현재</text>
-
-          {/* 증분 블록 */}
-          {steps.map((s, i) => {
-            const x = xOf(i + 1);
-            return (
-              <g key={i}>
-                <line x1={x - gap} y1={y(s.from)} x2={x} y2={y(s.from)} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="3 3" />
-                <rect x={x} y={y(s.to)} width={colW} height={Math.max(2, y(s.from) - y(s.to))} fill="#0ea5e9" rx={3} opacity={0.85} />
-                <text x={x + colW / 2} y={y(s.to) - 7} textAnchor="middle" fontSize={11} fontWeight={700} fill="#0369a1" fontFamily="IBM Plex Mono, monospace">+{s.to - s.from}</text>
-                <text x={x + colW / 2} y={H - 12} textAnchor="middle" fontSize={10} fill="#6b7280" fontFamily={FONT}>{s.label}</text>
-              </g>
-            );
-          })}
-
-          {/* 적용 후 막대 */}
-          <rect x={xOf(steps.length + 1)} y={y(appliedProb)} width={colW} height={Math.max(2, y(lo) - y(appliedProb))} fill="#16a34a" rx={3} />
-          <text x={xOf(steps.length + 1) + colW / 2} y={y(appliedProb) - 7} textAnchor="middle" fontSize={12} fontWeight={800} fill="#15803d" fontFamily="IBM Plex Mono, monospace">{appliedProb}%</text>
-          <text x={xOf(steps.length + 1) + colW / 2} y={H - 12} textAnchor="middle" fontSize={11} fill="#374151" fontWeight={600} fontFamily={FONT}>적용 후</text>
-        </svg>
-      </div>
+      {steps.length > 0 && (
+        <div style={{ borderTop: '1px solid #1e293b', paddingTop: 16, overflowX: 'auto' }}>
+          <div style={{ fontSize: 10, color: '#334155', fontFamily: 'IBM Plex Mono, monospace', letterSpacing: 1, marginBottom: 8 }}>PROBABILITY WATERFALL</div>
+          <svg width={W} height={H} style={{ display: 'block', minWidth: '100%' }}>
+            <line x1={padL - 8} y1={y(targetProb)} x2={W - 4} y2={y(targetProb)} stroke="#f59e0b" strokeDasharray="5 4" strokeWidth={1.2} />
+            <text x={W - 6} y={y(targetProb) - 5} textAnchor="end" fontSize={10} fill="#f59e0b" fontFamily="IBM Plex Mono, monospace">목표 {targetProb}%</text>
+            <rect x={xOf(0)} y={y(baseProb)} width={colW} height={Math.max(2, y(lo) - y(baseProb))} fill="#334155" rx={3} />
+            <text x={xOf(0) + colW / 2} y={y(baseProb) - 7} textAnchor="middle" fontSize={12} fontWeight={700} fill="#94a3b8" fontFamily="IBM Plex Mono, monospace">{baseProb}%</text>
+            <text x={xOf(0) + colW / 2} y={H - 12} textAnchor="middle" fontSize={11} fill="#475569" fontFamily={FONT}>현재</text>
+            {steps.map((s, i) => {
+              const x = xOf(i + 1);
+              return (
+                <g key={i}>
+                  <line x1={x - gap} y1={y(s.from)} x2={x} y2={y(s.from)} stroke="#334155" strokeWidth={1} strokeDasharray="3 3" />
+                  <rect x={x} y={y(s.to)} width={colW} height={Math.max(2, y(s.from) - y(s.to))} fill="#0ea5e9" rx={3} opacity={0.9} />
+                  <text x={x + colW / 2} y={y(s.to) - 7} textAnchor="middle" fontSize={11} fontWeight={700} fill="#38bdf8" fontFamily="IBM Plex Mono, monospace">+{s.to - s.from}</text>
+                  <text x={x + colW / 2} y={H - 12} textAnchor="middle" fontSize={10} fill="#475569" fontFamily={FONT}>{s.label}</text>
+                </g>
+              );
+            })}
+            <rect x={xOf(steps.length + 1)} y={y(appliedProb)} width={colW} height={Math.max(2, y(lo) - y(appliedProb))} fill="#22c55e" rx={3} />
+            <text x={xOf(steps.length + 1) + colW / 2} y={y(appliedProb) - 7} textAnchor="middle" fontSize={12} fontWeight={800} fill="#4ade80" fontFamily="IBM Plex Mono, monospace">{appliedProb}%</text>
+            <text x={xOf(steps.length + 1) + colW / 2} y={H - 12} textAnchor="middle" fontSize={11} fill="#94a3b8" fontWeight={600} fontFamily={FONT}>적용 후</text>
+          </svg>
+        </div>
+      )}
     </div>
   );
 }
