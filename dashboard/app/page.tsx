@@ -102,7 +102,7 @@ function probColor(p: number) {
 }
 
 // 수주전략 DB가 준비되면 true로 바꿔 모드 토글을 노출한다.
-const SHOW_MODE_TOGGLE = false;
+const SHOW_MODE_TOGGLE = true;
 
 function todayKST() {
   return new Date().toLocaleDateString('ko-KR', {
