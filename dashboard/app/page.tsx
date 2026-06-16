@@ -864,8 +864,8 @@ export default function ExecutiveDashboard() {
                 { key: 'strategy-review' as const, label: '수주전략 리뷰' },
                 { key: 'vdc-b' as const, label: 'VDC-B' },
                 { key: 'loss-analysis' as const, label: '수실주 분석' },
-              ].map((s, i, arr) => (
-                <span key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              ].map((s) => (
+                <span key={s.key}>
                   <span
                     onClick={() => setActiveStage(s.key)}
                     style={{
