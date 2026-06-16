@@ -97,6 +97,17 @@ interface ActionLogEntry {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+}
+
 function probColor(p: number) {
   return p >= 65 ? 'var(--green)' : p >= 45 ? 'var(--yellow)' : 'var(--red)';
 }
@@ -509,6 +520,13 @@ export default function ExecutiveDashboard() {
   const [mode, setMode] = useState<'bid' | 'geo'>('bid');
   const [geoStep, setGeoStep] = useState(1);
   const [activeStage, setActiveStage] = useState<BidStage>('strategy-review');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const isMobile = useIsMobile();
+  const px = isMobile ? '16px' : '32px';
+  const col3 = isMobile ? '1fr' : '1fr 1fr 1fr';
+  const col2 = isMobile ? '1fr' : '2fr 3fr';
+  const col4 = isMobile ? '1fr 1fr' : 'repeat(4, 1fr)';
 
   const simProb = simSubs
     ? Math.round(pillarMultiplication(pillarScoreFromSubs(simSubs as SubScores)) * 1000) / 10
@@ -621,11 +639,11 @@ export default function ExecutiveDashboard() {
       {/* ── Header ───────────────────────────────────────────────── */}
       <header style={{
         background: 'var(--surface)', borderBottom: '1px solid var(--border)',
-        position: 'sticky', top: 0, zIndex: 100, padding: '0 32px',
+        position: 'sticky', top: 0, zIndex: 100, padding: `0 ${px}`,
       }}>
         <div style={{
           maxWidth: '1440px', margin: '0 auto', height: '56px',
-          display: 'flex', alignItems: 'center', gap: '20px',
+          display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '20px',
         }}>
           {/* Brand */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
@@ -635,11 +653,11 @@ export default function ExecutiveDashboard() {
             <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', letterSpacing: '0' }}>
               Winning Ratio
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>수주 전략 플랫폼</span>
+            {!isMobile && <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>수주 전략 플랫폼</span>}
           </div>
 
           {/* Mode toggle (수주전략 DB 준비 시 SHOW_MODE_TOGGLE=true) */}
-          {SHOW_MODE_TOGGLE && (
+          {SHOW_MODE_TOGGLE && !isMobile && (
             <div style={{ display:'flex', gap:'4px', fontFamily:'IBM Plex Mono', fontSize:'11px', flexShrink:0 }}>
               {(['bid','geo'] as const).map(m => (
                 <button key={m} onClick={() => setMode(m)} style={{
@@ -664,7 +682,9 @@ export default function ExecutiveDashboard() {
                 style={{
                   background: 'var(--surface2)', border: '1px solid var(--border)',
                   color: 'var(--text)', padding: '6px 12px', borderRadius: '2px',
-                  fontSize: '13px', fontFamily: 'inherit', cursor: 'pointer', minWidth: '220px',
+                  fontSize: '13px', fontFamily: 'inherit', cursor: 'pointer',
+                  minWidth: isMobile ? '0' : '220px', flex: isMobile ? 1 : 'none',
+                  maxWidth: isMobile ? '200px' : 'none',
                 }}
               >
                 {deals.map(d => (
@@ -683,25 +703,62 @@ export default function ExecutiveDashboard() {
 
           {/* Right */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
-              {todayKST()} KST
-            </span>
-            <a href="/admin" style={{
-              fontSize: '11px', color: 'var(--text-dim)', textDecoration: 'none',
-              letterSpacing: '1px', padding: '4px 10px', border: '1px solid var(--border)',
-              borderRadius: '2px', fontWeight: 500,
-            }}>ADMIN</a>
+            {!isMobile && (
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
+                {todayKST()} KST
+              </span>
+            )}
+            {!isMobile && (
+              <a href="/admin" style={{
+                fontSize: '11px', color: 'var(--text-dim)', textDecoration: 'none',
+                letterSpacing: '1px', padding: '4px 10px', border: '1px solid var(--border)',
+                borderRadius: '2px', fontWeight: 500,
+              }}>ADMIN</a>
+            )}
           </div>
         </div>
       </header>
 
       {/* ── Content ──────────────────────────────────────────────── */}
+      {/* Mobile sidebar overlay dim */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:199 }}
+        />
+      )}
       <div style={{ maxWidth:'1440px', margin:'0 auto', display:'flex', alignItems:'flex-start' }}>
-        {mode === 'geo' && <GeoProcessSidebar step={geoStep} onStepClick={setGeoStep} />}
-        {mode === 'bid' && selectedId != null && dashData != null && (
-          <BidProcessSidebar stage={activeStage} onStageClick={setActiveStage} />
+        {mode === 'geo' && (
+          <div style={isMobile ? {
+            position:'fixed', left: sidebarOpen ? '0' : '-220px', top:'56px', zIndex:200,
+            transition:'left 0.25s ease', height:'calc(100vh - 56px)', overflowY:'auto',
+          } : {}}>
+            <GeoProcessSidebar step={geoStep} onStepClick={(s) => { setGeoStep(s); setSidebarOpen(false); }} />
+          </div>
         )}
-        <main style={{ flex:1, padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px', minWidth:0 }}>
+        {mode === 'bid' && selectedId != null && dashData != null && (
+          <div style={isMobile ? {
+            position:'fixed', left: sidebarOpen ? '0' : '-220px', top:'56px', zIndex:200,
+            transition:'left 0.25s ease', height:'calc(100vh - 56px)', overflowY:'auto',
+          } : {}}>
+            <BidProcessSidebar stage={activeStage} onStageClick={(s) => { setActiveStage(s); setSidebarOpen(false); }} />
+          </div>
+        )}
+        <main style={{ flex:1, padding:`20px ${px}`, display:'flex', flexDirection:'column', gap:'16px', minWidth:0 }}>
+          {/* Mobile hamburger button */}
+          {isMobile && (mode === 'geo' || (mode === 'bid' && selectedId != null && dashData != null)) && (
+            <button
+              onClick={() => setSidebarOpen(o => !o)}
+              style={{
+                alignSelf: 'flex-start', padding:'6px 14px', fontSize:'13px',
+                background: 'var(--surface)', border:'1px solid var(--border)',
+                borderRadius:'6px', cursor:'pointer', color:'var(--text-mid)',
+                display:'flex', alignItems:'center', gap:'6px',
+              }}
+            >
+              ☰ 단계
+            </button>
+          )}
           {mode === 'geo' ? (
             <GeoContent step={geoStep} setStep={setGeoStep} />
           ) : (
@@ -731,9 +788,11 @@ export default function ExecutiveDashboard() {
             {/* ── ZONE 1: Deal Banner ───────────────────────────── */}
             <div style={{
               background: 'var(--surface)', border: 'none',
-              borderRadius: '10px', padding: '24px 28px',
+              borderRadius: '10px', padding: isMobile ? '16px' : '24px 28px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
+              justifyContent: 'space-between',
+              flexDirection: isMobile ? 'column' : 'row',
               flexWrap: 'wrap', gap: '16px',
             }}>
               <div>
@@ -858,7 +917,7 @@ export default function ExecutiveDashboard() {
             </div>
 
             {/* ── 단계 배지 ──────────────────────────────────────── */}
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
               {[
                 { key: 'vdc-a' as const, label: 'VDC-A' },
                 { key: 'strategy-review' as const, label: '수주전략 리뷰' },
@@ -887,7 +946,7 @@ export default function ExecutiveDashboard() {
               <>
 
             {/* ── ZONE 2: 3-col charts ──────────────────────────── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: col3, gap: '16px' }}>
               <Panel title="수주 가능성 레이더">
                 {pred ? (
                   <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -982,7 +1041,7 @@ export default function ExecutiveDashboard() {
               )}
 
               {cards.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: col3, gap: '14px' }}>
                   {cards.map((card, i) => (
                     <ScqaCard key={i} card={card} />
                   ))}
@@ -1000,7 +1059,7 @@ export default function ExecutiveDashboard() {
             </Panel>
 
             {/* ── ZONE 4: Timeline + Risk ───────────────────────── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: col2, gap: '16px' }}>
               <Panel title="입찰 타임라인">
                 {deal.milestones.length > 0 || deal.due_date ? (
                   <TimelineChart milestones={deal.milestones} dueDate={deal.due_date} />
@@ -1232,7 +1291,7 @@ export default function ExecutiveDashboard() {
                     S: 'var(--cyan)', V: 'var(--brand)', D: 'var(--yellow)', P: 'var(--green)', E: 'var(--red)',
                   };
                   return (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? '100%' : '280px'}, 1fr))`, gap: '10px' }}>
                       {Object.entries(SUB_LABELS).map(([id, { label, pillar }]) => {
                         const val = simSubs[id] ?? 5;
                         const base = pred.sub_scores?.[id] ?? val;
@@ -1424,7 +1483,7 @@ export default function ExecutiveDashboard() {
 
             {pred && (
               <Panel title="앙상블 분해 (Pillar · Bayesian · Elo)">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: col4, gap: '10px', marginBottom: '12px' }}>
                   {[
                     { key: 'pillar', label: 'Pillar' },
                     { key: 'bayesian', label: 'Bayesian' },
@@ -1475,7 +1534,7 @@ export default function ExecutiveDashboard() {
             {/* ── VDC-A 단계 ─────────────────────────────────────── */}
             {activeStage === 'vdc-a' && (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: col3, gap: '16px' }}>
                   <Panel title="수주 가능성 레이더">
                     {pred ? (
                       <div style={{ display: 'flex', justifyContent: 'center' }}>
