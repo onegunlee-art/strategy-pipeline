@@ -499,7 +499,7 @@ export default function ExecutiveDashboard() {
   const [actionLog, setActionLog] = useState<ActionLogEntry[]>([]);
 
   // 데모: 수주전략 DB가 아직 없어 지정학 분석을 기본 화면으로. 토글은 숨김.
-  const [mode, setMode] = useState<'bid' | 'geo'>('geo');
+  const [mode, setMode] = useState<'bid' | 'geo'>('bid');
   const [geoStep, setGeoStep] = useState(1);
   const [activeStage, setActiveStage] = useState<BidStage>('strategy-review');
 
