@@ -1,4 +1,5 @@
 .claude/settings.local.json
+.claude/worktrees/
 
 # 데모/발표용 목업 산출물 (코드베이스 미포함)
 make_ui_*.py
