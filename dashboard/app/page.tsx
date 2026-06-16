@@ -477,6 +477,8 @@ function EmptyPanel({ label }: { label: string }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+type BidStage = 'vdc-a' | 'strategy-review' | 'vdc-b' | 'loss-analysis';
+
 export default function ExecutiveDashboard() {
   const [deals, setDeals] = useState<PortfolioDeal[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -499,6 +501,7 @@ export default function ExecutiveDashboard() {
   // 데모: 수주전략 DB가 아직 없어 지정학 분석을 기본 화면으로. 토글은 숨김.
   const [mode, setMode] = useState<'bid' | 'geo'>('geo');
   const [geoStep, setGeoStep] = useState(1);
+  const [activeStage, setActiveStage] = useState<BidStage>('strategy-review');
 
   const simProb = simSubs
     ? Math.round(pillarMultiplication(pillarScoreFromSubs(simSubs as SubScores)) * 1000) / 10
@@ -544,6 +547,7 @@ export default function ExecutiveDashboard() {
     setSimSubs(null);
     setScenarios([]);
     setActionLog([]);
+    setActiveStage('strategy-review');
     fetch(`/api/dashboard/${selectedId}`)
       .then(r => r.json())
       .then(d => {
@@ -687,6 +691,9 @@ export default function ExecutiveDashboard() {
       {/* ── Content ──────────────────────────────────────────────── */}
       <div style={{ maxWidth:'1440px', margin:'0 auto', display:'flex', alignItems:'flex-start' }}>
         {mode === 'geo' && <GeoProcessSidebar step={geoStep} onStepClick={setGeoStep} />}
+        {mode === 'bid' && selectedId != null && dashData != null && (
+          <BidProcessSidebar stage={activeStage} onStageClick={setActiveStage} />
+        )}
         <main style={{ flex:1, padding:'20px 32px', display:'flex', flexDirection:'column', gap:'16px', minWidth:0 }}>
           {mode === 'geo' ? (
             <GeoContent step={geoStep} setStep={setGeoStep} />
@@ -841,6 +848,36 @@ export default function ExecutiveDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* ── 단계 배지 ──────────────────────────────────────── */}
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              {[
+                { key: 'vdc-a' as const, label: 'VDC-A' },
+                { key: 'strategy-review' as const, label: '수주전략 리뷰' },
+                { key: 'vdc-b' as const, label: 'VDC-B' },
+                { key: 'loss-analysis' as const, label: '수실주 분석' },
+              ].map((s, i, arr) => (
+                <React.Fragment key={s.key}>
+                  <span
+                    onClick={() => setActiveStage(s.key)}
+                    style={{
+                      fontSize: '10px', padding: '3px 10px', borderRadius: '2px',
+                      fontFamily: 'IBM Plex Mono', cursor: 'pointer',
+                      background: activeStage === s.key ? 'var(--brand)' : 'var(--surface2)',
+                      color: activeStage === s.key ? '#fff' : 'var(--text-dim)',
+                      fontWeight: activeStage === s.key ? 700 : 400,
+                      border: activeStage === s.key ? 'none' : '1px solid var(--border)',
+                    }}
+                  >
+                    {s.label}
+                  </span>
+                  {i < arr.length - 1 && <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>›</span>}
+                </React.Fragment>
+              ))}
+            </div>
+
+            {activeStage === 'strategy-review' && (
+              <>
 
             {/* ── ZONE 2: 3-col charts ──────────────────────────── */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
@@ -1424,6 +1461,223 @@ export default function ExecutiveDashboard() {
                 )}
               </Panel>
             )}
+
+              </>
+            )}
+
+            {/* ── VDC-A 단계 ─────────────────────────────────────── */}
+            {activeStage === 'vdc-a' && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                  <Panel title="수주 가능성 레이더">
+                    {pred ? (
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <RadarChart scores={pred.pillar_scores} size={240} />
+                      </div>
+                    ) : <EmptyPanel label="Pillar 진단 필요" />}
+                  </Panel>
+                  <Panel title="경쟁 포지셔닝">
+                    {deal.competitive_positioning?.self || (deal.competitive_positioning?.competitors?.length ?? 0) > 0 ? (
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <PositionMatrix
+                          self={deal.competitive_positioning.self}
+                          competitors={deal.competitive_positioning.competitors ?? []}
+                        />
+                      </div>
+                    ) : <EmptyPanel label="포지셔닝 데이터 없음" />}
+                  </Panel>
+                  <Panel title="사업성 지표">
+                    {deal.expected_revenue || deal.risk_grade ? (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <tbody>
+                          {deal.expected_revenue && (
+                            <tr>
+                              <td style={{ padding: '6px 0', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)' }}>매출액</td>
+                              <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'IBM Plex Mono', color: 'var(--text)', borderBottom: '1px solid var(--border)' }}>{deal.expected_revenue.toLocaleString()}억</td>
+                            </tr>
+                          )}
+                          {deal.margin_rate && (
+                            <tr>
+                              <td style={{ padding: '6px 0', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)' }}>영업이익률</td>
+                              <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'IBM Plex Mono', color: 'var(--text)', borderBottom: '1px solid var(--border)' }}>{deal.margin_rate}%</td>
+                            </tr>
+                          )}
+                          {deal.risk_grade && (
+                            <tr>
+                              <td style={{ padding: '6px 0', color: 'var(--text-dim)' }}>리스크 등급</td>
+                              <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'IBM Plex Mono', color: deal.risk_grade === 'A' ? 'var(--green)' : deal.risk_grade === 'C' ? 'var(--red)' : 'var(--yellow)' }}>{deal.risk_grade}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    ) : <EmptyPanel label="재무 데이터 없음" />}
+                  </Panel>
+                </div>
+                {pred && pred.weaknesses.length > 0 && (
+                  <Panel title="약점 Top3 — Go/No-Go 근거">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {pred.weaknesses.slice(0, 3).map((w, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'var(--surface2)', borderRadius: '4px' }}>
+                          <span style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--red)', fontWeight: 700, flexShrink: 0 }}>#{i+1}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', flexShrink: 0 }}>{w.pillar}</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text)', flex: 1 }}>{w.label}</span>
+                          <span style={{ fontSize: '12px', fontFamily: 'IBM Plex Mono', color: probColor(w.score * 10) }}>{(w.score * 10).toFixed(0)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+                )}
+                <Panel title="VDC-A 의결 결과">
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-dim)', fontSize: '13px' }}>
+                    <div style={{ marginBottom: '8px', fontSize: '24px' }}>📋</div>
+                    VDC-A 의결 데이터가 없습니다
+                    <div style={{ marginTop: '8px', fontSize: '11px' }}>
+                      <a href="/admin" style={{ color: 'var(--brand)' }}>Admin에서 입력 →</a>
+                    </div>
+                  </div>
+                </Panel>
+              </>
+            )}
+
+            {/* ── VDC-B 단계 ─────────────────────────────────────── */}
+            {activeStage === 'vdc-b' && (
+              <>
+                {pred && (
+                  <Panel title="최종 수주 확률">
+                    <div style={{ display: 'flex', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontSize: '48px', fontWeight: 800, fontFamily: 'IBM Plex Mono', color: probColor(pred.probability), lineHeight: 1 }}>
+                          {pred.probability.toFixed(1)}%
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', fontFamily: 'IBM Plex Mono' }}>
+                          95% CI {pred.confidence_interval.low.toFixed(0)}–{pred.confidence_interval.high.toFixed(0)}%
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', flex: 1, flexWrap: 'wrap' }}>
+                        {Object.entries(pred.method_probs).map(([method, prob]) => (
+                          <div key={method} style={{ background: 'var(--surface2)', borderRadius: '4px', padding: '10px 14px', textAlign: 'center', flex: 1, minWidth: '80px' }}>
+                            <div style={{ fontSize: '10px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', marginBottom: '4px', letterSpacing: '0.5px' }}>{method.toUpperCase()}</div>
+                            <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'IBM Plex Mono', color: probColor(prob as number) }}>{(prob as number).toFixed(0)}%</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Panel>
+                )}
+                {(deal.vdc_b_result?.length ?? 0) > 0 ? (
+                  <Panel title="VDC-B 의결 결과">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr>
+                          {['의결', '의결 내용'].map(h => (
+                            <th key={h} style={{ textAlign: 'left', padding: '6px 8px', fontSize: '9px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', letterSpacing: '0.5px' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {deal.vdc_b_result!.map((r, i) => (
+                          <tr key={i}>
+                            <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', color: 'var(--cyan)', fontFamily: 'IBM Plex Mono', fontSize: '11px', whiteSpace: 'nowrap' }}>{r.decision}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', color: 'var(--text)', lineHeight: 1.6 }}>{r.detail}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </Panel>
+                ) : (
+                  <Panel title="VDC-B 의결 결과">
+                    <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-dim)', fontSize: '13px' }}>
+                      <div style={{ marginBottom: '8px', fontSize: '24px' }}>📋</div>
+                      VDC-B 의결 데이터가 없습니다
+                      <div style={{ marginTop: '8px', fontSize: '11px' }}>
+                        <a href="/admin" style={{ color: 'var(--brand)' }}>Admin에서 입력 →</a>
+                      </div>
+                    </div>
+                  </Panel>
+                )}
+                {(deal.qna_items?.length ?? 0) > 0 && (
+                  <Panel title="주요 질의응답">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {deal.qna_items!.map((q, i) => (
+                        <div key={i} style={{ background: 'var(--surface2)', borderRadius: '4px', padding: '12px 14px' }}>
+                          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '6px' }}>Q. {q.question}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: 1.6 }}>A. {q.answer}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+                )}
+                {(deal.pt_format || deal.customer_eval_criteria) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: deal.pt_format && deal.customer_eval_criteria ? '1fr 1fr' : '1fr', gap: '16px' }}>
+                    {deal.pt_format && (
+                      <Panel title="제안발표회 형식">
+                        <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{deal.pt_format}</div>
+                      </Panel>
+                    )}
+                    {deal.customer_eval_criteria && (
+                      <Panel title="고객 평가기준">
+                        <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{deal.customer_eval_criteria}</div>
+                      </Panel>
+                    )}
+                  </div>
+                )}
+                {(deal.winning_points?.length ?? 0) > 0 && (
+                  <Panel title="Winning 포인트 (최종 점검)">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr>
+                          {['고객 CFS', 'Winning Point'].map(h => (
+                            <th key={h} style={{ textAlign: 'left', padding: '6px 8px', fontSize: '9px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', letterSpacing: '0.5px' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {deal.winning_points!.map((w, i) => (
+                          <tr key={i}>
+                            <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', color: 'var(--text-dim)', fontSize: '11px' }}>{w.customer_cfs ?? '—'}</td>
+                            <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', color: 'var(--text)' }}>{w.winning_point}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </Panel>
+                )}
+              </>
+            )}
+
+            {/* ── 수실주 분석 단계 ────────────────────────────────── */}
+            {activeStage === 'loss-analysis' && (
+              <>
+                <Panel title="수실주 결과">
+                  <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-dim)', fontSize: '13px' }}>
+                    <div style={{ marginBottom: '12px', fontSize: '32px' }}>📊</div>
+                    <div style={{ marginBottom: '8px', color: 'var(--text)', fontWeight: 600 }}>수실주 결과 미확정</div>
+                    수주/실주 결과와 원인 분석을 Admin에서 입력해주세요
+                    <div style={{ marginTop: '12px', fontSize: '11px' }}>
+                      <a href="/admin" style={{ color: 'var(--brand)' }}>Admin에서 입력 →</a>
+                    </div>
+                  </div>
+                </Panel>
+                {pred && (
+                  <Panel title="예측 확률 회고">
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center', padding: '8px 0' }}>
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>예측 수주 확률</div>
+                        <div style={{ fontSize: '36px', fontWeight: 800, fontFamily: 'IBM Plex Mono', color: probColor(pred.probability) }}>{pred.probability.toFixed(1)}%</div>
+                      </div>
+                      <div style={{ fontSize: '20px', color: 'var(--text-dim)' }}>→</div>
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>실제 결과</div>
+                        <div style={{ fontSize: '18px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>미확정</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '16px', fontSize: '11px', color: 'var(--text-dim)', padding: '10px 14px', background: 'var(--surface2)', borderRadius: '4px' }}>
+                      수실주 원인 분석, Pillar별 기여도, 교훈은 결과 입력 후 자동 생성됩니다
+                    </div>
+                  </Panel>
+                )}
+              </>
+            )}
           </>
         )}
 
@@ -1573,6 +1827,72 @@ function GeoProcessSidebar({ step, onStepClick }: { step: number; onStepClick: (
         );
       })}
 
+    </div>
+  );
+}
+
+function BidProcessSidebar({ stage, onStageClick }: {
+  stage: BidStage;
+  onStageClick: (s: BidStage) => void;
+}) {
+  const stages = [
+    { key: 'vdc-a' as const,           label: 'VDC-A',        sub: '수주 초기 검토' },
+    { key: 'strategy-review' as const, label: '수주전략 리뷰', sub: '전략 수립·점검' },
+    { key: 'vdc-b' as const,           label: 'VDC-B',        sub: '최종 검토 의결' },
+    { key: 'loss-analysis' as const,   label: '수실주 분석',   sub: '결과 회고·교훈' },
+  ];
+  return (
+    <div style={{
+      width: '188px', flexShrink: 0, borderRight: '1px solid var(--border)',
+      padding: '24px 14px', display: 'flex', flexDirection: 'column',
+      background: 'var(--surface)', minHeight: 'calc(100vh - 56px)',
+    }}>
+      <div style={{
+        fontSize: '9px', letterSpacing: '1.5px', color: 'var(--text-dim)',
+        fontFamily: 'IBM Plex Mono', marginBottom: '20px',
+      }}>
+        수주 프로세스
+      </div>
+      {stages.map((s, i) => {
+        const active = stage === s.key;
+        return (
+          <div key={s.key}>
+            <div onClick={() => onStageClick(s.key)} style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '8px 0 8px 10px', cursor: 'pointer',
+              borderLeft: active ? '3px solid var(--brand)' : '3px solid transparent',
+            }}>
+              <div style={{
+                width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                background: active ? 'var(--brand)' : 'var(--surface2)',
+                border: active ? 'none' : '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '10px', color: active ? '#fff' : 'var(--text-dim)',
+                fontFamily: 'IBM Plex Mono', fontWeight: 700,
+              }}>
+                {i + 1}
+              </div>
+              <div>
+                <div style={{
+                  fontSize: '12px', fontWeight: active ? 600 : 400,
+                  color: active ? 'var(--text)' : 'var(--text-mid)',
+                }}>
+                  {s.label}
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                  {s.sub}
+                </div>
+              </div>
+            </div>
+            {i < stages.length - 1 && (
+              <div style={{
+                marginLeft: '23px', width: '1px', height: '16px',
+                borderLeft: '1px dashed var(--border)',
+              }} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
