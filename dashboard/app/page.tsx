@@ -116,9 +116,13 @@ function Panel({ title, children, style }: { title: string; children: React.Reac
   return (
     <div style={{
       background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: '2px', padding: '16px', ...style,
+      borderRadius: '8px', padding: '20px',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.06)', ...style,
     }}>
-      <div style={{ fontSize: '10px', letterSpacing: '1.5px', color: 'var(--text-dim)', marginBottom: '10px', fontFamily: 'IBM Plex Mono' }}>
+      <div style={{
+        fontSize: '10px', letterSpacing: '1.5px', color: 'var(--text-mid)', marginBottom: '14px',
+        fontFamily: 'IBM Plex Mono', paddingBottom: '10px', borderBottom: '1px solid var(--border)',
+      }}>
         {title.toUpperCase()}
       </div>
       {children}
@@ -466,7 +470,10 @@ function AnalysisEnginePanel({ driverMeta, driverScores, priorProb }: {
 
 function EmptyPanel({ label }: { label: string }) {
   return (
-    <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px' }}>
+    <div style={{
+      padding: '32px 0', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px',
+      background: 'var(--brand-dim)', border: '1px dashed var(--border)', borderRadius: '6px',
+    }}>
       {label}
       <div style={{ marginTop: '6px', fontSize: '11px' }}>
         <a href="/admin" style={{ color: 'var(--brand)', textDecoration: 'none' }}>Admin에서 입력 →</a>
@@ -723,8 +730,9 @@ export default function ExecutiveDashboard() {
           <>
             {/* ── ZONE 1: Deal Banner ───────────────────────────── */}
             <div style={{
-              background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: '2px', padding: '20px 24px',
+              background: 'var(--surface)', border: 'none',
+              borderRadius: '10px', padding: '24px 28px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               flexWrap: 'wrap', gap: '16px',
             }}>
@@ -861,17 +869,16 @@ export default function ExecutiveDashboard() {
                   <span
                     onClick={() => setActiveStage(s.key)}
                     style={{
-                      fontSize: '10px', padding: '3px 10px', borderRadius: '2px',
-                      fontFamily: 'IBM Plex Mono', cursor: 'pointer',
+                      fontSize: '11px', padding: '5px 14px', borderRadius: '4px',
+                      fontFamily: 'IBM Plex Mono', cursor: 'pointer', fontWeight: 600,
                       background: activeStage === s.key ? 'var(--brand)' : 'var(--surface2)',
-                      color: activeStage === s.key ? '#fff' : 'var(--text-dim)',
-                      fontWeight: activeStage === s.key ? 700 : 400,
-                      border: activeStage === s.key ? 'none' : '1px solid var(--border)',
+                      color: activeStage === s.key ? '#fff' : 'var(--text-mid)',
+                      border: 'none',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     {s.label}
                   </span>
-                  {i < arr.length - 1 && <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>›</span>}
                 </span>
               ))}
             </div>
@@ -1760,13 +1767,13 @@ function ScqaCard({ card }: { card: StrategyCard }) {
 
 const badgeStyle: React.CSSProperties = {
   fontSize: '11px', color: 'var(--text-mid)',
-  background: 'var(--surface2)', padding: '2px 8px',
-  borderRadius: '2px', border: '1px solid var(--border)',
+  background: 'var(--surface2)', padding: '3px 8px',
+  borderRadius: '4px', border: '1px solid var(--border)',
 };
 
 const actionBtn: React.CSSProperties = {
   padding: '7px 16px', background: 'var(--brand)', color: '#fff',
-  border: 'none', borderRadius: '2px', fontSize: '12px',
+  border: 'none', borderRadius: '6px', fontSize: '12px',
   fontFamily: 'IBM Plex Mono', fontWeight: 600, letterSpacing: '0.5px',
   cursor: 'pointer',
 };
@@ -1835,6 +1842,7 @@ function BidProcessSidebar({ stage, onStageClick }: {
   stage: BidStage;
   onStageClick: (s: BidStage) => void;
 }) {
+  const [hoveredKey, setHoveredKey] = useState<BidStage | null>(null);
   const stages = [
     { key: 'vdc-a' as const,           label: 'VDC-A',        sub: '수주 초기 검토' },
     { key: 'strategy-review' as const, label: '수주전략 리뷰', sub: '전략 수립·점검' },
@@ -1855,13 +1863,21 @@ function BidProcessSidebar({ stage, onStageClick }: {
       </div>
       {stages.map((s, i) => {
         const active = stage === s.key;
+        const hovered = hoveredKey === s.key && !active;
         return (
           <div key={s.key}>
-            <div onClick={() => onStageClick(s.key)} style={{
-              display: 'flex', alignItems: 'center', gap: '10px',
-              padding: '8px 0 8px 10px', cursor: 'pointer',
-              borderLeft: active ? '3px solid var(--brand)' : '3px solid transparent',
-            }}>
+            <div
+              onClick={() => onStageClick(s.key)}
+              onMouseEnter={() => setHoveredKey(s.key)}
+              onMouseLeave={() => setHoveredKey(null)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '8px 8px 8px 10px', cursor: 'pointer',
+                borderLeft: active ? '3px solid var(--brand)' : '3px solid transparent',
+                background: active ? 'var(--brand-dim)' : hovered ? 'var(--surface2)' : 'transparent',
+                borderRadius: '0 6px 6px 0',
+                transition: 'background 0.15s ease',
+              }}>
               <div style={{
                 width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
                 background: active ? 'var(--brand)' : 'var(--surface2)',
