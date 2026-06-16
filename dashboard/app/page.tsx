@@ -857,7 +857,7 @@ export default function ExecutiveDashboard() {
                 { key: 'vdc-b' as const, label: 'VDC-B' },
                 { key: 'loss-analysis' as const, label: '수실주 분석' },
               ].map((s, i, arr) => (
-                <React.Fragment key={s.key}>
+                <span key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span
                     onClick={() => setActiveStage(s.key)}
                     style={{
@@ -872,7 +872,7 @@ export default function ExecutiveDashboard() {
                     {s.label}
                   </span>
                   {i < arr.length - 1 && <span style={{ color: 'var(--text-dim)', fontSize: '10px' }}>›</span>}
-                </React.Fragment>
+                </span>
               ))}
             </div>
 
