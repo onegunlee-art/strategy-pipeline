@@ -517,7 +517,7 @@ export default function ExecutiveDashboard() {
   const [actionLog, setActionLog] = useState<ActionLogEntry[]>([]);
 
   // 데모: 수주전략 DB가 아직 없어 지정학 분석을 기본 화면으로. 토글은 숨김.
-  const [mode, setMode] = useState<'bid' | 'geo'>('bid');
+  const [mode, setMode] = useState<'bid' | 'geo' | 'claire'>('bid');
   const [geoStep, setGeoStep] = useState(1);
   const [activeStage, setActiveStage] = useState<BidStage>('strategy-review');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -659,21 +659,21 @@ export default function ExecutiveDashboard() {
           {/* Mode toggle (수주전략 DB 준비 시 SHOW_MODE_TOGGLE=true) */}
           {SHOW_MODE_TOGGLE && !isMobile && (
             <div style={{ display:'flex', gap:'4px', fontFamily:'IBM Plex Mono', fontSize:'11px', flexShrink:0 }}>
-              {(['bid','geo'] as const).map(m => (
+              {(['bid','geo','claire'] as const).map(m => (
                 <button key={m} onClick={() => setMode(m)} style={{
                   padding:'5px 12px', borderRadius:'2px', border:'none', cursor:'pointer',
-                  background: mode===m ? 'var(--brand)' : 'var(--surface2)',
+                  background: mode===m ? (m === 'claire' ? '#1a1a1a' : 'var(--brand)') : 'var(--surface2)',
                   color: mode===m ? '#fff' : 'var(--text-mid)', letterSpacing:'0.3px',
                 }}>
-                  {m === 'bid' ? '수주전략' : '지정학 분석'}
+                  {m === 'bid' ? '수주전략' : m === 'geo' ? '지정학 분석' : 'Claire ✦'}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Deal selector — 지정학 모드에선 숨김(목적과 무관) */}
+          {/* Deal selector — 지정학/claire 모드에선 숨김(목적과 무관) */}
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-            {mode === 'geo' ? null : loadingDeals ? (
+            {mode === 'geo' || mode === 'claire' ? null : loadingDeals ? (
               <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>LOADING...</span>
             ) : deals.length > 0 ? (
               <select
@@ -761,6 +761,8 @@ export default function ExecutiveDashboard() {
           )}
           {mode === 'geo' ? (
             <GeoContent step={geoStep} setStep={setGeoStep} />
+          ) : mode === 'claire' ? (
+            <ClaireContent />
           ) : (
             <>
 
@@ -2664,5 +2666,271 @@ function GeoContent({ step, setStep }: { step: number; setStep: (s: number) => v
         </div>
       </div>
     </Panel>
+  );
+}
+
+// ─── Claire: 사주 AI 채팅 ─────────────────────────────────────────────────────
+
+type ClaireStep = 'gender' | 'location' | 'year' | 'monthday' | 'time' | 'reading' | 'done';
+type ClaireMsg = { role: 'claire' | 'user'; text: string };
+
+function ClaireContent() {
+  const [messages, setMessages] = useState<ClaireMsg[]>([]);
+  const [step, setStep] = useState<ClaireStep>('gender');
+  const [info, setInfo] = useState({ gender: '', location: '', year: '', monthday: '', time: '' });
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const addClaire = (text: string) =>
+    setMessages(m => [...m, { role: 'claire', text }]);
+  const addUser = (text: string) =>
+    setMessages(m => [...m, { role: 'user', text }]);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => addClaire('사주를 제대로 보려면 4가지 정보가 필요해.'), 400);
+    const t2 = setTimeout(() => addClaire('성별부터 말해봐.'), 1100);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streaming]);
+
+  const handleGender = (g: string) => {
+    addUser(g);
+    setInfo(i => ({ ...i, gender: g }));
+    setStep('location');
+    setTimeout(() => addClaire('어디서 태어났어?'), 500);
+  };
+
+  const handleSubmit = async () => {
+    const val = input.trim();
+    if (!val) return;
+    setInput('');
+    addUser(val);
+
+    if (step === 'location') {
+      setInfo(i => ({ ...i, location: val }));
+      setStep('year');
+      setTimeout(() => addClaire('생일 알려줘. 연도부터.'), 500);
+    } else if (step === 'year') {
+      setInfo(i => ({ ...i, year: val }));
+      setStep('monthday');
+      setTimeout(() => addClaire('월이랑 일도 알려줘.'), 500);
+    } else if (step === 'monthday') {
+      setInfo(i => ({ ...i, monthday: val }));
+      setStep('time');
+      setTimeout(() => addClaire('태어난 시간 알아? 모르면 그냥 넘어가도 돼.'), 500);
+    } else if (step === 'time') {
+      setInfo(prev => {
+        const newInfo = { ...prev, time: val };
+        startReading(newInfo);
+        return newInfo;
+      });
+    } else if (step === 'done') {
+      const followMsg = val;
+      await sendFollowUp(followMsg);
+    }
+  };
+
+  const handleSkipTime = () => {
+    setInfo(prev => {
+      const newInfo = { ...prev, time: '모름' };
+      startReading(newInfo);
+      return newInfo;
+    });
+  };
+
+  const handleChip = async (topic: string) => {
+    addUser(topic);
+    await sendFollowUp(topic);
+  };
+
+  const startReading = async (finalInfo: typeof info) => {
+    setStep('reading');
+    setStreaming(true);
+    setMessages(m => [...m, { role: 'claire', text: '' }]);
+
+    try {
+      const res = await fetch('/api/claire', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalInfo),
+      });
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) return;
+      let done = false;
+      while (!done) {
+        const { value, done: d } = await reader.read();
+        done = d;
+        const chunk = decoder.decode(value ?? new Uint8Array());
+        setMessages(m => {
+          const copy = [...m];
+          const last = copy[copy.length - 1];
+          if (last?.role === 'claire') copy[copy.length - 1] = { ...last, text: last.text + chunk };
+          return copy;
+        });
+      }
+    } catch {
+      setMessages(m => {
+        const copy = [...m];
+        const last = copy[copy.length - 1];
+        if (last?.role === 'claire') copy[copy.length - 1] = { ...last, text: '연결에 문제가 생겼어. 잠시 후 다시 시도해줘.' };
+        return copy;
+      });
+    } finally {
+      setStreaming(false);
+      setStep('done');
+    }
+  };
+
+  const sendFollowUp = async (topic: string) => {
+    setStreaming(true);
+    setMessages(m => [...m, { role: 'claire', text: '' }]);
+    try {
+      const res = await fetch('/api/claire', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...info, followUp: true, topic }),
+      });
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) return;
+      let done = false;
+      while (!done) {
+        const { value, done: d } = await reader.read();
+        done = d;
+        const chunk = decoder.decode(value ?? new Uint8Array());
+        setMessages(m => {
+          const copy = [...m];
+          const last = copy[copy.length - 1];
+          if (last?.role === 'claire') copy[copy.length - 1] = { ...last, text: last.text + chunk };
+          return copy;
+        });
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setStreaming(false);
+    }
+  };
+
+  const BG = '#F2EDE8';
+  const chips = ['사주 명식', '오행 분포', '십신 분포', '일간 강약', '지장간'];
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)',
+      background: BG, margin: '-20px -32px', overflow: 'hidden',
+    }}>
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {messages.map((msg, i) =>
+          msg.role === 'claire' ? (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Avatar */}
+                <div style={{
+                  width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
+                  background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '14px', color: '#fff', fontFamily: 'IBM Plex Mono', fontWeight: 700,
+                }}>
+                  C
+                </div>
+                <span style={{ fontSize: '12px', color: '#888', fontFamily: 'IBM Plex Mono' }}>claire</span>
+              </div>
+              <div style={{ paddingLeft: '44px', fontSize: '15px', color: '#1a1a1a', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                {msg.text}
+                {i === messages.length - 1 && streaming && (
+                  <span style={{ display: 'inline-block', width: '2px', height: '14px', background: '#1a1a1a', marginLeft: '2px', animation: 'blink 1s infinite' }} />
+                )}
+              </div>
+            </div>
+          ) : (
+            <div key={i} style={{ textAlign: 'right', fontSize: '18px', fontWeight: 500, color: '#1a1a1a', lineHeight: 1.5 }}>
+              {msg.text}
+            </div>
+          )
+        )}
+
+        {/* Gender chips */}
+        {step === 'gender' && messages.length >= 2 && (
+          <div style={{ display: 'flex', gap: '8px', paddingLeft: '44px' }}>
+            {['남성', '여성'].map(g => (
+              <button key={g} onClick={() => handleGender(g)} style={{
+                padding: '8px 20px', borderRadius: '20px', border: '1px solid #d0c9c0',
+                background: '#fff', fontSize: '14px', cursor: 'pointer', color: '#1a1a1a',
+              }}>{g}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Skip time chip */}
+        {step === 'time' && (
+          <div style={{ paddingLeft: '44px' }}>
+            <button onClick={handleSkipTime} style={{
+              padding: '8px 20px', borderRadius: '20px', border: '1px solid #d0c9c0',
+              background: '#fff', fontSize: '14px', cursor: 'pointer', color: '#888',
+            }}>모름</button>
+          </div>
+        )}
+
+        {/* Follow-up chips after reading */}
+        {step === 'done' && !streaming && (
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingLeft: '44px' }}>
+            {chips.map(c => (
+              <button key={c} onClick={() => handleChip(c)} style={{
+                padding: '7px 16px', borderRadius: '20px', border: '1px solid #d0c9c0',
+                background: '#fff', fontSize: '13px', cursor: 'pointer', color: '#555',
+              }}>{c}</button>
+            ))}
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input bar */}
+      {step !== 'gender' && (
+        <div style={{
+          borderTop: '1px solid #e0d8d0', padding: '12px 16px',
+          background: BG, display: 'flex', alignItems: 'center', gap: '10px',
+        }}>
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !streaming && handleSubmit()}
+            placeholder="마음이 건네는 말은?"
+            maxLength={200}
+            disabled={streaming || step === 'reading'}
+            style={{
+              flex: 1, background: 'transparent', border: 'none', outline: 'none',
+              fontSize: '15px', color: '#1a1a1a', fontFamily: 'inherit',
+            }}
+          />
+          <span style={{ fontSize: '11px', color: '#bbb', fontFamily: 'IBM Plex Mono', flexShrink: 0 }}>
+            {input.length} / 200
+          </span>
+          <button
+            onClick={handleSubmit}
+            disabled={streaming || !input.trim()}
+            style={{
+              width: '32px', height: '32px', borderRadius: '50%',
+              background: input.trim() && !streaming ? '#1a1a1a' : '#ccc',
+              border: 'none', cursor: input.trim() && !streaming ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 12V2M7 2L2 7M7 2L12 7" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+    </div>
   );
 }
