@@ -634,7 +634,7 @@ export default function ExecutiveDashboard() {
   const pred = dashData?.prediction;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <header style={{
@@ -742,7 +742,7 @@ export default function ExecutiveDashboard() {
         {mode === 'geo' && (
           <div style={isMobile ? {
             position:'fixed', left: sidebarOpen ? '0' : '-220px', top:'56px', zIndex:200,
-            transition:'left 0.25s ease', height:'calc(100vh - 56px)', overflowY:'auto',
+            transition:'left 0.25s ease', height:'calc(100dvh - 56px)', overflowY:'auto',
           } : {}}>
             <GeoProcessSidebar step={geoStep} onStepClick={(s) => { setGeoStep(s); setSidebarOpen(false); }} />
           </div>
@@ -750,7 +750,7 @@ export default function ExecutiveDashboard() {
         {mode === 'bid' && selectedId != null && dashData != null && (
           <div style={isMobile ? {
             position:'fixed', left: sidebarOpen ? '0' : '-220px', top:'56px', zIndex:200,
-            transition:'left 0.25s ease', height:'calc(100vh - 56px)', overflowY:'auto',
+            transition:'left 0.25s ease', height:'calc(100dvh - 56px)', overflowY:'auto',
           } : {}}>
             <BidProcessSidebar stage={activeStage} onStageClick={(s) => { setActiveStage(s); setSidebarOpen(false); }} />
           </div>
@@ -1863,7 +1863,7 @@ function GeoProcessSidebar({ step, onStepClick }: { step: number; onStepClick: (
     <div style={{
       width: '200px', flexShrink: 0, borderRight: '1px solid var(--border)',
       padding: '24px 16px', display: 'flex', flexDirection: 'column',
-      background: 'var(--surface)', minHeight: 'calc(100vh - 56px)',
+      background: 'var(--surface)', minHeight: 'calc(100dvh - 56px)',
     }}>
       <div style={{ fontSize: '9px', letterSpacing: '1.5px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginBottom: '20px' }}>
         ANALYSIS PROCESS
@@ -1925,7 +1925,7 @@ function BidProcessSidebar({ stage, onStageClick }: {
     <div style={{
       width: '188px', flexShrink: 0, borderRight: '1px solid var(--border)',
       padding: '24px 14px', display: 'flex', flexDirection: 'column',
-      background: 'var(--surface)', minHeight: 'calc(100vh - 56px)',
+      background: 'var(--surface)', minHeight: 'calc(100dvh - 56px)',
     }}>
       <div style={{
         fontSize: '9px', letterSpacing: '1.5px', color: 'var(--text-dim)',
@@ -2833,7 +2833,7 @@ function ClaireContent() {
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)',
+      display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)',
       background: BG, margin: '-20px -32px', overflow: 'hidden',
     }}>
       {/* Messages */}
