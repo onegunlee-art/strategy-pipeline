@@ -670,6 +670,17 @@ export default function ExecutiveDashboard() {
               ))}
             </div>
           )}
+          {/* Claire 버튼 — 모바일 전용 */}
+          {isMobile && (
+            <button onClick={() => setMode(mode === 'claire' ? 'bid' : 'claire')} style={{
+              padding:'5px 12px', borderRadius:'2px', border:'none', cursor:'pointer', flexShrink:0,
+              background: mode === 'claire' ? '#1a1a1a' : 'var(--surface2)',
+              color: mode === 'claire' ? '#fff' : 'var(--text-mid)',
+              fontFamily:'IBM Plex Mono', fontSize:'11px', letterSpacing:'0.3px',
+            }}>
+              Claire ✦
+            </button>
+          )}
 
           {/* Deal selector — 지정학/claire 모드에선 숨김(목적과 무관) */}
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
