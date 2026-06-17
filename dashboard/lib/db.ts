@@ -564,6 +564,16 @@ async function runInit() {
       name TEXT UNIQUE NOT NULL,
       voter_role TEXT NOT NULL
     );
+
+    -- v2.0: 엑셀 시그널 공유 링크
+    CREATE TABLE IF NOT EXISTS signal_links (
+      id         SERIAL PRIMARY KEY,
+      token      TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+      deal_id    INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      deal_name  TEXT,
+      data       JSONB NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
 
   // v1.8: Judgment DB 데모 시드 (과거 예측 3개)

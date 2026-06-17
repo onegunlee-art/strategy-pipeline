@@ -3010,6 +3010,8 @@ function BidStageKickoff({
   const [uploading, setUploading] = useState(false);
   const [excelResult, setExcelResult] = useState<ExcelResult | null>(null);
   const [excelError, setExcelError] = useState('');
+  const [signalLink, setSignalLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const competitors = deal.competitive_positioning?.competitors ?? [];
@@ -3057,6 +3059,7 @@ function BidStageKickoff({
       const json = await res.json();
       if (!res.ok) { setExcelError(json.error ?? '파싱 오류'); return; }
       setExcelResult(json);
+      setSignalLink('');
       // 현수준 판단 근거를 narratives에 병합
       if (json.pillarRationale) setNarratives(prev => ({ ...prev, ...json.pillarRationale }));
     } catch { setExcelError('업로드 실패'); }
@@ -3067,6 +3070,23 @@ function BidStageKickoff({
     e.preventDefault(); setDragging(false);
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
+  };
+
+  const generateSignalLink = async () => {
+    if (!excelResult) return;
+    const res = await fetch('/api/signal-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dealId: deal.id, dealName: deal.client_name, data: excelResult }),
+    });
+    const json = await res.json();
+    if (json.url) {
+      const full = `${window.location.origin}${json.url}`;
+      setSignalLink(full);
+      navigator.clipboard.writeText(full);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
   };
 
   const panelStyle: React.CSSProperties = {
@@ -3169,6 +3189,24 @@ function BidStageKickoff({
                   </div>
                 );
               })}
+            </div>
+
+            {/* 공유 링크 생성 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', flexWrap: 'wrap' }}>
+              <button
+                onClick={generateSignalLink}
+                style={{
+                  padding: '8px 16px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer', border: 'none',
+                  background: linkCopied ? 'var(--green)' : 'var(--brand)', color: '#fff', fontFamily: 'IBM Plex Mono',
+                }}
+              >
+                {linkCopied ? '✓ 링크 복사됨' : '🔗 공유 링크 생성'}
+              </button>
+              {signalLink && (
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', wordBreak: 'break-all' }}>
+                  {signalLink}
+                </span>
+              )}
             </div>
 
             {/* 세부 항목 테이블 */}
