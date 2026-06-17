@@ -743,7 +743,6 @@ export default function ExecutiveDashboard() {
           <div style={isMobile ? {
             position:'fixed', left: sidebarOpen ? '0' : '-220px', top:'56px', zIndex:200,
             transition:'left 0.25s ease', height:'calc(100dvh - 56px)', overflowY:'auto',
-            transition:'left 0.25s ease', height:'calc(100vh - 56px)', overflowY:'auto',
           } : {}}>
             <GeoProcessSidebar step={geoStep} onStepClick={(s) => { setGeoStep(s); setSidebarOpen(false); }} />
           </div>
@@ -752,7 +751,6 @@ export default function ExecutiveDashboard() {
           <div style={isMobile ? {
             position:'fixed', left: sidebarOpen ? '0' : '-220px', top:'56px', zIndex:200,
             transition:'left 0.25s ease', height:'calc(100dvh - 56px)', overflowY:'auto',
-            transition:'left 0.25s ease', height:'calc(100vh - 56px)', overflowY:'auto',
           } : {}}>
             <BidProcessSidebar stage={activeStage} onStageClick={(s) => { setActiveStage(s); setSidebarOpen(false); }} />
           </div>
@@ -2836,7 +2834,6 @@ function ClaireContent() {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)',
-      display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)',
       background: BG, margin: '-20px -32px', overflow: 'hidden',
     }}>
       {/* Messages */}
