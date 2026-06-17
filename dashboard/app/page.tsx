@@ -1945,39 +1945,55 @@ function BidProcessSidebar({ stage, onStageClick }: {
         const hovered = hoveredKey === s.key && !active;
         return (
           <div key={s.key}>
-            <div
-              onClick={() => onStageClick(s.key)}
-              onMouseEnter={() => setHoveredKey(s.key)}
-              onMouseLeave={() => setHoveredKey(null)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '8px 8px 8px 10px', cursor: 'pointer',
-                borderLeft: active ? '3px solid var(--brand)' : '3px solid transparent',
-                background: active ? 'var(--brand-dim)' : hovered ? 'var(--surface2)' : 'transparent',
-                borderRadius: '0 6px 6px 0',
-                transition: 'background 0.15s ease',
-              }}>
-              <div style={{
-                width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                background: active ? 'var(--brand)' : 'var(--surface2)',
-                border: active ? 'none' : '1px solid var(--border)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '10px', color: active ? '#fff' : 'var(--text-dim)',
-                fontFamily: 'IBM Plex Mono', fontWeight: 700,
-              }}>
-                {i + 1}
-              </div>
-              <div>
-                <div style={{
-                  fontSize: '12px', fontWeight: active ? 600 : 400,
-                  color: active ? 'var(--text)' : 'var(--text-mid)',
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div
+                onClick={() => onStageClick(s.key)}
+                onMouseEnter={() => setHoveredKey(s.key)}
+                onMouseLeave={() => setHoveredKey(null)}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '8px 6px 8px 10px', cursor: 'pointer',
+                  borderLeft: active ? '3px solid var(--brand)' : '3px solid transparent',
+                  background: active ? 'var(--brand-dim)' : hovered ? 'var(--surface2)' : 'transparent',
+                  borderRadius: '0 6px 6px 0',
+                  transition: 'background 0.15s ease',
                 }}>
-                  {s.label}
+                <div style={{
+                  width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                  background: active ? 'var(--brand)' : 'var(--surface2)',
+                  border: active ? 'none' : '1px solid var(--border)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '10px', color: active ? '#fff' : 'var(--text-dim)',
+                  fontFamily: 'IBM Plex Mono', fontWeight: 700,
+                }}>
+                  {i + 1}
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                  {s.sub}
+                <div>
+                  <div style={{
+                    fontSize: '12px', fontWeight: active ? 600 : 400,
+                    color: active ? 'var(--text)' : 'var(--text-mid)',
+                  }}>
+                    {s.label}
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                    {s.sub}
+                  </div>
                 </div>
               </div>
+              <a
+                href="/admin"
+                title="Admin"
+                style={{
+                  flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '22px', height: '22px', borderRadius: '4px',
+                  color: 'var(--text-dim)', textDecoration: 'none', fontSize: '11px',
+                  opacity: 0.5, transition: 'opacity 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
+              >
+                ⚙
+              </a>
             </div>
             {i < stages.length - 1 && (
               <div style={{
