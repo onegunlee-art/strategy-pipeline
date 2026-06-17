@@ -759,17 +759,30 @@ export default function ExecutiveDashboard() {
         <main style={{ flex:1, padding:`20px ${px}`, display:'flex', flexDirection:'column', gap:'16px', minWidth:0 }}>
           {/* Mobile hamburger button */}
           {isMobile && (mode === 'geo' || (mode === 'bid' && selectedId != null && dashData != null)) && (
-            <button
-              onClick={() => setSidebarOpen(o => !o)}
-              style={{
-                alignSelf: 'flex-start', padding:'6px 14px', fontSize:'13px',
-                background: 'var(--surface)', border:'1px solid var(--border)',
-                borderRadius:'6px', cursor:'pointer', color:'var(--text-mid)',
-                display:'flex', alignItems:'center', gap:'6px',
-              }}
-            >
-              ☰ 단계
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', alignSelf: 'flex-start' }}>
+              <button
+                onClick={() => setSidebarOpen(o => !o)}
+                style={{
+                  padding:'6px 14px', fontSize:'13px',
+                  background: 'var(--surface)', border:'1px solid var(--border)',
+                  borderRadius:'6px', cursor:'pointer', color:'var(--text-mid)',
+                  display:'flex', alignItems:'center', gap:'6px',
+                }}
+              >
+                ☰ 단계
+              </button>
+              <a
+                href="/admin"
+                style={{
+                  padding:'6px 14px', fontSize:'13px',
+                  background: 'var(--surface)', border:'1px solid var(--border)',
+                  borderRadius:'6px', color:'var(--text-mid)', textDecoration:'none',
+                  display:'flex', alignItems:'center', gap:'4px',
+                }}
+              >
+                ⚙ Admin
+              </a>
+            </div>
           )}
           {mode === 'geo' ? (
             <GeoContent step={geoStep} setStep={setGeoStep} />
