@@ -547,6 +547,17 @@ async function runInit() {
     -- v2.0: 토픽별 동적 드라이버 메타 ({key,labelKo,labelEn,invert}[])
     ALTER TABLE geo_sessions ADD COLUMN IF NOT EXISTS driver_meta JSONB;
 
+    -- v2.1: 수주 단계별 형상 관리 스냅샷
+    CREATE TABLE IF NOT EXISTS stage_snapshots (
+      id             SERIAL PRIMARY KEY,
+      deal_id        INTEGER REFERENCES deals(id) ON DELETE CASCADE,
+      stage          TEXT NOT NULL,
+      snapshot_json  JSONB,
+      narrative_json JSONB,
+      created_at     TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_stage_snapshots_deal ON stage_snapshots(deal_id);
+
     -- v1.9: 데모 참가자 명단 (이름 자동완성 + 역할 자동 채움)
     CREATE TABLE IF NOT EXISTS demo_participants (
       id SERIAL PRIMARY KEY,
