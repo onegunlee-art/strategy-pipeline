@@ -3128,7 +3128,7 @@ function BidStageKickoff({
             </tr>
           </thead>
           <tbody>
-            {topWeakByPillar.map(({ pid, label, score }) => {
+            {topWeakByPillar.map(({ pid, label }) => {
               const ps = Math.round((pred.pillar_scores[pid] ?? 0) * 100 * 10) / 10;
               const color = ps >= 65 ? 'var(--green)' : ps >= 50 ? 'var(--brand)' : '#e53e3e';
               return (
