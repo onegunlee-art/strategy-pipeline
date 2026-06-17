@@ -43,6 +43,7 @@ interface DashboardData {
     vdc_b_result?: { decision: string; detail: string }[];
     qna_items?: { question: string; answer: string }[];
     winning_points?: { customer_cfs?: string; winning_point: string }[];
+    pillar_rationale?: Record<string, { reason?: string; action?: string } | string>;
   };
   prediction: {
     probability: number;
@@ -495,7 +496,7 @@ function EmptyPanel({ label }: { label: string }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-type BidStage = 'vdc-a' | 'strategy-review' | 'vdc-b' | 'loss-analysis';
+type BidStage = 'vdc-a' | 'kickoff' | 'strategy-review' | 'vdc-b' | 'loss-analysis';
 
 export default function ExecutiveDashboard() {
   const [deals, setDeals] = useState<PortfolioDeal[]>([]);
@@ -1724,6 +1725,11 @@ export default function ExecutiveDashboard() {
               </>
             )}
 
+            {/* ── 제안 Kick-Off 단계 ──────────────────────────────── */}
+            {activeStage === 'kickoff' && pred && (
+              <BidStageKickoff deal={deal} pred={pred} />
+            )}
+
             {/* ── 수실주 분석 단계 ────────────────────────────────── */}
             {activeStage === 'loss-analysis' && (
               <>
@@ -1917,6 +1923,7 @@ function BidProcessSidebar({ stage, onStageClick }: {
   const [hoveredKey, setHoveredKey] = useState<BidStage | null>(null);
   const stages = [
     { key: 'vdc-a' as const,           label: 'VDC-A',        sub: '수주 초기 검토' },
+    { key: 'kickoff' as const,         label: '제안 Kick-Off', sub: 'Weak Point 도출' },
     { key: 'strategy-review' as const, label: '수주전략 리뷰', sub: '전략 수립·점검' },
     { key: 'vdc-b' as const,           label: 'VDC-B',        sub: '최종 검토 의결' },
     { key: 'loss-analysis' as const,   label: '수실주 분석',   sub: '결과 회고·교훈' },
@@ -2942,6 +2949,291 @@ function ClaireContent() {
       )}
 
       <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+    </div>
+  );
+}
+
+// ─── 제안 Kick-Off 형상 관리 ──────────────────────────────────────────────────
+
+const PILLAR_LABEL_KO: Record<string, string> = {
+  S: '사전영업 수준', V: 'Value Impact', D: '차별화', P: '가격경쟁력', E: 'Delivery 경쟁력',
+};
+
+function BidStageKickoff({
+  deal, pred,
+}: {
+  deal: DashboardData['deal'];
+  pred: NonNullable<DashboardData['prediction']>;
+}) {
+  const [narratives, setNarratives] = useState<Record<string, string>>({});
+  const [generating, setGenerating] = useState(false);
+  const competitors = deal.competitive_positioning?.competitors ?? [];
+
+  const riskLabel = (r: string) => r === 'high' ? '상' : r === 'low' ? '하' : '중';
+
+  // Pillar별 최상위 Weak Point
+  const topWeakByPillar = (['S', 'V', 'D', 'P', 'E'] as const).map(pid => {
+    const w = pred.weaknesses.find(x => x.pillar === pid);
+    return { pid, label: w?.label ?? '—', score: w?.score ?? 0 };
+  });
+
+  // Pillar별 best next_move
+  const moveByPillar = (['S', 'V', 'D', 'P', 'E'] as const).reduce<Record<string, typeof pred.next_moves[0] | undefined>>((acc, pid) => {
+    acc[pid] = pred.next_moves.filter(m => m.pillar === pid).sort((a, b) => b.delta_pp - a.delta_pp)[0];
+    return acc;
+  }, {});
+
+  const handleGenerateNarrative = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/stage-snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealId: deal.id,
+          stage: 'kickoff',
+          pillarScores: pred.pillar_scores,
+          weaknesses: pred.weaknesses,
+          nextMoves: pred.next_moves,
+          deal: { client_name: deal.client_name, deal_size: deal.deal_size, customer_eval_criteria: deal.customer_eval_criteria },
+        }),
+      });
+      const json = await res.json();
+      if (json.narratives) setNarratives(json.narratives);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const panelStyle: React.CSSProperties = {
+    background: 'var(--surface)', borderRadius: '10px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.07)', padding: '20px 24px',
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: '9px', letterSpacing: '1px', fontFamily: 'IBM Plex Mono',
+    color: 'var(--text-dim)', marginBottom: '12px',
+  };
+  const thStyle: React.CSSProperties = {
+    fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono',
+    letterSpacing: '0.5px', padding: '6px 10px', textAlign: 'left',
+    borderBottom: '1px solid var(--border)', fontWeight: 400,
+  };
+  const tdStyle: React.CSSProperties = {
+    fontSize: '12px', color: 'var(--text)', padding: '8px 10px',
+    borderBottom: '1px solid var(--border)', verticalAlign: 'top',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* 섹션 A: 사업 개요 + 경쟁사 */}
+      <div style={{ display: 'grid', gridTemplateColumns: competitors.length > 0 ? '1fr 1.4fr' : '1fr', gap: '16px' }}>
+        {/* 사업 개요 */}
+        <div style={panelStyle}>
+          <div style={labelStyle}>사업 개요</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+            {deal.deal_size && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <span style={{ color: 'var(--text-dim)', minWidth: '70px' }}>사업규모</span>
+                <span style={{ color: 'var(--text)', fontWeight: 600 }}>{deal.deal_size}</span>
+              </div>
+            )}
+            {deal.duration_months && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <span style={{ color: 'var(--text-dim)', minWidth: '70px' }}>사업기간</span>
+                <span style={{ color: 'var(--text)' }}>계약 후 {deal.duration_months}개월</span>
+              </div>
+            )}
+            {deal.customer_eval_criteria && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <span style={{ color: 'var(--text-dim)', minWidth: '70px' }}>평가방법</span>
+                <span style={{ color: 'var(--text)' }}>{deal.customer_eval_criteria}</span>
+              </div>
+            )}
+            {deal.pm && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <span style={{ color: 'var(--text-dim)', minWidth: '70px' }}>PM</span>
+                <span style={{ color: 'var(--text)' }}>{deal.pm}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 경쟁사 현황 */}
+        {competitors.length > 0 && (
+          <div style={panelStyle}>
+            <div style={labelStyle}>경쟁사 현황</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>구분</th>
+                    {competitors.map((c: { name: string }) => (
+                      <th key={c.name} style={{ ...thStyle, color: 'var(--text)', fontWeight: 600 }}>{c.name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={{ ...tdStyle, color: 'var(--text-dim)', fontSize: '11px' }}>경쟁위</td>
+                    {competitors.map((c: { name: string; risk_level?: string }) => (
+                      <td key={c.name} style={tdStyle}>{riskLabel(c.risk_level ?? 'mid')}</td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td style={{ ...tdStyle, color: 'var(--text-dim)', fontSize: '11px' }}>비고</td>
+                    {competitors.map((c: { name: string; notes?: string }) => (
+                      <td key={c.name} style={{ ...tdStyle, fontSize: '11px', color: 'var(--text-mid)' }}>
+                        {c.notes ?? '—'}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 섹션 B: Win Ratio 흐름도 + Pillar 점수 */}
+      <div style={panelStyle}>
+        <div style={labelStyle}>WIN RATIO 제고 추진</div>
+        {/* 5단계 흐름도 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {(['VDC-A', '제안 Kick-Off', '수주전략 리뷰', 'VDC-B', '수/실주 보고'] as const).map((label, i) => {
+            const active = label === '제안 Kick-Off';
+            return (
+              <span key={label} style={{ display: 'contents' }}>
+                <div style={{
+                  padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: active ? 700 : 400,
+                  background: active ? 'var(--brand)' : 'var(--surface2)',
+                  color: active ? '#fff' : 'var(--text-mid)',
+                  border: active ? 'none' : '1px solid var(--border)',
+                }}>
+                  {label}
+                </div>
+                {i < 4 && <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>→</span>}
+              </span>
+            );
+          })}
+        </div>
+        {/* Pillar 점수표 */}
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={thStyle}>영역</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>평가 점수</th>
+              <th style={thStyle}>Weak Point</th>
+            </tr>
+          </thead>
+          <tbody>
+            {topWeakByPillar.map(({ pid, label }) => {
+              const ps = Math.round((pred.pillar_scores[pid] ?? 0) * 100 * 10) / 10;
+              const color = ps >= 65 ? 'var(--green)' : ps >= 50 ? 'var(--brand)' : '#e53e3e';
+              return (
+                <tr key={pid}>
+                  <td style={tdStyle}>{PILLAR_LABEL_KO[pid]}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'IBM Plex Mono', fontWeight: 700, color }}>
+                    {ps.toFixed(1)}
+                  </td>
+                  <td style={{ ...tdStyle, color: 'var(--text-mid)', fontSize: '11px' }}>{label}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 섹션 C: Pillar별 Action Item 표 */}
+      <div style={panelStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={labelStyle}>WEAK POINT별 개선방안 / ACTION ITEM</div>
+          <button
+            onClick={handleGenerateNarrative}
+            disabled={generating}
+            style={{
+              padding: '6px 16px', borderRadius: '4px', border: 'none', cursor: generating ? 'default' : 'pointer',
+              background: generating ? 'var(--surface2)' : '#1a1a1a',
+              color: generating ? 'var(--text-dim)' : '#fff',
+              fontSize: '11px', fontFamily: 'IBM Plex Mono', letterSpacing: '0.3px',
+              transition: 'background 0.15s',
+            }}
+          >
+            {generating ? '생성 중...' : '✦ AI 현수준 자동 생성'}
+          </button>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, minWidth: '90px' }}>Pillar</th>
+                <th style={{ ...thStyle, minWidth: '110px' }}>Weak Point</th>
+                <th style={{ ...thStyle, minWidth: '200px' }}>현수준 (제안 Kick-Off 단계)</th>
+                <th style={{ ...thStyle, minWidth: '200px' }}>개선방안 / Action Item</th>
+                <th style={{ ...thStyle, minWidth: '80px' }}>담당 부서</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(['S', 'V', 'D', 'P', 'E'] as const).map(pid => {
+                const weakList = pred.weaknesses.filter(w => w.pillar === pid);
+                const move = moveByPillar[pid];
+                const narrative = narratives[pid] ?? '';
+                const existingRationale = deal.pillar_rationale?.[pid];
+                const displayNarrative = narrative || (typeof existingRationale === 'string' ? existingRationale : existingRationale?.reason ?? '');
+                const rows = Math.max(weakList.length, 1);
+                return weakList.length > 0 ? weakList.map((w, wi) => (
+                  <tr key={`${pid}-${wi}`}>
+                    {wi === 0 && (
+                      <td style={{ ...tdStyle, fontWeight: 600, verticalAlign: 'middle', background: 'var(--brand-dim)' }} rowSpan={rows}>
+                        {PILLAR_LABEL_KO[pid]}
+                      </td>
+                    )}
+                    <td style={tdStyle}>{w.label}</td>
+                    {wi === 0 && (
+                      <td style={{ ...tdStyle, color: 'var(--text-mid)', fontSize: '11px', lineHeight: 1.6 }} rowSpan={rows}>
+                        {displayNarrative || (
+                          <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                            AI 생성 버튼을 눌러 자동 생성
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {wi === 0 && (
+                      <td style={{ ...tdStyle, fontSize: '11px', lineHeight: 1.6 }} rowSpan={rows}>
+                        {move ? move.label : '—'}
+                        {move && move.delta_pp > 0 && (
+                          <span style={{ display: 'inline-block', marginLeft: '6px', fontSize: '10px',
+                            color: 'var(--brand)', fontFamily: 'IBM Plex Mono' }}>
+                            +{move.delta_pp.toFixed(1)}pp
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {wi === 0 && (
+                      <td style={{ ...tdStyle, fontSize: '11px', color: 'var(--text-mid)' }} rowSpan={rows}>
+                        {move?.owner ?? '—'}
+                      </td>
+                    )}
+                  </tr>
+                )) : (
+                  <tr key={pid}>
+                    <td style={{ ...tdStyle, fontWeight: 600, background: 'var(--brand-dim)' }}>{PILLAR_LABEL_KO[pid]}</td>
+                    <td style={{ ...tdStyle, color: 'var(--text-dim)' }}>—</td>
+                    <td style={tdStyle}>
+                      {displayNarrative || (
+                        <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>AI 생성 버튼을 눌러 자동 생성</span>
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, fontSize: '11px' }}>{move ? move.label : '—'}</td>
+                    <td style={{ ...tdStyle, fontSize: '11px', color: 'var(--text-mid)' }}>{move?.owner ?? '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
