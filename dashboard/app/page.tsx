@@ -2959,6 +2959,16 @@ const PILLAR_LABEL_KO: Record<string, string> = {
   S: '사전영업 수준', V: 'Value Impact', D: '차별화', P: '가격경쟁력', E: 'Delivery 경쟁력',
 };
 
+interface ExcelResult {
+  sheetName: string;
+  pillarScores: Record<string, number>;
+  pillarRationale: Record<string, string>;
+  subScores: Record<string, number>;
+  totalScore: number;
+  itemCount: number;
+  items: { pillar: string; label: string; weight: number; rating: number; score: number; rationale: string }[];
+}
+
 function BidStageKickoff({
   deal, pred,
 }: {
@@ -2967,17 +2977,20 @@ function BidStageKickoff({
 }) {
   const [narratives, setNarratives] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
-  const competitors = deal.competitive_positioning?.competitors ?? [];
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [excelResult, setExcelResult] = useState<ExcelResult | null>(null);
+  const [excelError, setExcelError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const competitors = deal.competitive_positioning?.competitors ?? [];
   const riskLabel = (r: string) => r === 'high' ? '상' : r === 'low' ? '하' : '중';
 
-  // Pillar별 최상위 Weak Point
   const topWeakByPillar = (['S', 'V', 'D', 'P', 'E'] as const).map(pid => {
     const w = pred.weaknesses.find(x => x.pillar === pid);
-    return { pid, label: w?.label ?? '—', score: w?.score ?? 0 };
+    return { pid, label: w?.label ?? '—' };
   });
 
-  // Pillar별 best next_move
   const moveByPillar = (['S', 'V', 'D', 'P', 'E'] as const).reduce<Record<string, typeof pred.next_moves[0] | undefined>>((acc, pid) => {
     acc[pid] = pred.next_moves.filter(m => m.pillar === pid).sort((a, b) => b.delta_pp - a.delta_pp)[0];
     return acc;
@@ -2990,21 +3003,41 @@ function BidStageKickoff({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dealId: deal.id,
-          stage: 'kickoff',
+          dealId: deal.id, stage: 'kickoff',
           pillarScores: pred.pillar_scores,
-          weaknesses: pred.weaknesses,
-          nextMoves: pred.next_moves,
+          weaknesses: pred.weaknesses, nextMoves: pred.next_moves,
           deal: { client_name: deal.client_name, deal_size: deal.deal_size, customer_eval_criteria: deal.customer_eval_criteria },
         }),
       });
       const json = await res.json();
       if (json.narratives) setNarratives(json.narratives);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setGenerating(false);
+    } catch (e) { console.error(e); }
+    finally { setGenerating(false); }
+  };
+
+  const handleFile = async (file: File) => {
+    if (!file.name.match(/\.(xlsx|xls|xlsm)$/i)) {
+      setExcelError('xlsx / xls / xlsm 파일만 지원됩니다'); return;
     }
+    setUploading(true); setExcelError(''); setExcelResult(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('dealId', String(deal.id));
+    try {
+      const res = await fetch('/api/excel-import', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) { setExcelError(json.error ?? '파싱 오류'); return; }
+      setExcelResult(json);
+      // 현수준 판단 근거를 narratives에 병합
+      if (json.pillarRationale) setNarratives(prev => ({ ...prev, ...json.pillarRationale }));
+    } catch { setExcelError('업로드 실패'); }
+    finally { setUploading(false); }
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
   };
 
   const panelStyle: React.CSSProperties = {
@@ -3027,9 +3060,128 @@ function BidStageKickoff({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* 섹션 A: 사업 개요 + 경쟁사 */}
+
+      {/* ── 엑셀 연동 패널 ── */}
+      <div style={panelStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <div style={labelStyle}>엑셀 수주가능성 분석 연동</div>
+          <a
+            href="/api/excel-template"
+            download="win_ratio_assessment.xlsx"
+            style={{
+              fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--brand)',
+              textDecoration: 'none', letterSpacing: '0.3px',
+            }}
+          >
+            ↓ 템플릿 다운로드
+          </a>
+        </div>
+
+        {/* 드래그앤드롭 영역 */}
+        <div
+          onDragOver={e => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            border: `2px dashed ${dragging ? 'var(--brand)' : 'var(--border)'}`,
+            borderRadius: '8px', padding: '28px', textAlign: 'center', cursor: 'pointer',
+            background: dragging ? 'var(--brand-dim)' : 'var(--surface2)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.xlsm" style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+          {uploading ? (
+            <div style={{ color: 'var(--text-mid)', fontSize: '13px' }}>
+              <div style={{ marginBottom: '6px', fontSize: '20px' }}>⏳</div>
+              엑셀 파싱 중... 수식 결과값 추출
+            </div>
+          ) : excelResult ? (
+            <div style={{ color: 'var(--green)', fontSize: '13px' }}>
+              <div style={{ marginBottom: '4px' }}>✓ {excelResult.sheetName} 시트 파싱 완료</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-mid)' }}>{excelResult.itemCount}개 항목 · 총점 {excelResult.totalScore}점</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: '28px', marginBottom: '8px' }}>📊</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-mid)', marginBottom: '4px' }}>
+                엑셀 파일을 드래그하거나 클릭하여 업로드
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                수식 포함 파일 지원 · xlsx, xls, xlsm
+              </div>
+            </div>
+          )}
+        </div>
+        {excelError && <div style={{ color: '#e53e3e', fontSize: '12px', marginTop: '8px' }}>{excelError}</div>}
+
+        {/* 엑셀 파싱 결과 — Pillar 점수 비교 */}
+        {excelResult && (
+          <div style={{ marginTop: '16px' }}>
+            <div style={{ ...labelStyle, marginBottom: '10px' }}>PILLAR 점수 비교 (엑셀 vs 시스템)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+              {(['S', 'V', 'D', 'P', 'E'] as const).map(pid => {
+                const xlScore = excelResult.pillarScores[pid] ?? 0;
+                const sysScore = Math.round((pred.pillar_scores[pid] ?? 0) * 100 * 10) / 10;
+                const delta = Math.round((xlScore - sysScore) * 10) / 10;
+                const deltaColor = delta > 0 ? 'var(--green)' : delta < 0 ? '#e53e3e' : 'var(--text-dim)';
+                return (
+                  <div key={pid} style={{
+                    background: 'var(--surface2)', borderRadius: '8px', padding: '12px',
+                    textAlign: 'center', border: '1px solid var(--border)',
+                  }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '6px', fontFamily: 'IBM Plex Mono' }}>{pid}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)', fontFamily: 'IBM Plex Mono' }}>{xlScore}</div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>엑셀</div>
+                    <div style={{ fontSize: '11px', color: deltaColor, marginTop: '4px', fontFamily: 'IBM Plex Mono' }}>
+                      {delta > 0 ? '+' : ''}{delta} vs 시스템
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 세부 항목 테이블 */}
+            {excelResult.items.length > 0 && (
+              <div style={{ marginTop: '14px' }}>
+                <div style={{ ...labelStyle, marginBottom: '8px' }}>세부 항목 분석</div>
+                <div style={{ overflowX: 'auto', maxHeight: '260px', overflowY: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: 'var(--surface2)' }}>
+                      <tr>
+                        <th style={thStyle}>Pillar</th>
+                        <th style={thStyle}>항목</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>가중치</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>평점</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>점수</th>
+                        <th style={thStyle}>현수준 판단 근거</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {excelResult.items.map((item, i) => (
+                        <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--surface2)' }}>
+                          <td style={{ ...tdStyle, fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>{item.pillar}</td>
+                          <td style={tdStyle}>{item.label}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'IBM Plex Mono', color: 'var(--text-mid)' }}>{item.weight}%</td>
+                          <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'IBM Plex Mono' }}>{item.rating}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>
+                            {Math.round(item.score * 10) / 10}
+                          </td>
+                          <td style={{ ...tdStyle, fontSize: '10px', color: 'var(--text-mid)', maxWidth: '240px' }}>{item.rationale || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── 사업 개요 + 경쟁사 ── */}
       <div style={{ display: 'grid', gridTemplateColumns: competitors.length > 0 ? '1fr 1.4fr' : '1fr', gap: '16px' }}>
-        {/* 사업 개요 */}
         <div style={panelStyle}>
           <div style={labelStyle}>사업 개요</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
@@ -3060,7 +3212,6 @@ function BidStageKickoff({
           </div>
         </div>
 
-        {/* 경쟁사 현황 */}
         {competitors.length > 0 && (
           <div style={panelStyle}>
             <div style={labelStyle}>경쟁사 현황</div>
@@ -3084,9 +3235,7 @@ function BidStageKickoff({
                   <tr>
                     <td style={{ ...tdStyle, color: 'var(--text-dim)', fontSize: '11px' }}>비고</td>
                     {competitors.map((c: { name: string; notes?: string }) => (
-                      <td key={c.name} style={{ ...tdStyle, fontSize: '11px', color: 'var(--text-mid)' }}>
-                        {c.notes ?? '—'}
-                      </td>
+                      <td key={c.name} style={{ ...tdStyle, fontSize: '11px', color: 'var(--text-mid)' }}>{c.notes ?? '—'}</td>
                     ))}
                   </tr>
                 </tbody>
@@ -3096,10 +3245,9 @@ function BidStageKickoff({
         )}
       </div>
 
-      {/* 섹션 B: Win Ratio 흐름도 + Pillar 점수 */}
+      {/* ── Win Ratio 흐름도 + Pillar 점수 ── */}
       <div style={panelStyle}>
         <div style={labelStyle}>WIN RATIO 제고 추진</div>
-        {/* 5단계 흐름도 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '20px', flexWrap: 'wrap' }}>
           {(['VDC-A', '제안 Kick-Off', '수주전략 리뷰', 'VDC-B', '수/실주 보고'] as const).map((label, i) => {
             const active = label === '제안 Kick-Off';
@@ -3118,25 +3266,29 @@ function BidStageKickoff({
             );
           })}
         </div>
-        {/* Pillar 점수표 */}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               <th style={thStyle}>영역</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>평가 점수</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>시스템 점수</th>
+              {excelResult && <th style={{ ...thStyle, textAlign: 'right' }}>엑셀 점수</th>}
               <th style={thStyle}>Weak Point</th>
             </tr>
           </thead>
           <tbody>
             {topWeakByPillar.map(({ pid, label }) => {
-              const ps = Math.round((pred.pillar_scores[pid] ?? 0) * 100 * 10) / 10;
-              const color = ps >= 65 ? 'var(--green)' : ps >= 50 ? 'var(--brand)' : '#e53e3e';
+              const sysScore = Math.round((pred.pillar_scores[pid] ?? 0) * 100 * 10) / 10;
+              const xlScore = excelResult?.pillarScores[pid];
+              const color = sysScore >= 65 ? 'var(--green)' : sysScore >= 50 ? 'var(--brand)' : '#e53e3e';
               return (
                 <tr key={pid}>
                   <td style={tdStyle}>{PILLAR_LABEL_KO[pid]}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'IBM Plex Mono', fontWeight: 700, color }}>
-                    {ps.toFixed(1)}
-                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'IBM Plex Mono', fontWeight: 700, color }}>{sysScore.toFixed(1)}</td>
+                  {excelResult && (
+                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'IBM Plex Mono', fontWeight: 700, color: 'var(--brand)' }}>
+                      {xlScore?.toFixed(1) ?? '—'}
+                    </td>
+                  )}
                   <td style={{ ...tdStyle, color: 'var(--text-mid)', fontSize: '11px' }}>{label}</td>
                 </tr>
               );
@@ -3145,19 +3297,17 @@ function BidStageKickoff({
         </table>
       </div>
 
-      {/* 섹션 C: Pillar별 Action Item 표 */}
+      {/* ── Action Item 표 (현수준 판단 근거 포함) ── */}
       <div style={panelStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div style={labelStyle}>WEAK POINT별 개선방안 / ACTION ITEM</div>
           <button
-            onClick={handleGenerateNarrative}
-            disabled={generating}
+            onClick={handleGenerateNarrative} disabled={generating}
             style={{
               padding: '6px 16px', borderRadius: '4px', border: 'none', cursor: generating ? 'default' : 'pointer',
               background: generating ? 'var(--surface2)' : '#1a1a1a',
               color: generating ? 'var(--text-dim)' : '#fff',
               fontSize: '11px', fontFamily: 'IBM Plex Mono', letterSpacing: '0.3px',
-              transition: 'background 0.15s',
             }}
           >
             {generating ? '생성 중...' : '✦ AI 현수준 자동 생성'}
@@ -3169,7 +3319,7 @@ function BidStageKickoff({
               <tr>
                 <th style={{ ...thStyle, minWidth: '90px' }}>Pillar</th>
                 <th style={{ ...thStyle, minWidth: '110px' }}>Weak Point</th>
-                <th style={{ ...thStyle, minWidth: '200px' }}>현수준 (제안 Kick-Off 단계)</th>
+                <th style={{ ...thStyle, minWidth: '220px' }}>현수준 판단 근거</th>
                 <th style={{ ...thStyle, minWidth: '200px' }}>개선방안 / Action Item</th>
                 <th style={{ ...thStyle, minWidth: '80px' }}>담당 부서</th>
               </tr>
@@ -3182,6 +3332,7 @@ function BidStageKickoff({
                 const existingRationale = deal.pillar_rationale?.[pid];
                 const displayNarrative = narrative || (typeof existingRationale === 'string' ? existingRationale : existingRationale?.reason ?? '');
                 const rows = Math.max(weakList.length, 1);
+
                 return weakList.length > 0 ? weakList.map((w, wi) => (
                   <tr key={`${pid}-${wi}`}>
                     {wi === 0 && (
@@ -3194,7 +3345,7 @@ function BidStageKickoff({
                       <td style={{ ...tdStyle, color: 'var(--text-mid)', fontSize: '11px', lineHeight: 1.6 }} rowSpan={rows}>
                         {displayNarrative || (
                           <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                            AI 생성 버튼을 눌러 자동 생성
+                            엑셀 업로드 또는 AI 생성 버튼 클릭
                           </span>
                         )}
                       </td>
@@ -3203,8 +3354,7 @@ function BidStageKickoff({
                       <td style={{ ...tdStyle, fontSize: '11px', lineHeight: 1.6 }} rowSpan={rows}>
                         {move ? move.label : '—'}
                         {move && move.delta_pp > 0 && (
-                          <span style={{ display: 'inline-block', marginLeft: '6px', fontSize: '10px',
-                            color: 'var(--brand)', fontFamily: 'IBM Plex Mono' }}>
+                          <span style={{ display: 'inline-block', marginLeft: '6px', fontSize: '10px', color: 'var(--brand)', fontFamily: 'IBM Plex Mono' }}>
                             +{move.delta_pp.toFixed(1)}pp
                           </span>
                         )}
@@ -3222,7 +3372,7 @@ function BidStageKickoff({
                     <td style={{ ...tdStyle, color: 'var(--text-dim)' }}>—</td>
                     <td style={tdStyle}>
                       {displayNarrative || (
-                        <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>AI 생성 버튼을 눌러 자동 생성</span>
+                        <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>엑셀 업로드 또는 AI 생성 버튼 클릭</span>
                       )}
                     </td>
                     <td style={{ ...tdStyle, fontSize: '11px' }}>{move ? move.label : '—'}</td>
