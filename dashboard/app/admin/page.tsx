@@ -9,7 +9,7 @@ import EnsembleAnalysisTab from '@/components/EnsembleAnalysisTab';
 import PortfolioTab from '@/components/PortfolioTab';
 import ScenarioCompare from '@/components/ScenarioCompare';
 
-type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit' | 'analyze';
+type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit' | 'analyze' | 'signal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -109,6 +109,7 @@ export default function AdminPage() {
     { id: 'vote_analysis', label: '투표 분석' },
     { id: 'manual_edit', label: '수동 편집' },
     { id: 'analyze', label: '분석' },
+    { id: 'signal', label: '시그널 입력' },
   ];
 
   return (
@@ -145,6 +146,7 @@ export default function AdminPage() {
         {tab === 'vote_analysis' && <VoteAnalysisTab />}
         {tab === 'manual_edit' && <ManualEditTab />}
         {tab === 'analyze' && <AnalyzeTab />}
+        {tab === 'signal' && <SignalInputTab />}
       </main>
     </div>
   );
@@ -2395,6 +2397,210 @@ function LoadingText() {
   return (
     <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: 'var(--text-dim)', padding: '40px', textAlign: 'center' }}>
       LOADING...
+    </div>
+  );
+}
+
+// ─── Signal Input Tab ─────────────────────────────────────────────────────────
+
+const SIGNAL_SUB_FACTORS = [
+  { id: 's_key_man_contact',      pillar: 'S', label: 'Key Man 접촉',      weight: 40 },
+  { id: 's_evaluator_rfp',        pillar: 'S', label: '평가자·RFP 파악',    weight: 40 },
+  { id: 's_poc_proposal',         pillar: 'S', label: 'PoC·제안 기회',      weight: 20 },
+  { id: 'v_needs_painpoint',      pillar: 'V', label: '니즈·Pain Point',    weight: 40 },
+  { id: 'v_value_proposition',    pillar: 'V', label: '가치 제안',           weight: 40 },
+  { id: 'v_presentation',         pillar: 'V', label: 'C-Level 발표',       weight: 20 },
+  { id: 'd_competitive_strategy', pillar: 'D', label: '차별화 전략',        weight: 40 },
+  { id: 'd_tech_reference',       pillar: 'D', label: '기술·레퍼런스',       weight: 40 },
+  { id: 'd_partner',              pillar: 'D', label: '파트너·컨소시엄',     weight: 20 },
+  { id: 'p_budget_fit',           pillar: 'P', label: '예산 적합성',         weight: 30 },
+  { id: 'p_price_competition',    pillar: 'P', label: '경쟁 가격 우위',      weight: 40 },
+  { id: 'p_cost_value',           pillar: 'P', label: 'ROI·TCO',            weight: 30 },
+  { id: 'e_track_record',         pillar: 'E', label: '수주·이행 실적',      weight: 40 },
+  { id: 'e_risk_management',      pillar: 'E', label: '리스크 관리',          weight: 40 },
+  { id: 'e_execution_team',       pillar: 'E', label: '전담팀·PM',            weight: 20 },
+];
+
+const SIGNAL_PILLAR_KO: Record<string, string> = {
+  S: '사전영업', V: 'Value Impact', D: '차별화', P: '가격경쟁력', E: 'Delivery',
+};
+
+interface SignalEntry { rating: number; rationale: string; }
+
+function SignalInputTab() {
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [selectedDeal, setSelectedDeal] = useState('');
+  const [entries, setEntries] = useState<Record<string, SignalEntry>>(() =>
+    Object.fromEntries(SIGNAL_SUB_FACTORS.map(f => [f.id, { rating: 2, rationale: '' }]))
+  );
+  const [saving, setSaving] = useState(false);
+  const [signalLink, setSignalLink] = useState('');
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/deals').then(r => r.json()).then(d => setDeals(Array.isArray(d) ? d : []));
+  }, []);
+
+  const setEntry = (id: string, field: keyof SignalEntry, value: string | number) => {
+    setEntries(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+  };
+
+  // Pillar 점수 계산 (0~100)
+  const calcPillarScores = () => {
+    const scores: Record<string, number> = {};
+    for (const pid of ['S', 'V', 'D', 'P', 'E']) {
+      const items = SIGNAL_SUB_FACTORS.filter(f => f.pillar === pid);
+      const raw = items.reduce((s, f) => s + (entries[f.id]?.rating ?? 2) * f.weight / 100, 0);
+      scores[pid] = Math.round(raw / 3 * 100 * 10) / 10;
+    }
+    return scores;
+  };
+
+  const buildExcelData = () => {
+    const pillarScores = calcPillarScores();
+    const pillarRationale: Record<string, string> = {};
+    for (const pid of ['S', 'V', 'D', 'P', 'E']) {
+      const texts = SIGNAL_SUB_FACTORS.filter(f => f.pillar === pid)
+        .map(f => entries[f.id]?.rationale).filter(Boolean);
+      pillarRationale[pid] = texts.slice(0, 2).join(' / ');
+    }
+    const items = SIGNAL_SUB_FACTORS.map(f => ({
+      pillar: f.pillar,
+      label: f.label,
+      weight: f.weight,
+      rating: entries[f.id]?.rating ?? 2,
+      score: Math.round((entries[f.id]?.rating ?? 2) * f.weight / 100 * 10) / 10,
+      rationale: entries[f.id]?.rationale ?? '',
+    }));
+    const totalScore = Math.round(Object.values(pillarScores).reduce((s, v) => s + v, 0) / 5 * 10) / 10;
+    return { pillarScores, pillarRationale, items, totalScore, itemCount: items.length, source: 'manual' as const };
+  };
+
+  const handleDownloadExcel = async () => {
+    // 엑셀 다운로드: 템플릿 API에 데이터 넣어서 생성
+    const data = buildExcelData();
+    const res = await fetch('/api/excel-export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries, dealName: deals.find(d => String(d.id) === selectedDeal)?.client_name }),
+    });
+    if (!res.ok) { setMsg('엑셀 생성 실패'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'signal_assessment.xlsx'; a.click();
+    URL.revokeObjectURL(url);
+    void data;
+  };
+
+  const handleGenerateLink = async () => {
+    setSaving(true);
+    const deal = deals.find(d => String(d.id) === selectedDeal);
+    const data = buildExcelData();
+    const res = await fetch('/api/signal-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dealId: selectedDeal ? Number(selectedDeal) : null, dealName: deal?.client_name, data }),
+    });
+    const json = await res.json();
+    if (json.url) {
+      const full = `${window.location.origin}${json.url}`;
+      setSignalLink(full);
+      navigator.clipboard.writeText(full);
+      setMsg('링크 복사됨!');
+      setTimeout(() => setMsg(''), 2000);
+    }
+    setSaving(false);
+  };
+
+  const ratingColor = (r: number) => r === 3 ? '#22c55e' : r === 2 ? '#f59e0b' : '#ef4444';
+  const pillarScores = calcPillarScores();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '800px' }}>
+      <div style={S.card}>
+        <div style={{ ...S.mono, marginBottom: '16px' }}>시그널 입력 → 공유 링크 / 엑셀 생성</div>
+
+        {/* 딜 선택 */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ ...S.mono, fontSize: '11px', color: 'var(--text-dim)', display: 'block', marginBottom: '6px' }}>딜 선택 (선택사항)</label>
+          <select value={selectedDeal} onChange={e => setSelectedDeal(e.target.value)} style={{ ...S.input, maxWidth: '320px' }}>
+            <option value="">딜 없이 생성</option>
+            {deals.map(d => <option key={d.id} value={d.id}>{d.client_name}</option>)}
+          </select>
+        </div>
+
+        {/* Pillar별 총점 미리보기 */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '20px' }}>
+          {(['S', 'V', 'D', 'P', 'E'] as const).map(pid => (
+            <div key={pid} style={{ background: 'var(--surface2)', borderRadius: '8px', padding: '10px 14px', textAlign: 'center', minWidth: '70px' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>{pid}</div>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: pillarScores[pid] >= 70 ? '#22c55e' : pillarScores[pid] >= 50 ? '#f59e0b' : '#ef4444', fontFamily: 'IBM Plex Mono' }}>
+                {pillarScores[pid]}
+              </div>
+              <div style={{ fontSize: '9px', color: 'var(--text-dim)' }}>{SIGNAL_PILLAR_KO[pid]}</div>
+            </div>
+          ))}
+          <div style={{ background: 'var(--brand-dim)', borderRadius: '8px', padding: '10px 14px', textAlign: 'center', minWidth: '70px', border: '1px solid var(--brand)' }}>
+            <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>총점</div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--brand)', fontFamily: 'IBM Plex Mono' }}>
+              {Math.round(Object.values(pillarScores).reduce((s, v) => s + v, 0) / 5 * 10) / 10}
+            </div>
+          </div>
+        </div>
+
+        {/* Sub-Factor 입력 */}
+        {(['S', 'V', 'D', 'P', 'E'] as const).map(pid => (
+          <div key={pid} style={{ marginBottom: '20px' }}>
+            <div style={{ ...S.mono, fontSize: '11px', color: 'var(--text-dim)', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid var(--border)' }}>
+              {pid} — {SIGNAL_PILLAR_KO[pid]}
+            </div>
+            {SIGNAL_SUB_FACTORS.filter(f => f.pillar === pid).map(f => (
+              <div key={f.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '10px' }}>
+                {/* 평점 버튼 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0 }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginBottom: '2px' }}>{f.label} ({f.weight}%)</div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[1, 2, 3].map(r => (
+                      <button key={r} onClick={() => setEntry(f.id, 'rating', r)} style={{
+                        width: '32px', height: '32px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700,
+                        background: entries[f.id]?.rating === r ? ratingColor(r) : 'var(--surface2)',
+                        color: entries[f.id]?.rating === r ? '#fff' : 'var(--text-dim)',
+                      }}>
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* 현수준 근거 */}
+                <textarea
+                  value={entries[f.id]?.rationale ?? ''}
+                  onChange={e => setEntry(f.id, 'rationale', e.target.value)}
+                  placeholder="현수준 판단 근거..."
+                  rows={2}
+                  style={{ ...S.input, flex: 1, resize: 'vertical', fontSize: '12px', lineHeight: 1.5 }}
+                />
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {/* 액션 버튼 */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+          <button onClick={handleGenerateLink} disabled={saving} style={{ ...S.btn('var(--brand)'), color: '#fff', opacity: saving ? 0.6 : 1 }}>
+            {saving ? '생성 중...' : '🔗 공유 링크 생성'}
+          </button>
+          <button onClick={handleDownloadExcel} style={{ ...S.btn('var(--surface2)') }}>
+            📥 엑셀 다운로드
+          </button>
+          {msg && <span style={{ fontSize: '12px', color: 'var(--green)', fontFamily: 'IBM Plex Mono' }}>{msg}</span>}
+        </div>
+
+        {signalLink && (
+          <div style={{ marginTop: '12px', padding: '10px 14px', background: 'var(--surface2)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-mid)', wordBreak: 'break-all', fontFamily: 'IBM Plex Mono' }}>
+            {signalLink}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
