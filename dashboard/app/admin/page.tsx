@@ -2477,7 +2477,6 @@ function SignalInputTab() {
   };
 
   const handleDownloadExcel = async () => {
-    // 엑셀 다운로드: 템플릿 API에 데이터 넣어서 생성
     const data = buildExcelData();
     const res = await fetch('/api/excel-export', {
       method: 'POST',
@@ -2490,6 +2489,33 @@ function SignalInputTab() {
     const a = document.createElement('a'); a.href = url; a.download = 'signal_assessment.xlsx'; a.click();
     URL.revokeObjectURL(url);
     void data;
+  };
+
+  const handleDownloadPPT = async () => {
+    const deal = deals.find(d => String(d.id) === selectedDeal);
+    const data = buildExcelData();
+    setSaving(true);
+    const res = await fetch('/api/ppt-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dealName: deal?.client_name,
+        pillarScores: data.pillarScores,
+        pillarRationale: data.pillarRationale,
+        weaknesses: data.items.map(i => ({ label: i.label, pillar: i.pillar, score: i.rating })),
+        nextMoves: [],
+        deal: null,
+        totalScore: data.totalScore,
+        items: data.items,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) { setMsg('PPT 생성 실패'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const filename = deal ? `${deal.client_name}_전략장표.pptx` : '전략장표.pptx';
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleGenerateLink = async () => {
@@ -2591,6 +2617,9 @@ function SignalInputTab() {
           </button>
           <button onClick={handleDownloadExcel} style={{ ...S.btn('var(--surface2)') }}>
             📥 엑셀 다운로드
+          </button>
+          <button onClick={handleDownloadPPT} disabled={saving} style={{ ...S.btn('var(--surface2)'), opacity: saving ? 0.6 : 1 }}>
+            📊 전략 장표 생성
           </button>
           {msg && <span style={{ fontSize: '12px', color: 'var(--green)', fontFamily: 'IBM Plex Mono' }}>{msg}</span>}
         </div>
