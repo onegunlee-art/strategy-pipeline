@@ -9,7 +9,7 @@ import EnsembleAnalysisTab from '@/components/EnsembleAnalysisTab';
 import PortfolioTab from '@/components/PortfolioTab';
 import ScenarioCompare from '@/components/ScenarioCompare';
 
-type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit' | 'analyze' | 'signal';
+type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit' | 'analyze' | 'signal' | 'loss_report';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +110,7 @@ export default function AdminPage() {
     { id: 'manual_edit', label: '수동 편집' },
     { id: 'analyze', label: '분석' },
     { id: 'signal', label: '시그널 입력' },
+    { id: 'loss_report', label: '실주 보고' },
   ];
 
   return (
@@ -147,6 +148,7 @@ export default function AdminPage() {
         {tab === 'manual_edit' && <ManualEditTab />}
         {tab === 'analyze' && <AnalyzeTab />}
         {tab === 'signal' && <SignalInputTab />}
+        {tab === 'loss_report' && <LossReportTab />}
       </main>
     </div>
   );
@@ -2629,6 +2631,199 @@ function SignalInputTab() {
             {signalLink}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Loss Report Tab ──────────────────────────────────────────────────────────
+
+const HANA_PREFILL = {
+  dealName: '하나은행 비정형 데이터 플랫폼 구축사업',
+  dealSize: '1,233억원',
+  duration: '38개월 (계약체결일~2029.8.31)',
+  evalCriteria: '기술 90% + 가격 10% (기술 중요도 高)',
+  winner: 'LG CNS',
+  winnerNotes: 'ISP 컨설팅 수행사로 사업 이해도 高 / 기존 영상관리시스템(가이아) 구축 경험 / 발주처 사업 6건 모두 수주로 고객 우호도 高 / 그룹 차원의 AI 경쟁력(엑사원) 우수 → 제안 Kick-Off 당시 당사 전반적으로 경쟁 열위 판단',
+  ourScore: '96.2857',
+  competitorScore: '94.8943',
+  ourTechScore: '86.2857',
+  ourPriceScore: '10',
+  // Pillar Before(수주전략 보고) → After(결과 발표)
+  pillarBefore: { S: 53.3, V: 57.6, D: 68.5, P: 52.8, E: 80.7 },
+  pillarAfter:  { S: 73.3, V: 93.9, D: 88.0, P: 75.0, E: 86.0 },
+  totalBefore: 62.6,
+  totalAfter: 83.2,
+  // Action Items per pillar
+  actions: {
+    S: '발주처 특성상 사전영업이 어려운 상황이므로 초기 점수는 낮았으나, 다양한 채널을 활용한 지속적인 고객 접촉을 통해 주요 니즈 및 관심사항을 파악하고 제안팀 전달 및 제안서에 반영\n(ex. AI Agent 활용 방안, 데이터센터 자율운영을 위한 로봇 적용, NGA/AWS 등 글로벌 벤치마킹, 서울 센터에 대한 리모델링 니즈 등)',
+    V: '100G 적용 환경에 대해 구체적으로 시뮬레이션하고, 고객 Value 관점에서 강조 (VDI 업무환경, 데이터이관 등)\nAIOps 적용 시 기대효과를 당사 실 적용 사례 기반 제시\n이외 총 14개의 추가/상향 제안 및 고객 Value Proposition 제시',
+    D: '경쟁사 예상 전략 분석 및 당사 차별화 전략 구체화\n경쟁사 전략(ISP 경험, 기존 구축 파트너사 활용, 기존과 동일한 제품 사용)과 동등 수준 이상의 전략 제시\nISP 경험 부족에 대응하여 KT sat의 위성사업 역량 강조 및 제안서 전반에 역량 활용 방안 제시\n당사 핵심 보유역량(100G, AIOps, DC구축/운영, 양자보안 등)에 대해 발주처가 충분히 인지할 수 있도록 강조',
+    P: '전사 전략사업으로, 전략적 가격정책 수립 및 유관부서와의 컨센서스 형성을 통한 의사결정\n최종 평가결과, 경쟁사 대비 가격경쟁력 우위 확인\n사업 수행 기간 동안 100G에 대한 무상 제공 정책 유효',
+    E: '당초 대비 큰 변동은 없으나, KT sat의 위성사업 역량/방법론 및 보유 Asset 활용 강조\n(WTA Tier 4 등급 강조)',
+  },
+  lossReason: '최종 수주 실패. 우선협상대상자 선정 후 계약 협상 단계에서 이슈 발생. 경쟁사(LG CNS)의 기존 고객 관계 및 사업 이해도가 의사결정에 영향을 미친 것으로 추정.',
+  lessons: [
+    '사전영업 단계(VDC-A 이전)부터 핵심 의사결정권자와의 관계 구축 필요',
+    'ISP 경험 부재에 대한 선제적 극복 전략 수립 및 차별화 논리 강화',
+    '경쟁사 대비 고객 우호도 확보를 위한 장기적 관계 관리 체계 필요',
+  ],
+};
+
+const LOSS_PILLAR_KO: Record<string, string> = {
+  S: '사전영업 수준', V: 'Value Impact', D: '차별화', P: '가격경쟁력', E: 'Delivery 경쟁력',
+};
+
+function LossReportTab() {
+  const [form, setForm] = useState(HANA_PREFILL);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const set = (key: string, val: string) => setForm(prev => ({ ...prev, [key]: val }));
+  const setAction = (pid: string, val: string) =>
+    setForm(prev => ({ ...prev, actions: { ...prev.actions, [pid]: val } }));
+  const setLesson = (i: number, val: string) =>
+    setForm(prev => { const l = [...prev.lessons]; l[i] = val; return { ...prev, lessons: l }; });
+
+  const handleGenerate = async () => {
+    setSaving(true);
+    const res = await fetch('/api/ppt-loss-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    });
+    setSaving(false);
+    if (!res.ok) { setMsg('생성 실패'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${form.dealName}_실주보고.pptx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMsg('다운로드 완료');
+    setTimeout(() => setMsg(''), 2000);
+  };
+
+  const inp = (label: string, key: string, rows?: number) => (
+    <div style={{ marginBottom: '12px' }}>
+      <label style={{ ...S.mono, fontSize: '10px', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>{label}</label>
+      {rows ? (
+        <textarea value={(form as Record<string, unknown>)[key] as string} onChange={e => set(key, e.target.value)}
+          rows={rows} style={{ ...S.input, width: '100%', resize: 'vertical', fontSize: '12px', lineHeight: 1.6 }} />
+      ) : (
+        <input value={(form as Record<string, unknown>)[key] as string} onChange={e => set(key, e.target.value)}
+          style={{ ...S.input, width: '100%', fontSize: '13px' }} />
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '860px' }}>
+      <div style={S.card}>
+        <div style={{ ...S.mono, marginBottom: '4px' }}>실주 보고서 생성</div>
+        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '20px' }}>하나은행 프로젝트 데이터가 프리필됩니다. 수정 후 PPTX 생성.</div>
+
+        {/* 사업 기본 정보 */}
+        <div style={{ ...S.mono, fontSize: '11px', color: 'var(--text-dim)', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid var(--border)' }}>A. 사업 기본 정보</div>
+        {inp('사업명', 'dealName')}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          {inp('매출 금액', 'dealSize')}
+          {inp('사업 기간', 'duration')}
+        </div>
+        {inp('평가 방법', 'evalCriteria')}
+
+        {/* 경쟁 결과 */}
+        <div style={{ ...S.mono, fontSize: '11px', color: 'var(--text-dim)', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid var(--border)', marginTop: '8px' }}>B. 경쟁 결과</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px' }}>
+          {inp('낙찰 경쟁사', 'winner')}
+          {inp('당사 기술점수', 'ourTechScore')}
+          {inp('당사 가격점수', 'ourPriceScore')}
+          {inp('당사 총점', 'ourScore')}
+        </div>
+        {inp('경쟁사 강점 (한 줄 이내)', 'winnerNotes', 3)}
+
+        {/* Pillar 점수 */}
+        <div style={{ ...S.mono, fontSize: '11px', color: 'var(--text-dim)', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid var(--border)', marginTop: '8px' }}>C. Win Ratio 점수 (수주전략 보고 → 결과 발표)</div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                {['영역', '수주전략 보고', '결과 발표', '증감'].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', textAlign: 'center', fontFamily: 'IBM Plex Mono', fontSize: '11px' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(['S', 'V', 'D', 'P', 'E'] as const).map(pid => {
+                const before = form.pillarBefore[pid];
+                const after = form.pillarAfter[pid];
+                return (
+                  <tr key={pid}>
+                    <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>{LOSS_PILLAR_KO[pid]}</td>
+                    <td style={{ padding: '6px', borderBottom: '1px solid var(--border)', textAlign: 'center' }}>
+                      <input type="number" value={before} onChange={e => setForm(p => ({ ...p, pillarBefore: { ...p.pillarBefore, [pid]: Number(e.target.value) } }))}
+                        style={{ ...S.input, width: '70px', textAlign: 'center', fontSize: '13px' }} />
+                    </td>
+                    <td style={{ padding: '6px', borderBottom: '1px solid var(--border)', textAlign: 'center' }}>
+                      <input type="number" value={after} onChange={e => setForm(p => ({ ...p, pillarAfter: { ...p.pillarAfter, [pid]: Number(e.target.value) } }))}
+                        style={{ ...S.input, width: '70px', textAlign: 'center', fontSize: '13px' }} />
+                    </td>
+                    <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', textAlign: 'center', color: (after - before) >= 0 ? 'var(--green)' : '#ef4444', fontWeight: 700 }}>
+                      {(after - before) >= 0 ? '+' : ''}{(after - before).toFixed(1)}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr>
+                <td style={{ padding: '8px 10px', fontWeight: 700, fontFamily: 'IBM Plex Mono' }}>총점</td>
+                <td style={{ padding: '6px', textAlign: 'center' }}>
+                  <input type="number" value={form.totalBefore} onChange={e => setForm(p => ({ ...p, totalBefore: Number(e.target.value) }))}
+                    style={{ ...S.input, width: '70px', textAlign: 'center', fontSize: '13px' }} />
+                </td>
+                <td style={{ padding: '6px', textAlign: 'center' }}>
+                  <input type="number" value={form.totalAfter} onChange={e => setForm(p => ({ ...p, totalAfter: Number(e.target.value) }))}
+                    style={{ ...S.input, width: '70px', textAlign: 'center', fontSize: '13px' }} />
+                </td>
+                <td style={{ padding: '6px 10px', textAlign: 'center', color: 'var(--green)', fontWeight: 700 }}>
+                  +{(form.totalAfter - form.totalBefore).toFixed(1)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* 영역별 Action Item */}
+        <div style={{ ...S.mono, fontSize: '11px', color: 'var(--text-dim)', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid var(--border)', marginTop: '16px' }}>D. 영역별 개선방안 / Action Item</div>
+        {(['S', 'V', 'D', 'P', 'E'] as const).map(pid => (
+          <div key={pid} style={{ marginBottom: '10px' }}>
+            <label style={{ ...S.mono, fontSize: '10px', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+              {pid} — {LOSS_PILLAR_KO[pid]} ({form.pillarBefore[pid]} → {form.pillarAfter[pid]})
+            </label>
+            <textarea value={form.actions[pid]} onChange={e => setAction(pid, e.target.value)}
+              rows={3} style={{ ...S.input, width: '100%', resize: 'vertical', fontSize: '12px', lineHeight: 1.6 }} />
+          </div>
+        ))}
+
+        {/* 실주 원인 & 교훈 */}
+        <div style={{ ...S.mono, fontSize: '11px', color: 'var(--text-dim)', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid var(--border)', marginTop: '8px' }}>E. 실주 원인 & 교훈</div>
+        {inp('실주 원인 (핵심 서사)', 'lossReason', 3)}
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ marginBottom: '8px' }}>
+            <label style={{ ...S.mono, fontSize: '10px', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>교훈 {i + 1}</label>
+            <input value={form.lessons[i] ?? ''} onChange={e => setLesson(i, e.target.value)}
+              style={{ ...S.input, width: '100%', fontSize: '13px' }} />
+          </div>
+        ))}
+
+        {/* 생성 버튼 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+          <button onClick={handleGenerate} disabled={saving}
+            style={{ ...S.btn('var(--brand)'), color: '#fff', opacity: saving ? 0.6 : 1, fontSize: '13px', padding: '10px 24px' }}>
+            {saving ? '생성 중...' : '📊 실주 보고서 PPTX 생성'}
+          </button>
+          {msg && <span style={{ fontSize: '12px', color: 'var(--green)', fontFamily: 'IBM Plex Mono' }}>{msg}</span>}
+        </div>
       </div>
     </div>
   );
