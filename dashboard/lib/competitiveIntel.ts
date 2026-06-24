@@ -193,7 +193,7 @@ export async function fetchGeminiNews(
 기사는 최대 8건만 포함하고, 반드시 실제 언론에 보도된 것만 포함하세요.`;
 
   const errors: string[] = [];
-  let articles: IntelArticle[] = [];
+  const articles: IntelArticle[] = [];
 
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_KEY);
