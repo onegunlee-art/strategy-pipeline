@@ -81,7 +81,7 @@ function buildPPT(body: ExportBody): PptxGenJS {
     s.addText('경쟁사 뉴스 요약', { x: 0.4, y: 0.18, w: 12, h: 0.5, fontSize: 22, color: TEXT, fontFace: 'Arial', bold: true });
     s.addText('Naver News 최신 수집', { x: 0.4, y: 0.62, w: 12, h: 0.3, fontSize: 12, color: TEXT_DIM, fontFace: 'Arial' });
 
-    const rows: any[][] = [[
+    const rows: PptxGenJS.TableRow[] = [[
       { text: '경쟁사', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
       { text: '날짜', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
       { text: '제목', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
