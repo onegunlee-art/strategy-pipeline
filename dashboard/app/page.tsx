@@ -721,6 +721,13 @@ export default function ExecutiveDashboard() {
               </span>
             )}
             {!isMobile && (
+              <a href="/market-research" style={{
+                fontSize: '11px', color: 'var(--brand)', textDecoration: 'none',
+                letterSpacing: '0.5px', padding: '4px 10px', border: '1px solid var(--brand)',
+                borderRadius: '2px', fontWeight: 600,
+              }}>AI Market Research</a>
+            )}
+            {!isMobile && (
               <a href="/admin" style={{
                 fontSize: '11px', color: 'var(--text-dim)', textDecoration: 'none',
                 letterSpacing: '1px', padding: '4px 10px', border: '1px solid var(--border)',
