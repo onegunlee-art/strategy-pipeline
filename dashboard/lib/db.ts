@@ -574,6 +574,27 @@ async function runInit() {
       data       JSONB NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    -- v2.2: 경쟁사 인텔리전스 기사 수집
+    CREATE TABLE IF NOT EXISTS competitive_intel_articles (
+      id            SERIAL PRIMARY KEY,
+      article_date  DATE,
+      entity_type   TEXT NOT NULL CHECK (entity_type IN ('self','competitor')),
+      entity_name   TEXT NOT NULL,
+      stance        TEXT NOT NULL CHECK (stance IN ('강점','약점')),
+      title         TEXT NOT NULL,
+      keywords      JSONB DEFAULT '[]'::jsonb,
+      content       TEXT,
+      source        TEXT,
+      url           TEXT,
+      attack_points JSONB DEFAULT '[]'::jsonb,
+      strategy_tips JSONB DEFAULT '[]'::jsonb,
+      fetch_source  TEXT DEFAULT 'manual',
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_cia_url ON competitive_intel_articles(entity_name, url) WHERE url IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_cia_entity ON competitive_intel_articles(entity_name, article_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_cia_stance  ON competitive_intel_articles(stance);
   `);
 
   // v1.8: Judgment DB 데모 시드 (과거 예측 3개)

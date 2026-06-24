@@ -9,7 +9,7 @@ import EnsembleAnalysisTab from '@/components/EnsembleAnalysisTab';
 import PortfolioTab from '@/components/PortfolioTab';
 import ScenarioCompare from '@/components/ScenarioCompare';
 
-type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit' | 'analyze' | 'signal' | 'loss_report';
+type AdminTab = 'labels' | 'deals' | 'voters' | 'weights' | 'links' | 'import' | 'competitors' | 'rfp' | 'vote_analysis' | 'manual_edit' | 'analyze' | 'signal' | 'loss_report' | 'competitive_intel';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +111,7 @@ export default function AdminPage() {
     { id: 'analyze', label: '분석' },
     { id: 'signal', label: '시그널 입력' },
     { id: 'loss_report', label: '실주 보고' },
+    { id: 'competitive_intel', label: '경쟁 인텔' },
   ];
 
   return (
@@ -149,6 +150,7 @@ export default function AdminPage() {
         {tab === 'analyze' && <AnalyzeTab />}
         {tab === 'signal' && <SignalInputTab />}
         {tab === 'loss_report' && <LossReportTab />}
+        {tab === 'competitive_intel' && <CompetitiveIntelTab />}
       </main>
     </div>
   );
@@ -2823,6 +2825,399 @@ function LossReportTab() {
             {saving ? '생성 중...' : '📊 실주 보고서 PPTX 생성'}
           </button>
           {msg && <span style={{ fontSize: '12px', color: 'var(--green)', fontFamily: 'IBM Plex Mono' }}>{msg}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Competitive Intel Tab ────────────────────────────────────────────────────
+
+interface CIArticle {
+  id: number;
+  article_date: string | null;
+  entity_type: 'self' | 'competitor';
+  entity_name: string;
+  stance: '강점' | '약점';
+  title: string;
+  keywords: string[];
+  content: string | null;
+  source: string | null;
+  url: string | null;
+  attack_points: string[];
+  strategy_tips: string[];
+  fetch_source: string;
+  created_at: string;
+}
+
+interface StrategyOutput {
+  attack_points: string[];
+  defense_tips: string[];
+  summary: string;
+}
+
+function CompetitiveIntelTab() {
+  const [articles, setArticles] = useState<CIArticle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [strategy, setStrategy] = useState<StrategyOutput | null>(null);
+  const [filterEntity, setFilterEntity] = useState('');
+  const [filterStance, setFilterStance] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [fetchMsg, setFetchMsg] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  const blankForm = {
+    article_date: '', entity_type: 'competitor' as 'self' | 'competitor',
+    entity_name: '', stance: '강점' as '강점' | '약점',
+    title: '', keywords: '', content: '', source: '', url: '',
+  };
+  const [form, setForm] = useState(blankForm);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (filterEntity) params.set('entity_name', filterEntity);
+    if (filterStance) params.set('stance', filterStance);
+    if (filterType) params.set('entity_type', filterType);
+    const res = await fetch(`/api/admin/competitive-intel?${params}`, { credentials: 'include' });
+    const data = await res.json();
+    setArticles(Array.isArray(data.articles) ? data.articles : []);
+    setLoading(false);
+  }, [filterEntity, filterStance, filterType]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleAutoFetch() {
+    setFetching(true);
+    setFetchMsg('');
+    try {
+      const res = await fetch('/api/admin/competitive-intel/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          entities: [
+            { name: 'KT', type: 'self' },
+            { name: 'LG CNS', type: 'competitor' },
+            { name: 'Samsung SDS', type: 'competitor' },
+            { name: 'SKT', type: 'competitor' },
+          ],
+        }),
+      });
+      const data = await res.json();
+      setFetchMsg(`✓ 수집 완료: 뉴스 ${data.total_saved - data.dart_synced}건 + DART ${data.dart_synced}건 저장`);
+      load();
+    } catch {
+      setFetchMsg('수집 오류 발생');
+    }
+    setFetching(false);
+  }
+
+  async function handleAnalyze() {
+    setAnalyzing(true);
+    try {
+      const res = await fetch('/api/admin/competitive-intel/strategy', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      setStrategy(data.strategy);
+    } catch {
+      setStrategy({ attack_points: ['전략 분석 오류'], defense_tips: [], summary: '' });
+    }
+    setAnalyzing(false);
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm('삭제하시겠습니까?')) return;
+    await fetch(`/api/admin/competitive-intel?id=${id}`, { method: 'DELETE', credentials: 'include' });
+    load();
+  }
+
+  async function handleAddSubmit() {
+    if (!form.entity_name || !form.title) return;
+    await fetch('/api/admin/competitive-intel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        ...form,
+        keywords: form.keywords ? form.keywords.split(',').map(k => k.trim()).filter(Boolean) : [],
+      }),
+    });
+    setForm(blankForm);
+    setShowAddForm(false);
+    load();
+  }
+
+  // 필터된 기사
+  const filtered = articles.filter(a => {
+    if (filterEntity && a.entity_name !== filterEntity) return false;
+    if (filterStance && a.stance !== filterStance) return false;
+    if (filterType && a.entity_type !== filterType) return false;
+    return true;
+  });
+
+  // 고유 회사 목록
+  const entityNames = Array.from(new Set(articles.map(a => a.entity_name)));
+
+  const stanceColor = (s: string) => s === '강점' ? 'var(--green)' : 'var(--red)';
+  const stanceBg = (s: string) => s === '강점' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+
+  if (loading) return <div style={{ padding: '40px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>로딩 중...</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+      {/* 헤더 액션 */}
+      <div style={S.card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ ...S.mono }}>COMPETITIVE INTEL — 자사/경쟁사 보도자료 분석</div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button onClick={handleAutoFetch} disabled={fetching}
+              style={{ ...S.btn('var(--cyan)'), opacity: fetching ? 0.6 : 1 }}>
+              {fetching ? '수집 중...' : '🔄 뉴스 자동 수집'}
+            </button>
+            <button onClick={handleAnalyze} disabled={analyzing}
+              style={{ ...S.btn('var(--brand, #6366f1)'), opacity: analyzing ? 0.6 : 1 }}>
+              {analyzing ? '분석 중...' : '📊 전략 분석'}
+            </button>
+            <button onClick={() => setShowAddForm(v => !v)} style={S.btn('var(--surface2)')}>
+              + 수동 추가
+            </button>
+          </div>
+        </div>
+        {fetchMsg && (
+          <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--green)', fontFamily: 'IBM Plex Mono' }}>
+            {fetchMsg}
+          </div>
+        )}
+      </div>
+
+      {/* 수동 추가 폼 */}
+      {showAddForm && (
+        <div style={{ ...S.card, borderColor: 'var(--cyan)' }}>
+          <div style={{ ...S.mono, marginBottom: '16px' }}>기사 수동 추가</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>날짜</label>
+              <input type="date" value={form.article_date} onChange={e => setForm(f => ({ ...f, article_date: e.target.value }))} style={S.input} />
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>구분</label>
+              <select value={form.entity_type} onChange={e => setForm(f => ({ ...f, entity_type: e.target.value as 'self' | 'competitor' }))} style={S.input}>
+                <option value="self">자사 (KT)</option>
+                <option value="competitor">경쟁사</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>회사명</label>
+              <input value={form.entity_name} onChange={e => setForm(f => ({ ...f, entity_name: e.target.value }))} placeholder="KT / LG CNS / SKT ..." style={S.input} />
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>강점/약점</label>
+              <select value={form.stance} onChange={e => setForm(f => ({ ...f, stance: e.target.value as '강점' | '약점' }))} style={S.input}>
+                <option value="강점">강점</option>
+                <option value="약점">약점</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>신문사</label>
+              <input value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))} placeholder="한국경제 / ETNEWS ..." style={S.input} />
+            </div>
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>핵심 키워드 (쉼표 구분)</label>
+              <input value={form.keywords} onChange={e => setForm(f => ({ ...f, keywords: e.target.value }))} placeholder="AI MOU, 보안, 클라우드" style={S.input} />
+            </div>
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>제목 *</label>
+            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="기사 제목" style={{ ...S.input, width: '100%', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>내용 요약</label>
+            <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} rows={3} placeholder="기사 핵심 내용 요약" style={{ ...S.input, width: '100%', boxSizing: 'border-box', resize: 'vertical' }} />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', display: 'block', marginBottom: '4px' }}>기사 URL</label>
+            <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://..." style={{ ...S.input, width: '100%', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={handleAddSubmit} style={S.btn('var(--green)')}>저장</button>
+            <button onClick={() => setShowAddForm(false)} style={{ ...S.btn('var(--surface2)'), color: 'var(--text-dim)' }}>취소</button>
+          </div>
+        </div>
+      )}
+
+      {/* 전략 분석 결과 */}
+      {strategy && (
+        <div style={{ ...S.card, border: '1px solid var(--cyan)' }}>
+          <div style={{ ...S.mono, marginBottom: '16px', color: 'var(--cyan)' }}>📊 AI 전략 분석 결과</div>
+          {strategy.summary && (
+            <p style={{ fontSize: '13px', color: 'var(--text)', marginBottom: '16px', lineHeight: 1.6 }}>{strategy.summary}</p>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--green)', marginBottom: '8px' }}>⚔ 공격포인트</div>
+              {strategy.attack_points.map((p, i) => (
+                <div key={i} style={{ fontSize: '12px', color: 'var(--text)', padding: '6px 10px', background: 'rgba(34,197,94,0.08)', borderRadius: '6px', marginBottom: '6px', borderLeft: '3px solid var(--green)' }}>
+                  {p}
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--yellow)', marginBottom: '8px' }}>🛡 방어전략</div>
+              {strategy.defense_tips.map((p, i) => (
+                <div key={i} style={{ fontSize: '12px', color: 'var(--text)', padding: '6px 10px', background: 'rgba(245,158,11,0.08)', borderRadius: '6px', marginBottom: '6px', borderLeft: '3px solid var(--yellow)' }}>
+                  {p}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 필터 + 기사 테이블 */}
+      <div style={S.card}>
+        {/* 필터 바 */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ ...S.input, width: 'auto', minWidth: '100px' }}>
+            <option value="">전체 구분</option>
+            <option value="self">자사</option>
+            <option value="competitor">경쟁사</option>
+          </select>
+          <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} style={{ ...S.input, width: 'auto', minWidth: '120px' }}>
+            <option value="">전체 회사</option>
+            {entityNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <select value={filterStance} onChange={e => setFilterStance(e.target.value)} style={{ ...S.input, width: 'auto', minWidth: '100px' }}>
+            <option value="">강점+약점</option>
+            <option value="강점">강점</option>
+            <option value="약점">약점</option>
+          </select>
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono', marginLeft: 'auto' }}>
+            {filtered.length}건
+          </span>
+        </div>
+
+        {/* 기사 테이블 (Excel 레이아웃 재현) */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ ...S.table, minWidth: '900px' }}>
+            <thead>
+              <tr>
+                {['날짜', '구분', '회사', '제목', '키워드', '내용', '출처', '링크', ''].map(h => (
+                  <th key={h} style={S.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={9} style={{ ...S.td, textAlign: 'center', color: 'var(--text-dim)', padding: '40px' }}>
+                    기사가 없습니다. 🔄 뉴스 자동 수집을 실행하거나 + 수동 추가를 사용하세요.
+                  </td>
+                </tr>
+              ) : filtered.map(a => (
+                <>
+                  <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expandedId === a.id ? null : a.id)}>
+                    <td style={{ ...S.td, fontFamily: 'IBM Plex Mono', fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                      {a.article_date ? a.article_date.slice(2, 10).replace(/-/g, '.') : '—'}
+                    </td>
+                    <td style={{ ...S.td, whiteSpace: 'nowrap' }}>
+                      <span style={{
+                        fontSize: '10px', fontFamily: 'IBM Plex Mono', fontWeight: 600,
+                        padding: '2px 6px', borderRadius: '4px',
+                        background: a.entity_type === 'self' ? 'rgba(99,102,241,0.15)' : 'rgba(100,116,139,0.15)',
+                        color: a.entity_type === 'self' ? '#818cf8' : 'var(--text-dim)',
+                      }}>
+                        {a.entity_type === 'self' ? '자사' : '경쟁사'}
+                      </span>
+                      {' '}
+                      <span style={{
+                        fontSize: '10px', fontFamily: 'IBM Plex Mono', fontWeight: 600,
+                        padding: '2px 6px', borderRadius: '4px',
+                        background: stanceBg(a.stance),
+                        color: stanceColor(a.stance),
+                      }}>
+                        {a.stance}
+                      </span>
+                    </td>
+                    <td style={{ ...S.td, fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>{a.entity_name}</td>
+                    <td style={{ ...S.td, fontSize: '12px', maxWidth: '260px' }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</div>
+                    </td>
+                    <td style={{ ...S.td, maxWidth: '160px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                        {(a.keywords ?? []).slice(0, 3).map((k, i) => (
+                          <span key={i} style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '3px', background: 'var(--surface2)', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                            {k}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td style={{ ...S.td, fontSize: '11px', color: 'var(--text-dim)', maxWidth: '180px' }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {a.content ?? '—'}
+                      </div>
+                    </td>
+                    <td style={{ ...S.td, fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{a.source ?? '—'}</td>
+                    <td style={S.td}>
+                      {a.url && !a.url.startsWith('dart:') ? (
+                        <a href={a.url} target="_blank" rel="noopener noreferrer"
+                          style={{ color: 'var(--cyan)', fontSize: '11px', textDecoration: 'none' }}
+                          onClick={e => e.stopPropagation()}>
+                          🔗
+                        </a>
+                      ) : a.url?.startsWith('dart:') ? (
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>DART</span>
+                      ) : '—'}
+                    </td>
+                    <td style={S.td}>
+                      <button onClick={e => { e.stopPropagation(); handleDelete(a.id); }}
+                        style={{ ...S.btn('var(--surface2)'), color: 'var(--text-dim)', padding: '3px 8px', fontSize: '10px' }}>
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedId === a.id && (
+                    <tr key={`${a.id}-detail`}>
+                      <td colSpan={9} style={{ ...S.td, background: 'var(--surface2)', padding: '14px 20px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div>
+                            <div style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--text-dim)', marginBottom: '4px' }}>내용</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.6 }}>{a.content ?? '—'}</div>
+                          </div>
+                          <div>
+                            {a.attack_points?.length > 0 && (
+                              <div style={{ marginBottom: '10px' }}>
+                                <div style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--green)', marginBottom: '4px' }}>⚔ 공격포인트</div>
+                                {a.attack_points.map((p, i) => <div key={i} style={{ fontSize: '11px', color: 'var(--text)', marginBottom: '3px' }}>• {p}</div>)}
+                              </div>
+                            )}
+                            {a.strategy_tips?.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: '11px', fontFamily: 'IBM Plex Mono', color: 'var(--yellow)', marginBottom: '4px' }}>🛡 대응전략</div>
+                                {a.strategy_tips.map((p, i) => <div key={i} style={{ fontSize: '11px', color: 'var(--text)', marginBottom: '3px' }}>• {p}</div>)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'IBM Plex Mono' }}>
+                          출처: {a.fetch_source} · 등록: {new Date(a.created_at).toLocaleDateString('ko-KR')}
+                          {a.url && !a.url.startsWith('dart:') && (
+                            <> · <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--cyan)' }}>{a.url.slice(0, 60)}...</a></>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
