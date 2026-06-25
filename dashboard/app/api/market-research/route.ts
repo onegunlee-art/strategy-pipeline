@@ -71,7 +71,7 @@ ${newsSection}
       "needs": ["고객 핵심 니즈1", "니즈2", "니즈3"],
       "eval_criteria": ["평가기준1", "평가기준2", "평가기준3"]
     },
-    "competitors": [${competitors.map(c => `{"name":"${c}","strategy":"예상 전략","strengths":["강점1","강점2"],"weaknesses":["약점1","약점2"]}`).join(',')}]
+    "competitors": [${competitors.map(c => JSON.stringify({name:c,strategy:"예상 전략",strengths:["강점1","강점2"],weaknesses:["약점1","약점2"]})).join(',')}]
   },
   "swot": {
     "strengths": ["KT 강점1", "강점2", "강점3"],
