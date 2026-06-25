@@ -87,6 +87,56 @@ const S = {
 
 const DEFAULT_COMPETITORS = ['LG CNS', 'Samsung SDS', 'SK C&C'];
 
+const DEMO_DATA = {
+  projectName: '국방 AI·데이터 맞춤형 플랫폼 구축 사업',
+  customerName: '국방부 (KCCS)',
+  businessDesc: 'AI 챗봇·목적모델 구축, 데이터 자산화, DIDC 기반 국방 AI 플랫폼 고도화. 기술 80% / 가격 20% 평가. 27~30년 국방부 전략 사업 집중 투자 예상.',
+  competitors: ['LG CNS', 'Samsung SDS', 'SKT'],
+  result: {
+    newsMap: {
+      'LG CNS': [
+        { title: 'LG CNS, 국방부 DIDC 데이터·AI 플랫폼 독점 구축 사업 수주', originallink: '#', link: '#', description: 'LG CNS가 국방통합데이터센터(DIDC) 기반 AI 플랫폼 구축 사업을 단독 수주, ExaOne 국방 특화 모델 적용 예정', pubDate: '2025-11-12T09:30' },
+        { title: 'LG CNS ExaOne, 방산부 AI 통합기반 Full 라인업 제안 완료', originallink: '#', link: '#', description: '자체 DAP GenAI·AgenticWorks 플랫폼 기반 국방 AI 생태계 독점 구조 강화 움직임', pubDate: '2025-10-28T14:10' },
+        { title: 'LG CNS·LG유플러스 Alliance, 25년 국방 인력 보강 완료', originallink: '#', link: '#', description: '국방 IT 아웃소싱 시장 선점 위해 전담 제안 조직 확대 및 사전 영업 완료', pubDate: '2025-09-15T11:00' },
+      ],
+      'Samsung SDS': [
+        { title: '삼성SDS FabriX·Brightics AI, 국가AI컴퓨팅 센터 국방 데이터허브 연동 추진', originallink: '#', link: '#', description: '방위산업 AI 통합기반 구축 레퍼런스를 바탕으로 Full-Stack 솔루션 제안 본격화', pubDate: '2025-11-05T10:00' },
+        { title: '삼성SDS, 국방부 AI 통합기반 구축 사업 단계적 수행', originallink: '#', link: '#', description: 'Brightics AI 기반 데이터 분석 플랫폼 확장 및 국방 AI R&D 조직 신설', pubDate: '2025-10-02T09:00' },
+      ],
+      'SKT': [
+        { title: 'SKT, 국방부 AX 전략 TF 통해 목적모델 개발·MOU 체결', originallink: '#', link: '#', description: 'LLM 에이전트 솔루션 국방 적용 MOU 체결, 에이전트 솔루션 선도 사업자로 포지셔닝', pubDate: '2025-11-18T08:30' },
+        { title: 'SKT AI 에이전트, 국방 모바일 목적모델 실증 착수', originallink: '#', link: '#', description: 'AX 전략 TF 가동, 국방부 AX 전략 프레임워크 기반 목적모델 개발 본격화', pubDate: '2025-10-20T13:00' },
+      ],
+    },
+    analysis_3c: {
+      company: {
+        strengths: ['DIDC 인프라 구축·운영 경험', 'K-RMF 실증 경험', '오픈 컨소시엄 구성 유연성', '국방 전담 조직 보강 중'],
+        positioning: 'DIDC 인프라 구축·운영 경험과 목표 데이터 공급 사업 수행 이력을 바탕으로, 특정 기술에 종속되지 않는 유연한 오픈 컨소시엄 구성이 가능한 플레이어. Full-Stack 부재를 벤더 중립성 강점으로 전환하는 프레임워크 전략이 핵심.',
+      },
+      customer: {
+        needs: ['국방 특화 AI 목적모델 구축', '데이터 보안·자산화', '기존 시스템과의 통합 운영', '지속 가능한 유지보수 체계'],
+        eval_criteria: ['국방 레퍼런스 및 보안 적합성', 'AI 플랫폼 자체 역량', 'Full-Stack 솔루션 제공 여부', '컨소시엄 안정성 및 납기'],
+      },
+      competitors: [
+        { name: 'LG CNS', strategy: '국방 IT 독점 지위 유지 + ExaOne 국방 특화 모델로 Full 라인업 제안', strengths: ['국방 IT 독점 레퍼런스', '자체 AI 플랫폼(ExaOne/DAP GenAI)', 'Full 라인업 솔루션'], weaknesses: ['고비용 독점 구조', '신기술 유연성 낮음'] },
+        { name: 'Samsung SDS', strategy: 'FabriX·Brightics AI 기반 Full 라인업 + 국가AI컴퓨팅 센터 레퍼런스 활용', strengths: ['방위산업 AI 통합 레퍼런스', '자체 AI·데이터 플랫폼', '삼성 그룹 신뢰도'], weaknesses: ['국방 특화 인력 부족', '단독 제안 시 가격 열위'] },
+        { name: 'SKT', strategy: 'LLM 에이전트·목적모델 특화, MOU 기반 사전 영업 완료로 조기 선점', strengths: ['국방 AX 목적모델 역량', '에이전트 솔루션 선도', 'MOU 기반 사전 영업'], weaknesses: ['인프라·운영 역량 약함', 'Full-Stack 단독 제안 불가'] },
+      ],
+    },
+    swot: {
+      strengths: ['DIDC 인프라 구축·운영 경험', 'K-RMF 실증 경험 보유', '오픈 컨소시엄 구성 유연성', '국방 전담 조직 보강 중'],
+      weaknesses: ['AI Full-Stack 라인업 부재', '국내 AI 인지도(레퍼런스) 열위', '지역 조달 고객 마케팅 취약', '제안 전담 조직 미흡'],
+      opportunities: ['특정 기술 독점 없는 유연 플랫폼 수요 증가', '27~30년 KCCS 포함 국방부 전략 사업 집중 투자', 'Alliance & 제안 전담 공조 체계 구축 가능', '오픈 컨소시엄으로 벤더 중립성 어필 가능'],
+      threats: ['LG CNS Full 라인업 단독 제안 가능', '삼성SDS·SKT Alliance 제안준비 완료', '25년 국방 인력 보강(LG·삼성)', '방산 AI 사업 독점 구조 고착화 우려'],
+    },
+    opportunity: {
+      key_opportunities: ['특정 기술 독점이 없는 유연한 국방 맞춤형 플랫폼 전환 수요', 'KT중심 오픈 컨소시엄으로 벤더 중립성 확보', '27~30년 국방부 전략 사업 집중 투자 시기 선점', 'DIDC 운영 경험 기반 신뢰성 레퍼런스 활용'],
+      differentiation: ['KT중심 오픈 컨소 제안 (단일 벤더 독점 탈피)', '기술 세미나·검증 솔루션 적용 (KT+전문 솔루션 공급사 협력)', '수행조직 내 국방 전문 인력 공조 (전문 협력사 사전 확보)', '국방 전제 제안/인력 집중 보강 및 영업 조직 간공조 합의'],
+      strategy: "기존 'Full-Stack 솔루션 부재'라는 약점을 '특정 기술 독점이 없는 유연한 국방 맞춤형 플랫폼'이라는 강점으로 프레임워크 전환. KT중심 오픈 컨소시엄을 구성해 기술 자유도와 고객 맞춤성을 앞세우고, DIDC 운영 레퍼런스와 국방 전담 인력 보강을 통해 신뢰도를 높여 27~30년 집중 투자 사업을 선점한다.",
+    },
+  } as AnalysisResult,
+};
+
 export default function MarketResearchPage() {
   const [projectName, setProjectName] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -99,6 +149,17 @@ export default function MarketResearchPage() {
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState<'ppt' | 'excel' | null>(null);
   const resultRef = useRef<AnalysisResult | null>(null);
+
+  const loadDemo = () => {
+    setProjectName(DEMO_DATA.projectName);
+    setCustomerName(DEMO_DATA.customerName);
+    setBusinessDesc(DEMO_DATA.businessDesc);
+    setCompetitors(DEMO_DATA.competitors);
+    setResult(DEMO_DATA.result);
+    resultRef.current = DEMO_DATA.result;
+    setActiveTab('news');
+    setError('');
+  };
 
   const addCompetitor = () => {
     const v = competitorInput.trim();
@@ -170,9 +231,17 @@ export default function MarketResearchPage() {
           <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>수주전략</span>
           <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>AI Market Research</span>
         </div>
-        <a href="/" style={{ fontSize: '12px', color: 'var(--text-dim)', textDecoration: 'none', padding: '4px 10px', border: '1px solid var(--border)', borderRadius: '2px' }}>
-          ← 메인으로
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={loadDemo}
+            style={{ fontSize: '12px', color: 'var(--brand)', background: 'rgba(230,0,28,0.06)', border: '1px solid var(--brand)', borderRadius: '2px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}
+          >
+            데모 보기
+          </button>
+          <a href="/" style={{ fontSize: '12px', color: 'var(--text-dim)', textDecoration: 'none', padding: '4px 10px', border: '1px solid var(--border)', borderRadius: '2px' }}>
+            ← 메인으로
+          </a>
+        </div>
       </header>
 
       <main style={S.content}>
