@@ -4,61 +4,30 @@ import Anthropic from '@anthropic-ai/sdk';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-interface NaverNewsItem {
+export interface IntelItem {
+  date: string;
+  category: '자사강점' | '자사약점' | '경쟁사강점' | '경쟁사약점';
+  subject: string;
   title: string;
-  originallink: string;
+  keywords: string;
+  content: string;
+  source: string;
   link: string;
-  description: string;
-  pubDate: string;
 }
 
-async function fetchNaverNews(company: string): Promise<NaverNewsItem[]> {
-  const clientId = process.env.NAVER_CLIENT_ID;
-  const clientSecret = process.env.NAVER_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return [];
-
-  try {
-    const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(company + ' IT 사업')}&display=10&sort=date`;
-    const res = await fetch(url, {
-      headers: {
-        'X-Naver-Client-Id': clientId,
-        'X-Naver-Client-Secret': clientSecret,
-      },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.items ?? []).map((item: NaverNewsItem) => ({
-      ...item,
-      title: item.title.replace(/<[^>]+>/g, ''),
-      description: item.description.replace(/<[^>]+>/g, ''),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function buildPrompt(
+function buildAnalysisPrompt(
   projectName: string,
   customerName: string,
   businessDesc: string,
   competitors: string[],
-  newsMap: Record<string, NaverNewsItem[]>,
 ): string {
-  const newsSection = competitors.map(c => {
-    const items = newsMap[c] ?? [];
-    const headlines = items.slice(0, 5).map(i => `- ${i.title} (${i.pubDate})`).join('\n');
-    return `[${c} 최근 뉴스]\n${headlines || '(뉴스 없음)'}`;
-  }).join('\n\n');
-
   return `당신은 KT B2B 영업 전략 전문가입니다.
-아래 사업 정보와 경쟁사 뉴스를 분석하여 수주전략 리서치를 작성하세요.
+아래 사업 정보를 분석하여 수주전략 리서치를 작성하세요.
 
 사업명: ${projectName}
 고객사: ${customerName}
 사업 내용/RFP 핵심: ${businessDesc}
 경쟁사: ${competitors.join(', ')}
-
-${newsSection}
 
 아래 JSON 형식으로만 응답하세요. 추가 설명 없이 JSON만:
 {
@@ -71,7 +40,7 @@ ${newsSection}
       "needs": ["고객 핵심 니즈1", "니즈2", "니즈3"],
       "eval_criteria": ["평가기준1", "평가기준2", "평가기준3"]
     },
-    "competitors": [${competitors.map(c => `{"name":"${c}","strategy":"예상 전략","strengths":["강점1","강점2"],"weaknesses":["약점1","약점2"]}`).join(',')}]
+    "competitors": [${competitors.map(c => JSON.stringify({name:c,strategy:"예상 전략",strengths:["강점1","강점2"],weaknesses:["약점1","약점2"]})).join(',')}]
   },
   "swot": {
     "strengths": ["KT 강점1", "강점2", "강점3"],
@@ -87,6 +56,44 @@ ${newsSection}
 }`;
 }
 
+function buildIntelPrompt(
+  projectName: string,
+  customerName: string,
+  businessDesc: string,
+  competitors: string[],
+): string {
+  return `당신은 KT B2B 수주 전략 전문가입니다.
+아래 사업 정보를 바탕으로, KT(자사)와 경쟁사에 관한 IT/비즈니스 뉴스 인텔리전스 아이템을 생성하세요.
+실제 언론에서 보도될 법한 구체적인 내용으로 작성하고, 자사(KT) 강점/약점과 경쟁사 강점/약점으로 분류하세요.
+
+사업명: ${projectName}
+고객사: ${customerName}
+사업내용: ${businessDesc}
+경쟁사: ${competitors.join(', ')}
+
+아래 JSON 배열 형식으로만 응답하세요. 추가 설명 없이 JSON 배열만:
+[
+  {
+    "date": "2025-11",
+    "category": "자사강점",
+    "subject": "KT",
+    "title": "기사 제목",
+    "keywords": "핵심 키워드1, 키워드2",
+    "content": "기사 핵심 내용 2~3문장. 구체적인 수치나 사업명 포함.",
+    "source": "전자신문",
+    "link": ""
+  }
+]
+
+규칙:
+- category는 반드시 "자사강점", "자사약점", "경쟁사강점", "경쟁사약점" 중 하나
+- subject: 자사 항목은 "KT", 경쟁사 항목은 해당 회사명
+- KT 자사강점 2건, KT 자사약점 2건, 각 경쟁사별 강점 1~2건 + 약점 1건씩 포함
+- 총 10~14건
+- source는 실제 IT 언론사명 (전자신문, ZDNet Korea, 아이뉴스24, 디지털데일리, 연합뉴스, 뉴스1, 조선비즈 등)
+- 사업 도메인(${customerName}, ${projectName})에 맞는 구체적인 내용으로 작성`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { projectName, customerName, businessDesc, competitors } = await req.json() as {
@@ -100,42 +107,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: '경쟁사를 1개 이상 입력하세요.' }, { status: 400 });
     }
 
-    // Step 1: Naver News 병렬 수집
-    const newsResults = await Promise.allSettled(
-      competitors.map(c => fetchNaverNews(c))
-    );
-    const newsMap: Record<string, NaverNewsItem[]> = {};
-    competitors.forEach((c, i) => {
-      const r = newsResults[i];
-      newsMap[c] = r.status === 'fulfilled' ? r.value : [];
-    });
-
-    // Step 2: Claude Haiku로 분석
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ ok: false, error: 'ANTHROPIC_API_KEY 미설정' }, { status: 500 });
     }
 
     const client = new Anthropic({ apiKey });
-    const prompt = buildPrompt(projectName, customerName, businessDesc, competitors, newsMap);
 
-    const msg = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const [analysisMsg, intelMsg] = await Promise.all([
+      client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: buildAnalysisPrompt(projectName, customerName, businessDesc, competitors) }],
+      }),
+      client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 3000,
+        messages: [{ role: 'user', content: buildIntelPrompt(projectName, customerName, businessDesc, competitors) }],
+      }),
+    ]);
 
-    const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) {
-      return NextResponse.json({ ok: false, error: 'AI 응답 파싱 실패', raw }, { status: 500 });
+    const analysisRaw = analysisMsg.content[0]?.type === 'text' ? analysisMsg.content[0].text : '';
+    const analysisMatch = analysisRaw.match(/\{[\s\S]*\}/);
+    if (!analysisMatch) {
+      return NextResponse.json({ ok: false, error: 'AI 분석 응답 파싱 실패', raw: analysisRaw }, { status: 500 });
     }
+    const parsed = JSON.parse(analysisMatch[0]);
 
-    const parsed = JSON.parse(m[0]);
+    const intelRaw = intelMsg.content[0]?.type === 'text' ? intelMsg.content[0].text : '';
+    let newsItems: IntelItem[] = [];
+    const intelMatch = intelRaw.match(/\[[\s\S]*\]/);
+    if (intelMatch) {
+      try {
+        newsItems = JSON.parse(intelMatch[0]);
+      } catch {
+        newsItems = [];
+      }
+    }
 
     return NextResponse.json({
       ok: true,
-      newsMap,
+      newsItems,
       analysis_3c: parsed.analysis_3c,
       swot: parsed.swot,
       opportunity: parsed.opportunity,
