@@ -13,12 +13,15 @@ const SURFACE2 = '162032';
 const GREEN = '22c55e';
 const YELLOW = 'f59e0b';
 
-interface NaverNewsItem {
+interface IntelItem {
+  date: string;
+  category: '자사강점' | '자사약점' | '경쟁사강점' | '경쟁사약점';
+  subject: string;
   title: string;
-  originallink: string;
+  keywords: string;
+  content: string;
+  source: string;
   link: string;
-  description: string;
-  pubDate: string;
 }
 
 interface Analysis3C {
@@ -46,7 +49,7 @@ interface ExportBody {
   customerName: string;
   businessDesc: string;
   competitors: string[];
-  newsMap: Record<string, NaverNewsItem[]>;
+  newsItems: IntelItem[];
   analysis_3c: Analysis3C;
   swot: SWOT;
   opportunity: Opportunity;
@@ -78,37 +81,29 @@ function buildPPT(body: ExportBody): PptxGenJS {
     const s = pres.addSlide();
     s.background = { color: BG };
     s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 1.0, fill: { color: SURFACE } });
-    s.addText('경쟁사 뉴스 요약', { x: 0.4, y: 0.18, w: 12, h: 0.5, fontSize: 22, color: TEXT, fontFace: 'Arial', bold: true });
-    s.addText('Naver News 최신 수집', { x: 0.4, y: 0.62, w: 12, h: 0.3, fontSize: 12, color: TEXT_DIM, fontFace: 'Arial' });
+    s.addText('기사 인텔리전스', { x: 0.4, y: 0.18, w: 12, h: 0.5, fontSize: 22, color: TEXT, fontFace: 'Arial', bold: true });
+    s.addText('자사/경쟁사 보도자료(기사)를 통한 공격포인트/경쟁전략 예측', { x: 0.4, y: 0.62, w: 12, h: 0.3, fontSize: 12, color: TEXT_DIM, fontFace: 'Arial' });
 
     const rows: PptxGenJS.TableRow[] = [[
-      { text: '경쟁사', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
       { text: '날짜', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
+      { text: '구분', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
+      { text: '대상', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
       { text: '제목', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
+      { text: '출처', options: { bold: true, color: TEXT, fill: { color: BRAND } } },
     ]];
 
-    for (const comp of body.competitors) {
-      const items = (body.newsMap[comp] ?? []).slice(0, 4);
-      if (items.length === 0) {
-        rows.push([
-          { text: comp, options: { color: TEXT_DIM } },
-          { text: '-', options: { color: TEXT_DIM } },
-          { text: '(뉴스 없음)', options: { color: TEXT_DIM } },
-        ]);
-      } else {
-        items.forEach((item, idx) => {
-          const dateStr = item.pubDate ? item.pubDate.slice(0, 16) : '-';
-          rows.push([
-            { text: idx === 0 ? comp : '', options: { color: TEXT } },
-            { text: dateStr, options: { color: TEXT_DIM, fontSize: 10 } },
-            { text: item.title.slice(0, 80), options: { color: TEXT } },
-          ]);
-        });
-      }
+    for (const item of (body.newsItems ?? []).slice(0, 12)) {
+      rows.push([
+        { text: item.date, options: { color: TEXT_DIM, fontSize: 10 } },
+        { text: item.category, options: { color: TEXT } },
+        { text: item.subject, options: { color: TEXT } },
+        { text: item.title.slice(0, 80), options: { color: TEXT } },
+        { text: item.source, options: { color: TEXT_DIM, fontSize: 10 } },
+      ]);
     }
 
     s.addTable(rows, {
-      x: 0.4, y: 1.15, w: 12.5, colW: [2.0, 2.0, 8.5],
+      x: 0.4, y: 1.15, w: 12.5, colW: [1.4, 1.6, 1.6, 6.9, 1.0],
       border: { type: 'solid', color: '334155', pt: 0.5 },
       fill: { color: SURFACE2 },
       color: TEXT,
@@ -242,21 +237,14 @@ function buildPPT(body: ExportBody): PptxGenJS {
 function buildExcel(body: ExportBody): Buffer {
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: 경쟁사 뉴스
-  const newsData: (string | number)[][] = [['경쟁사', '날짜', '제목', '출처 링크']];
-  for (const comp of body.competitors) {
-    const items = body.newsMap[comp] ?? [];
-    if (items.length === 0) {
-      newsData.push([comp, '-', '(뉴스 없음)', '']);
-    } else {
-      items.forEach(item => {
-        newsData.push([comp, item.pubDate ?? '', item.title, item.originallink || item.link || '']);
-      });
-    }
+  // Sheet 1: 기사 인텔리전스
+  const newsData: (string | number)[][] = [['날짜', '구분', '해당 대상', '제목', '핵심 키워드', '내용', '신문사', '링크']];
+  for (const item of (body.newsItems ?? [])) {
+    newsData.push([item.date, item.category, item.subject, item.title, item.keywords, item.content, item.source, item.link || '']);
   }
   const ws1 = XLSX.utils.aoa_to_sheet(newsData);
-  ws1['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 60 }, { wch: 50 }];
-  XLSX.utils.book_append_sheet(wb, ws1, '경쟁사 뉴스');
+  ws1['!cols'] = [{ wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 50 }, { wch: 24 }, { wch: 60 }, { wch: 14 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, ws1, '기사 인텔리전스');
 
   // Sheet 2: 3C 분석
   const { analysis_3c } = body;
